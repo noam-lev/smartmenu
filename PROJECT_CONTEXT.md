@@ -61,7 +61,7 @@
 * `events`: id, restaurant_id, event_type, item_id, created_at. (Composite index for performance queries).
 
 ## 6. The API Contract (Mock JSON Payload)
-The data is fetched as a single nested JSON. This is the structure (currently located in `frontend/src/data/mockMenu.json`):
+The data is fetched as a single nested JSON. This is the structure (currently located in `frontend/data/mockMenu.json`):
 
 ```json
 {
@@ -120,5 +120,22 @@ The data is fetched as a single nested JSON. This is the structure (currently lo
 We are currently operating inside the `frontend` (Next.js) directory using a "UI-First" approach based on the Mock Data.
 * **Definition of Done (MVP):** A restaurant owner can set up a menu. A diner can scan a QR code and view the menu smoothly. A diner can add an item to a local cart. The Upsell pop-up triggers correctly. Everything is served directly from Supabase.
 
+## 8. Visual & UX Architecture (The "Wolt-Style" Experience)
+To ensure all frontend components align with the overall user experience, here is the mental model for the diner's UI:
+
+* **The Header & Hero:**
+  * Top: Restaurant logo, name, and a short subtitle (e.g., "Lunch Menu").
+  * **Sticky Category Bar:** Immediately below the header, a horizontally scrollable list of categories ("Starters | Mains | Drinks"). As the user scrolls down the menu feed, this bar sticks to the top of the screen for quick navigation jumps.
+* **The Menu Feed:**
+  * Categorized sections with clear typography headers (e.g., **"Starters"**).
+  * The `MenuItemCard` components are stacked in a flat list. No heavy shadows or floating boxes; just clean rows separated by subtle 1px borders to keep the scrolling smooth and highly readable.
+* **The Interaction & Upsell Flow (Bottom Sheet):**
+  * Tapping a `MenuItemCard` does NOT immediately add it to the cart. Instead, it slides up a **Bottom Sheet** (modal).
+  * Inside the Bottom Sheet: A larger image, item details, a quantity selector (+/-), and a prominent primary button: "Add to order - 32 ₪".
+  * *The Upsell Transition:* If the item has an associated `upsell_rule`, clicking "Add to order" does not close the sheet. Instead, the sheet content smoothly transitions to the upsell offer ("Add a side of fries for 12 ₪?"). The user can click "Add" or "No thanks", which finally closes the sheet.
+* **The Floating Cart (Sticky Footer):**
+  * Invisible when the cart is empty.
+  * Once an item is added, a floating button appears anchored to the bottom of the screen.
+  * Displays a summary: "View Order (2 items) - 44 ₪". Tapping it opens the final cart summary to show the waiter (Soft Ordering).
 
 **End of Context Document.**
