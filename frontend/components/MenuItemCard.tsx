@@ -1,24 +1,18 @@
-type MenuItem = {
-  id: string;
-  name: string;
-  description: string;
-  base_price: number;
-  is_available: boolean;
-  image_url: string;
-  tags?: string[];
-};
+import type { MenuItem } from "../types/menu";
 
 type MenuItemCardProps = {
   item: MenuItem;
+  onClick?: () => void;
 };
 
-export default function MenuItemCard({ item }: MenuItemCardProps) {
+export default function MenuItemCard({ item, onClick }: MenuItemCardProps) {
   const formattedPrice = `${item.base_price.toFixed(0)} \u20aa`;
 
   return (
     <button
       type="button"
       aria-label={`Open ${item.name}`}
+      onClick={onClick}
       className="group w-full border-b border-zinc-200 bg-white px-4 py-3 text-left transition-transform duration-100 active:scale-[0.985]"
     >
       <div className="flex items-start gap-3">
