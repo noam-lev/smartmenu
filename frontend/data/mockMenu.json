@@ -1,0 +1,51 @@
+{
+    "restaurant": {
+      "name": "Yossi's Hummus",
+      "slug": "yossis-hummus",
+      "theme_color": "#FF5733",
+      "currency": "ILS"
+    },
+    "menu": {
+      "id": "uuid-menu-123",
+      "name": "Lunch Menu",
+      "last_updated": "2026-04-16T12:00:00Z",
+      "categories": [
+        {
+          "id": "uuid-cat-1",
+          "name": "Starters",
+          "sort_order": 1,
+          "items": [
+            {
+              "id": "uuid-item-1",
+              "name": "Classic Chickpea Hummus",
+              "description": "House hummus with warm chickpeas, parsley, and premium olive oil",
+              "base_price": 32.00,
+              "is_available": true,
+              "image_url": "https://images.unsplash.com/photo-1577906096429-f73c2c312435?auto=format&fit=crop&q=80&w=200",
+              "tags": ["VEGAN", "GLUTEN_FREE"],
+              "variants": [
+                {
+                  "id": "uuid-var-1",
+                  "name": "Regular",
+                  "price": 32.00
+                }
+              ],
+              "upsell_rules": [
+                {
+                  "offer_item_snapshot": {
+                    "id": "uuid-item-2",
+                    "name": "Small Fries",
+                    "image_url": "https://images.unsplash.com/photo-1630384060421-cb20d0e0649d?auto=format&fit=crop&q=80&w=200",
+                    "price": 15.00
+                  },
+                  "custom_message": "Fancy adding small fries on the side for 12₪?",
+                  "discount_price": 12.00
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+  
