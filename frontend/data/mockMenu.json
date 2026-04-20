@@ -7,8 +7,8 @@
     },
     "menu": {
       "id": "uuid-menu-123",
-      "name": "Lunch Menu",
-      "last_updated": "2026-04-16T12:00:00Z",
+      "name": "Full Menu",
+      "last_updated": "2026-04-19T08:00:00Z",
       "categories": [
         {
           "id": "uuid-cat-1",
@@ -18,7 +18,7 @@
             {
               "id": "uuid-item-1",
               "name": "Classic Chickpea Hummus",
-              "description": "House hummus with warm chickpeas, parsley, and premium olive oil",
+              "description": "House hummus with warm chickpeas, fresh parsley, and premium cold-pressed olive oil.",
               "base_price": 32.00,
               "is_available": true,
               "image_url": "https://images.unsplash.com/photo-1577906096429-f73c2c312435?auto=format&fit=crop&q=80&w=200",
@@ -33,7 +33,7 @@
               "upsell_rules": [
                 {
                   "offer_item_snapshot": {
-                    "id": "uuid-item-2",
+                    "id": "uuid-item-10",
                     "name": "Small Fries",
                     "image_url": "https://images.unsplash.com/photo-1630384060421-cb20d0e0649d?auto=format&fit=crop&q=80&w=200",
                     "price": 15.00
@@ -42,10 +42,177 @@
                   "discount_price": 12.00
                 }
               ]
+            },
+            {
+              "id": "uuid-item-2",
+              "name": "Falafel Plate",
+              "description": "6 pieces of our famous green falafel served with a side of tahini.",
+              "base_price": 24.00,
+              "is_available": true,
+              "image_url": "https://images.unsplash.com/photo-1619096252214-ef06c45683e3?auto=format&fit=crop&q=80&w=200",
+              "tags": ["VEGAN", "GLUTEN_FREE"],
+              "variants": [
+                {
+                  "id": "uuid-var-2",
+                  "name": "Regular",
+                  "price": 24.00
+                }
+              ],
+              "upsell_rules": []
+            },
+            {
+              "id": "uuid-item-3",
+              "name": "Stuffed Grape Leaves",
+              "description": "Hand-rolled grape leaves stuffed with rice, dill, and pine nuts, served cold with a lemon wedge.",
+              "base_price": 28.00,
+              "is_available": true,
+              "image_url": "https://images.unsplash.com/photo-1621852004158-f3bc188ace2d?auto=format&fit=crop&q=80&w=200",
+              "tags": ["VEGAN"],
+              "variants": [
+                {
+                  "id": "uuid-var-3",
+                  "name": "Regular",
+                  "price": 28.00
+                }
+              ],
+              "upsell_rules": []
+            }
+          ]
+        },
+        {
+          "id": "uuid-cat-2",
+          "name": "Mains",
+          "sort_order": 2,
+          "items": [
+            {
+              "id": "uuid-item-4",
+              "name": "Hummus Shawarma",
+              "description": "A massive plate of our classic hummus topped with a generous portion of slow-roasted chicken and lamb shawarma, caramelized onions, toasted pine nuts, amba sauce, and fresh herbs. Served with 2 hot pitas.",
+              "base_price": 58.00,
+              "is_available": true,
+              "image_url": "https://images.unsplash.com/photo-1604908176997-125f25cc6f3d?auto=format&fit=crop&q=80&w=200",
+              "tags": [],
+              "variants": [
+                {
+                  "id": "uuid-var-4",
+                  "name": "Regular",
+                  "price": 58.00
+                }
+              ],
+              "upsell_rules": [
+                {
+                  "offer_item_snapshot": {
+                    "id": "uuid-item-11",
+                    "name": "Lemonana",
+                    "image_url": "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?auto=format&fit=crop&q=80&w=200",
+                    "price": 14.00
+                  },
+                  "custom_message": "Wash it down with a refreshing Mint Lemonade for just 10₪!",
+                  "discount_price": 10.00
+                }
+              ]
+            },
+            {
+              "id": "uuid-item-5",
+              "name": "Spicy Beef Kebab",
+              "description": "3 skewers of grilled ground beef mixed with hot green peppers and onions. Served on a grilled tomato.",
+              "base_price": 65.00,
+              "is_available": true,
+              "image_url": "https://images.unsplash.com/photo-1529193591184-b1d58069ecdd?auto=format&fit=crop&q=80&w=200",
+              "tags": ["SPICY", "GLUTEN_FREE"],
+              "variants": [
+                {
+                  "id": "uuid-var-5",
+                  "name": "Regular",
+                  "price": 65.00
+                }
+              ],
+              "upsell_rules": []
+            }
+          ]
+        },
+        {
+          "id": "uuid-cat-3",
+          "name": "Salads",
+          "sort_order": 3,
+          "items": [
+            {
+              "id": "uuid-item-6",
+              "name": "Fatoush Salad",
+              "description": "Fresh tomatoes, cucumbers, radishes, and mint, topped with crispy pita chips and sumac dressing.",
+              "base_price": 42.00,
+              "is_available": true,
+              "image_url": "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&q=80&w=200",
+              "tags": ["VEGAN"],
+              "variants": [
+                {
+                  "id": "uuid-var-6",
+                  "name": "Regular",
+                  "price": 42.00
+                }
+              ],
+              "upsell_rules": []
+            }
+          ]
+        },
+        {
+          "id": "uuid-cat-4",
+          "name": "Drinks",
+          "sort_order": 4,
+          "items": [
+            {
+              "id": "uuid-item-10",
+              "name": "Coca Cola",
+              "description": "330ml Glass Bottle",
+              "base_price": 12.00,
+              "is_available": true,
+              "image_url": "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?auto=format&fit=crop&q=80&w=200",
+              "tags": [],
+              "variants": [
+                {
+                  "id": "uuid-var-10",
+                  "name": "Regular",
+                  "price": 12.00
+                }
+              ],
+              "upsell_rules": []
+            },
+            {
+              "id": "uuid-item-11",
+              "name": "Coke Zero",
+              "description": "330ml Glass Bottle",
+              "base_price": 12.00,
+              "is_available": false,
+              "image_url": "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?auto=format&fit=crop&q=80&w=200",
+              "tags": [],
+              "variants": [
+                {
+                  "id": "uuid-var-11",
+                  "name": "Regular",
+                  "price": 12.00
+                }
+              ],
+              "upsell_rules": []
+            },
+            {
+              "id": "uuid-item-12",
+              "name": "Lemonana",
+              "description": "Freshly squeezed lemonade with crushed mint leaves.",
+              "base_price": 14.00,
+              "is_available": true,
+              "image_url": "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?auto=format&fit=crop&q=80&w=200",
+              "tags": ["VEGAN"],
+              "variants": [
+                {
+                  "id": "uuid-var-12",
+                  "name": "Regular",
+                  "price": 14.00
+                }
+              ],
+              "upsell_rules": []
             }
           ]
         }
       ]
     }
   }
-  

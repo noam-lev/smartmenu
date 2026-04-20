@@ -1,12 +1,14 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import MenuItemCard from "../components/MenuItemCard";
 import mockMenuRaw from "../data/mockMenu.json";
 import { useCartStore } from "../store/cartStore";
 import type { MenuCategory, MenuItem, MenuPayload } from "../types/menu";
 
 const mockMenu = mockMenuRaw as MenuPayload;
+
+const SHEET_DISMISS_PX = 120;
 
 function formatILS(amount: number) {
   return `${Math.round(amount)} \u20aa`;
@@ -23,6 +25,14 @@ export default function Home() {
   const [quantity, setQuantity] = useState(1);
   const [isUpsellStep, setIsUpsellStep] = useState(false);
   const [activeCategoryId, setActiveCategoryId] = useState(categories[0]?.id ?? "");
+  const [sheetOffsetY, setSheetOffsetY] = useState(0);
+  const [sheetDragging, setSheetDragging] = useState(false);
+  const [hasMounted, setHasMounted] = useState(false);
+  const sheetDragRef = useRef<{
+    pointerId: number;
+    startClientY: number;
+    startOffsetY: number;
+  } | null>(null);
 
   const addItem = useCartStore((state) => state.addItem);
   const totalItems = useCartStore((state) => state.totalItems());
@@ -34,6 +44,9 @@ export default function Home() {
     setSelectedItem(null);
     setIsUpsellStep(false);
     setQuantity(1);
+    setSheetOffsetY(0);
+    sheetDragRef.current = null;
+    setSheetDragging(false);
   };
 
   const openItemSheet = (item: MenuItem) => {
@@ -44,6 +57,58 @@ export default function Home() {
     setSelectedItem(item);
     setIsUpsellStep(false);
     setQuantity(1);
+  };
+
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!selectedItem) {
+      return;
+    }
+    setSheetOffsetY(0);
+    sheetDragRef.current = null;
+    setSheetDragging(false);
+  }, [selectedItem, isUpsellStep]);
+
+  const handleSheetHandlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    (event.currentTarget as HTMLDivElement).setPointerCapture(event.pointerId);
+    sheetDragRef.current = {
+      pointerId: event.pointerId,
+      startClientY: event.clientY,
+      startOffsetY: sheetOffsetY,
+    };
+    setSheetDragging(true);
+  };
+
+  const handleSheetHandlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = sheetDragRef.current;
+    if (!drag || event.pointerId !== drag.pointerId) {
+      return;
+    }
+    const delta = event.clientY - drag.startClientY;
+    const next = Math.max(0, drag.startOffsetY + delta);
+    setSheetOffsetY(next);
+  };
+
+  const handleSheetHandlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = sheetDragRef.current;
+    if (!drag || event.pointerId !== drag.pointerId) {
+      return;
+    }
+    (event.currentTarget as HTMLDivElement).releasePointerCapture(event.pointerId);
+    const delta = event.clientY - drag.startClientY;
+    const endOffset = Math.max(0, drag.startOffsetY + delta);
+    sheetDragRef.current = null;
+    setSheetDragging(false);
+
+    if (endOffset >= SHEET_DISMISS_PX) {
+      closeSheet();
+      return;
+    }
+    setSheetOffsetY(0);
   };
 
   const handlePrimaryAdd = () => {
@@ -157,14 +222,31 @@ export default function Home() {
       </main>
 
       {selectedItem ? (
-        <div className="fixed inset-0 z-40 bg-black/40" onClick={closeSheet}>
+        <div
+          className="fixed inset-0 z-[60] bg-black/40"
+          onClick={closeSheet}
+          role="presentation"
+        >
           <div
-            className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-md rounded-t-3xl bg-white p-4 pb-6 shadow-2xl"
+            className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-md rounded-t-3xl bg-white p-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-2xl will-change-transform"
+            style={{
+              transform: `translateY(${sheetOffsetY}px)`,
+              transition: sheetDragging ? "none" : "transform 0.22s cubic-bezier(0.32, 0.72, 0, 1)",
+            }}
             onClick={(event) => event.stopPropagation()}
           >
             {!isUpsellStep ? (
               <>
-                <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-zinc-200" />
+                <div
+                  className="-mx-4 -mt-2 flex cursor-grab touch-none justify-center py-3 active:cursor-grabbing"
+                  onPointerDown={handleSheetHandlePointerDown}
+                  onPointerMove={handleSheetHandlePointerMove}
+                  onPointerUp={handleSheetHandlePointerUp}
+                  onPointerCancel={handleSheetHandlePointerUp}
+                  role="presentation"
+                >
+                  <div className="h-1.5 w-12 rounded-full bg-zinc-200" />
+                </div>
                 <img
                   src={selectedItem.image_url}
                   alt={selectedItem.name}
@@ -210,7 +292,16 @@ export default function Home() {
               </>
             ) : (
               <>
-                <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-zinc-200" />
+                <div
+                  className="-mx-4 -mt-2 flex cursor-grab touch-none justify-center py-3 active:cursor-grabbing"
+                  onPointerDown={handleSheetHandlePointerDown}
+                  onPointerMove={handleSheetHandlePointerMove}
+                  onPointerUp={handleSheetHandlePointerUp}
+                  onPointerCancel={handleSheetHandlePointerUp}
+                  role="presentation"
+                >
+                  <div className="h-1.5 w-12 rounded-full bg-zinc-200" />
+                </div>
                 <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
                   Suggested add-on
                 </p>
@@ -259,7 +350,7 @@ export default function Home() {
         </div>
       ) : null}
 
-      {totalItems > 0 ? (
+      {hasMounted && totalItems > 0 ? (
         <button
           type="button"
           className="fixed bottom-4 left-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-2xl bg-zinc-900 px-4 py-3 text-left text-white shadow-lg active:scale-[0.995]"
