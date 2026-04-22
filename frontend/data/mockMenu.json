@@ -4,17 +4,33 @@
       "slug": "yossis-hummus",
       "theme_color": "#FF5733",
       "currency": "ILS",
-      "banner_image_url": "https://images.unsplash.com/photo-1547592166-23ac45744acd?auto=format&fit=crop&q=80&w=1400"
+      "banner_image_url": "https://images.unsplash.com/photo-1547592166-23ac45744acd?auto=format&fit=crop&q=80&w=1400",
+      "default_locale": "he",
+      "translations": {
+        "he": {
+          "name": "החומוס של יוסי"
+        }
+      }
     },
     "menu": {
       "id": "uuid-menu-123",
       "name": "Full Menu",
       "last_updated": "2026-04-19T08:00:00Z",
+      "translations": {
+        "he": {
+          "name": "תפריט מלא"
+        }
+      },
       "categories": [
         {
           "id": "uuid-cat-1",
           "name": "Starters",
           "sort_order": 1,
+          "translations": {
+            "he": {
+              "name": "מנות פתיחה"
+            }
+          },
           "items": [
             {
               "id": "uuid-item-1",
@@ -23,6 +39,12 @@
               "base_price": 32.00,
               "is_available": true,
               "image_url": "https://images.unsplash.com/photo-1577906096429-f73c2c312435?auto=format&fit=crop&q=80&w=200",
+              "translations": {
+                "he": {
+                  "name": "חומוס גרגרים קלאסי",
+                  "description": "חומוס ביתי עם גרגרים חמים, פטרוזיליה טרייה ושמן זית כתית מעולה."
+                }
+              },
               "tags": ["VEGAN", "GLUTEN_FREE"],
               "variants": [
                 {
@@ -37,10 +59,20 @@
                     "id": "uuid-item-10",
                     "name": "Small Fries",
                     "image_url": "https://images.unsplash.com/photo-1630384060421-cb20d0e0649d?auto=format&fit=crop&q=80&w=200",
-                    "price": 15.00
+                    "price": 15.00,
+                    "translations": {
+                      "he": {
+                        "name": "צ'יפס קטן"
+                      }
+                    }
                   },
                   "custom_message": "Fancy adding small fries on the side for 12₪?",
-                  "discount_price": 12.00
+                  "discount_price": 12.00,
+                  "translations": {
+                    "he": {
+                      "custom_message": "בא לך להוסיף צ'יפס קטן בצד ב-12₪?"
+                    }
+                  }
                 }
               ]
             },
@@ -51,6 +83,12 @@
               "base_price": 24.00,
               "is_available": true,
               "image_url": "https://images.unsplash.com/photo-1619096252214-ef06c45683e3?auto=format&fit=crop&q=80&w=200",
+              "translations": {
+                "he": {
+                  "name": "מנת פלאפל",
+                  "description": "6 כדורי פלאפל ירוק מפורסם שלנו, מוגשים עם טחינה בצד."
+                }
+              },
               "tags": ["VEGAN", "GLUTEN_FREE"],
               "variants": [
                 {
@@ -68,6 +106,12 @@
               "base_price": 28.00,
               "is_available": true,
               "image_url": "https://images.unsplash.com/photo-1621852004158-f3bc188ace2d?auto=format&fit=crop&q=80&w=200",
+              "translations": {
+                "he": {
+                  "name": "עלי גפן ממולאים",
+                  "description": "עלי גפן מגולגלים ביד, ממולאים באורז, שמיר וצנוברים, מוגשים קרים עם לימון."
+                }
+              },
               "tags": ["VEGAN"],
               "variants": [
                 {
@@ -84,6 +128,11 @@
           "id": "uuid-cat-2",
           "name": "Mains",
           "sort_order": 2,
+          "translations": {
+            "he": {
+              "name": "עיקריות"
+            }
+          },
           "items": [
             {
               "id": "uuid-item-4",
@@ -92,6 +141,12 @@
               "base_price": 58.00,
               "is_available": true,
               "image_url": "https://images.unsplash.com/photo-1604908176997-125f25cc6f3d?auto=format&fit=crop&q=80&w=200",
+              "translations": {
+                "he": {
+                  "name": "חומוס שווארמה",
+                  "description": "צלחת נדיבה של חומוס קלאסי עם שווארמת עוף ובקר בצלייה איטית, בצל מקורמל, צנוברים, עמבה ועשבי תיבול. מוגש עם 2 פיתות חמות."
+                }
+              },
               "tags": [],
               "variants": [
                 {
@@ -106,10 +161,20 @@
                     "id": "uuid-item-11",
                     "name": "Lemonana",
                     "image_url": "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?auto=format&fit=crop&q=80&w=200",
-                    "price": 14.00
+                    "price": 14.00,
+                    "translations": {
+                      "he": {
+                        "name": "לימונענע"
+                      }
+                    }
                   },
                   "custom_message": "Wash it down with a refreshing Mint Lemonade for just 10₪!",
-                  "discount_price": 10.00
+                  "discount_price": 10.00,
+                  "translations": {
+                    "he": {
+                      "custom_message": "רוצה לרענן עם לימונענע רק ב-10₪?"
+                    }
+                  }
                 }
               ]
             },
@@ -120,6 +185,12 @@
               "base_price": 65.00,
               "is_available": true,
               "image_url": "https://images.unsplash.com/photo-1529193591184-b1d58069ecdd?auto=format&fit=crop&q=80&w=200",
+              "translations": {
+                "he": {
+                  "name": "קבב בקר חריף",
+                  "description": "3 שיפודי קבב בקר על הגריל עם פלפלים חריפים ובצל. מוגש על עגבנייה צלויה."
+                }
+              },
               "tags": ["SPICY", "GLUTEN_FREE"],
               "variants": [
                 {
@@ -136,6 +207,11 @@
           "id": "uuid-cat-3",
           "name": "Salads",
           "sort_order": 3,
+          "translations": {
+            "he": {
+              "name": "סלטים"
+            }
+          },
           "items": [
             {
               "id": "uuid-item-6",
@@ -144,6 +220,12 @@
               "base_price": 42.00,
               "is_available": true,
               "image_url": "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&q=80&w=200",
+              "translations": {
+                "he": {
+                  "name": "סלט פטוש",
+                  "description": "עגבניות, מלפפונים, צנוניות ונענע טרייה עם שבבי פיתה קריספיים ורוטב סומאק."
+                }
+              },
               "tags": ["VEGAN"],
               "variants": [
                 {
@@ -160,6 +242,11 @@
           "id": "uuid-cat-4",
           "name": "Drinks",
           "sort_order": 4,
+          "translations": {
+            "he": {
+              "name": "שתייה"
+            }
+          },
           "items": [
             {
               "id": "uuid-item-10",
@@ -168,6 +255,12 @@
               "base_price": 12.00,
               "is_available": true,
               "image_url": "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?auto=format&fit=crop&q=80&w=200",
+              "translations": {
+                "he": {
+                  "name": "קוקה קולה",
+                  "description": "בקבוק זכוכית 330 מ״ל"
+                }
+              },
               "tags": [],
               "variants": [
                 {
@@ -185,6 +278,12 @@
               "base_price": 12.00,
               "is_available": false,
               "image_url": "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?auto=format&fit=crop&q=80&w=200",
+              "translations": {
+                "he": {
+                  "name": "קוקה קולה זירו",
+                  "description": "בקבוק זכוכית 330 מ״ל"
+                }
+              },
               "tags": [],
               "variants": [
                 {
@@ -202,6 +301,12 @@
               "base_price": 14.00,
               "is_available": true,
               "image_url": "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?auto=format&fit=crop&q=80&w=200",
+              "translations": {
+                "he": {
+                  "name": "לימונענע",
+                  "description": "לימונדה סחוטה טרייה עם עלי נענע כתושים."
+                }
+              },
               "tags": ["VEGAN"],
               "variants": [
                 {

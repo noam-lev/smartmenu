@@ -1,14 +1,23 @@
 "use client";
 
-import type { MenuItem, UpsellRule } from "../types/menu";
+import type { Locale, MenuItem, UpsellRule } from "../types/menu";
 import { useDraggableSheet } from "../hooks/useDraggableSheet";
 import { formatILSCurrency } from "../utils/currency";
+import { getLocalizedText } from "../utils/i18n";
 
 type ItemBottomSheetProps = {
   selectedItem: MenuItem | null;
   isUpsellStep: boolean;
   quantity: number;
+  locale: Locale;
   upsellRule?: UpsellRule;
+  labels: {
+    quantity: string;
+    addToOrder: string;
+    suggestedAddon: string;
+    noThanks: string;
+    add: string;
+  };
   onClose: () => void;
   onQuantityChange: (nextQuantity: number) => void;
   onPrimaryAdd: () => void;
@@ -19,7 +28,9 @@ export default function ItemBottomSheet({
   selectedItem,
   isUpsellStep,
   quantity,
+  locale,
   upsellRule,
+  labels,
   onClose,
   onQuantityChange,
   onPrimaryAdd,
@@ -32,6 +43,15 @@ export default function ItemBottomSheet({
   if (!selectedItem) {
     return null;
   }
+
+  const itemName = getLocalizedText(selectedItem, "name", locale);
+  const itemDescription = getLocalizedText(selectedItem, "description", locale);
+  const upsellItemName = upsellRule
+    ? getLocalizedText(upsellRule.offer_item_snapshot, "name", locale)
+    : "";
+  const upsellMessage = upsellRule
+    ? getLocalizedText(upsellRule, "custom_message", locale)
+    : "";
 
   return (
     <div
@@ -61,18 +81,18 @@ export default function ItemBottomSheet({
           <>
             <img
               src={selectedItem.image_url}
-              alt={selectedItem.name}
+              alt={itemName}
               className="h-44 w-full rounded-2xl object-cover"
             />
             <h3 className="mt-4 text-xl font-bold text-zinc-900">
-              {selectedItem.name}
+              {itemName}
             </h3>
             <p className="mt-1 text-sm leading-6 text-zinc-600">
-              {selectedItem.description}
+              {itemDescription}
             </p>
 
             <div className="mt-4 flex items-center justify-between">
-              <p className="text-sm font-medium text-zinc-600">Quantity</p>
+              <p className="text-sm font-medium text-zinc-600">{labels.quantity}</p>
               <div className="flex items-center gap-3">
                 <button
                   type="button"
@@ -99,31 +119,31 @@ export default function ItemBottomSheet({
               onClick={onPrimaryAdd}
               className="mt-5 w-full rounded-2xl bg-zinc-900 px-4 py-3 text-base font-semibold text-white active:scale-[0.995]"
             >
-              Add to order -{" "}
+              {labels.addToOrder} -{" "}
               {formatILSCurrency(selectedItem.base_price * quantity)}
             </button>
           </>
         ) : (
           <>
             <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
-              Suggested add-on
+              {labels.suggestedAddon}
             </p>
             <h3 className="mt-1 text-xl font-bold text-zinc-900">
-              {upsellRule?.offer_item_snapshot.name}
+              {upsellItemName}
             </h3>
             <p className="mt-2 text-sm leading-6 text-zinc-600">
-              {upsellRule?.custom_message}
+              {upsellMessage}
             </p>
 
             <div className="mt-4 flex items-center gap-3 rounded-2xl border border-zinc-200 p-3">
               <img
                 src={upsellRule?.offer_item_snapshot.image_url}
-                alt={upsellRule?.offer_item_snapshot.name}
+                alt={upsellItemName}
                 className="h-16 w-16 rounded-xl object-cover"
               />
               <div>
                 <p className="text-sm font-semibold text-zinc-900">
-                  {upsellRule?.offer_item_snapshot.name}
+                  {upsellItemName}
                 </p>
                 <p className="text-sm text-zinc-500">
                   {formatILSCurrency(upsellRule?.discount_price ?? 0)}
@@ -137,14 +157,14 @@ export default function ItemBottomSheet({
                 onClick={() => onUpsellDecision(false)}
                 className="rounded-2xl border border-zinc-300 px-4 py-3 text-sm font-semibold text-zinc-700 active:scale-[0.99]"
               >
-                No thanks
+                {labels.noThanks}
               </button>
               <button
                 type="button"
                 onClick={() => onUpsellDecision(true)}
                 className="rounded-2xl bg-zinc-900 px-4 py-3 text-sm font-semibold text-white active:scale-[0.99]"
               >
-                Add {formatILSCurrency(upsellRule?.discount_price ?? 0)}
+                {labels.add} {formatILSCurrency(upsellRule?.discount_price ?? 0)}
               </button>
             </div>
           </>

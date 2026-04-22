@@ -6,10 +6,12 @@ import ItemBottomSheet from "../components/ItemBottomSheet";
 import MenuItemCard from "../components/MenuItemCard";
 import mockMenuRaw from "../data/mockMenu.json";
 import { useCartStore } from "../store/cartStore";
-import type { MenuCategory, MenuItem, MenuPayload } from "../types/menu";
+import type { Locale, MenuCategory, MenuItem, MenuPayload } from "../types/menu";
 import { formatILSCurrency } from "../utils/currency";
+import { getLocalizedText, getUiMessage, isRtlLocale } from "../utils/i18n";
 
 const mockMenu = mockMenuRaw as MenuPayload;
+const defaultLocale: Locale = mockMenu.restaurant.default_locale ?? "en";
 
 export default function Home() {
   const categories = useMemo(
@@ -23,7 +25,10 @@ export default function Home() {
   const [isUpsellStep, setIsUpsellStep] = useState(false);
   const [isCartSheetOpen, setIsCartSheetOpen] = useState(false);
   const [cartSheetSession, setCartSheetSession] = useState(0);
+  const [isLanguageMenuOpen, setIsLanguageMenuOpen] = useState(false);
+  const [locale, setLocale] = useState<Locale>(defaultLocale);
   const [activeCategoryId, setActiveCategoryId] = useState(categories[0]?.id ?? "");
+  const languageMenuRef = useRef<HTMLDivElement | null>(null);
   const hasMounted = useSyncExternalStore(
     () => () => {},
     () => true,
@@ -37,8 +42,11 @@ export default function Home() {
   const totalItems = useCartStore((state) => state.totalItems());
   const totalPrice = useCartStore((state) => state.totalPrice());
   const cartItems = useMemo(() => Object.values(itemsByItemId), [itemsByItemId]);
+  const isRtl = isRtlLocale(locale);
 
   const upsellRule = selectedItem?.upsell_rules?.[0];
+  const restaurantName = getLocalizedText(mockMenu.restaurant, "name", locale);
+  const menuName = getLocalizedText(mockMenu.menu, "name", locale);
 
   const closeSheet = () => {
     setSelectedItem(null);
@@ -93,6 +101,25 @@ export default function Home() {
     return () => observer.disconnect();
   }, [categories]);
 
+  useEffect(() => {
+    if (!isLanguageMenuOpen) {
+      return;
+    }
+
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (!languageMenuRef.current) {
+        return;
+      }
+
+      if (!languageMenuRef.current.contains(event.target as Node)) {
+        setIsLanguageMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, [isLanguageMenuOpen]);
+
   const handlePrimaryAdd = () => {
     if (!selectedItem) {
       return;
@@ -102,6 +129,7 @@ export default function Home() {
       itemId: selectedItem.id,
       quantity,
       name: selectedItem.name,
+      translations: selectedItem.translations,
       displayUnitPrice: selectedItem.base_price,
     });
 
@@ -119,6 +147,7 @@ export default function Home() {
         itemId: upsellRule.offer_item_snapshot.id,
         quantity: 1,
         name: upsellRule.offer_item_snapshot.name,
+        translations: upsellRule.offer_item_snapshot.translations,
         displayUnitPrice: upsellRule.discount_price,
       });
     }
@@ -144,21 +173,80 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-50">
+    <div
+      className="min-h-screen bg-zinc-50"
+      lang={locale}
+      dir={isRtl ? "rtl" : "ltr"}
+    >
       <main className="mx-auto max-w-md bg-white pb-24">
         <header className="border-b border-zinc-200">
           <div className="h-44 w-full overflow-hidden bg-zinc-100">
             <img
               src={mockMenu.restaurant.banner_image_url}
-              alt={`${mockMenu.restaurant.name} banner`}
+              alt={`${restaurantName} banner`}
               className="h-full w-full object-cover"
             />
           </div>
           <div className="px-4 pb-3 pt-4">
-            <h1 className="text-2xl font-bold text-zinc-900">
-              {mockMenu.restaurant.name}
-            </h1>
-            <p className="mt-1 text-sm text-zinc-500">{mockMenu.menu.name}</p>
+            <div className="flex items-center justify-between gap-3">
+              <h1 className="text-2xl font-bold text-zinc-900">
+                {restaurantName}
+              </h1>
+              <div className="relative" ref={languageMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => setIsLanguageMenuOpen((open) => !open)}
+                  aria-haspopup="menu"
+                  aria-expanded={isLanguageMenuOpen}
+                  aria-label="Select language"
+                  className="inline-flex items-center gap-1 rounded-full border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 shadow-sm"
+                >
+                  <span>{locale === "he" ? "עב" : "EN"}</span>
+                  <span className="text-[10px] text-zinc-500">▾</span>
+                </button>
+
+                {isLanguageMenuOpen ? (
+                  <div
+                    role="menu"
+                    className={`absolute z-30 mt-2 min-w-28 rounded-xl border border-zinc-200 bg-white p-1 shadow-lg ${
+                      isRtl ? "left-0" : "right-0"
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setLocale("he");
+                        setIsLanguageMenuOpen(false);
+                      }}
+                      className={`block w-full rounded-lg px-3 py-2 text-sm ${
+                        locale === "he"
+                          ? "bg-zinc-900 text-white"
+                          : "text-zinc-700 hover:bg-zinc-100"
+                      }`}
+                    >
+                      {getUiMessage("languageHebrew", locale)}
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setLocale("en");
+                        setIsLanguageMenuOpen(false);
+                      }}
+                      className={`mt-1 block w-full rounded-lg px-3 py-2 text-sm ${
+                        locale === "en"
+                          ? "bg-zinc-900 text-white"
+                          : "text-zinc-700 hover:bg-zinc-100"
+                      }`}
+                    >
+                      {getUiMessage("languageEnglish", locale)}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+            <p className="mt-1 text-sm text-zinc-500">{menuName}</p>
           </div>
         </header>
 
@@ -177,7 +265,7 @@ export default function Home() {
                       : "bg-zinc-100 text-zinc-700 active:scale-[0.98]"
                   }`}
                 >
-                  {category.name}
+                  {getLocalizedText(category, "name", locale)}
                 </button>
               );
             })}
@@ -194,12 +282,14 @@ export default function Home() {
               data-category-id={category.id}
             >
               <h2 className="border-b border-zinc-200 px-4 py-3 text-base font-bold text-zinc-900">
-                {category.name}
+                {getLocalizedText(category, "name", locale)}
               </h2>
               {category.items.map((item) => (
                 <MenuItemCard
                   key={item.id}
                   item={item}
+                  locale={locale}
+                  unavailableLabel={getUiMessage("unavailable", locale)}
                   onClick={() => openItemSheet(item)}
                 />
               ))}
@@ -213,7 +303,15 @@ export default function Home() {
         selectedItem={selectedItem}
         isUpsellStep={isUpsellStep}
         quantity={quantity}
+        locale={locale}
         upsellRule={upsellRule}
+        labels={{
+          quantity: getUiMessage("quantity", locale),
+          addToOrder: getUiMessage("addToOrder", locale),
+          suggestedAddon: getUiMessage("suggestedAddon", locale),
+          noThanks: getUiMessage("noThanks", locale),
+          add: getUiMessage("add", locale),
+        }}
         onClose={closeSheet}
         onQuantityChange={setQuantity}
         onPrimaryAdd={handlePrimaryAdd}
@@ -223,8 +321,17 @@ export default function Home() {
       <CartSummarySheet
         key={`cart-sheet-${cartSheetSession}`}
         isOpen={isCartSheetOpen}
+        locale={locale}
         items={cartItems}
         subtotal={totalPrice}
+        labels={{
+          yourOrder: getUiMessage("yourOrder", locale),
+          close: getUiMessage("close", locale),
+          emptyCart: getUiMessage("emptyCart", locale),
+          each: getUiMessage("each", locale),
+          remove: getUiMessage("remove", locale),
+          subtotal: getUiMessage("subtotal", locale),
+        }}
         onClose={closeCartSheet}
         onIncrease={(itemId) => {
           const item = itemsByItemId[itemId];
@@ -247,11 +354,16 @@ export default function Home() {
         <button
           type="button"
           onClick={openCartSheet}
-          className="fixed bottom-4 left-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-2xl bg-zinc-900 px-4 py-3 text-left text-white shadow-lg active:scale-[0.995]"
+          className="fixed bottom-4 left-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-2xl bg-zinc-900 px-4 py-3 text-start text-white shadow-lg active:scale-[0.995]"
         >
-          <p className="text-xs font-medium text-zinc-300">Soft ordering</p>
+          <p className="text-xs font-medium text-zinc-300">
+            {getUiMessage("softOrdering", locale)}
+          </p>
           <p className="text-sm font-semibold">
-            View Order ({totalItems} {totalItems === 1 ? "item" : "items"}) -{" "}
+            {getUiMessage("viewOrder", locale)} ({totalItems}{" "}
+            {totalItems === 1
+              ? getUiMessage("itemSingular", locale)
+              : getUiMessage("itemPlural", locale)}) -{" "}
             {formatILSCurrency(totalPrice)}
           </p>
         </button>

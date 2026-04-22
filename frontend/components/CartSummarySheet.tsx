@@ -1,20 +1,25 @@
 "use client";
 
 import { useEffect } from "react";
+import type { CartItem } from "../store/cartStore";
+import type { Locale } from "../types/menu";
 import { useDraggableSheet } from "../hooks/useDraggableSheet";
 import { formatILSCurrency } from "../utils/currency";
-
-type CartLineItem = {
-  itemId: string;
-  name: string;
-  displayUnitPrice: number;
-  quantity: number;
-};
+import { getLocalizedText } from "../utils/i18n";
 
 type CartSummarySheetProps = {
   isOpen: boolean;
-  items: CartLineItem[];
+  locale: Locale;
+  items: CartItem[];
   subtotal: number;
+  labels: {
+    yourOrder: string;
+    close: string;
+    emptyCart: string;
+    each: string;
+    remove: string;
+    subtotal: string;
+  };
   onClose: () => void;
   onIncrease: (itemId: string) => void;
   onDecrease: (itemId: string) => void;
@@ -23,8 +28,10 @@ type CartSummarySheetProps = {
 
 export default function CartSummarySheet({
   isOpen,
+  locale,
   items,
   subtotal,
+  labels,
   onClose,
   onIncrease,
   onDecrease,
@@ -75,20 +82,20 @@ export default function CartSummarySheet({
           <div className="h-1.5 w-12 rounded-full bg-zinc-200" />
         </div>
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-lg font-bold text-zinc-900">Your order</h3>
+          <h3 className="text-lg font-bold text-zinc-900">{labels.yourOrder}</h3>
           <button
             type="button"
             onClick={onClose}
             className="rounded-full px-2 py-1 text-sm font-medium text-zinc-500"
           >
-            Close
+            {labels.close}
           </button>
         </div>
 
         {items.length === 0 ? (
           <div className="flex flex-1 items-center justify-center">
             <p className="py-6 text-center text-sm text-zinc-500">
-              Your cart is empty.
+              {labels.emptyCart}
             </p>
           </div>
         ) : (
@@ -102,10 +109,10 @@ export default function CartSummarySheet({
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-zinc-900">
-                        {item.name}
+                        {getLocalizedText(item, "name", locale)}
                       </p>
                       <p className="text-xs text-zinc-500">
-                        {formatILSCurrency(item.displayUnitPrice)} each
+                        {formatILSCurrency(item.displayUnitPrice)} {labels.each}
                       </p>
                     </div>
                     <button
@@ -113,7 +120,7 @@ export default function CartSummarySheet({
                       onClick={() => onRemove(item.itemId)}
                       className="text-xs font-semibold text-zinc-500 underline underline-offset-2"
                     >
-                      Remove
+                      {labels.remove}
                     </button>
                   </div>
 
@@ -147,7 +154,7 @@ export default function CartSummarySheet({
 
             <div className="mt-4 border-t border-zinc-200 pt-3">
               <div className="flex items-center justify-between">
-                <p className="text-sm text-zinc-600">Subtotal</p>
+                <p className="text-sm text-zinc-600">{labels.subtotal}</p>
                 <p className="text-base font-bold text-zinc-900">
                   {formatILSCurrency(subtotal)}
                 </p>

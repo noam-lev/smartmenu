@@ -2,10 +2,12 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import type { TranslationsMap } from "../types/menu";
 
 export type CartItem = {
   itemId: string;
   name: string;
+  translations?: TranslationsMap;
   displayUnitPrice: number;
   quantity: number;
 };
@@ -16,6 +18,7 @@ type CartStore = {
     itemId: string;
     quantity: number;
     name: string;
+    translations?: TranslationsMap;
     displayUnitPrice: number;
   }) => void;
   totalItems: () => number;
@@ -28,7 +31,7 @@ export const useCartStore = create<CartStore>()(
   persist(
     (set, get) => ({
       itemsByItemId: {},
-      addSelection: ({ itemId, quantity, name, displayUnitPrice }) =>
+      addSelection: ({ itemId, quantity, name, translations, displayUnitPrice }) =>
         set((state) => {
           const existing = state.itemsByItemId[itemId];
           const nextQuantity = (existing?.quantity ?? 0) + quantity;
@@ -39,6 +42,7 @@ export const useCartStore = create<CartStore>()(
               [itemId]: {
                 itemId,
                 name,
+                translations,
                 displayUnitPrice,
                 quantity: nextQuantity,
               },
