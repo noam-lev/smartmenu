@@ -146,22 +146,19 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-zinc-50">
       <main className="mx-auto max-w-md bg-white pb-24">
-        <header className="border-b border-zinc-200 px-4 pb-4 pt-5">
-          <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-zinc-900 text-sm font-bold text-white">
-              {mockMenu.restaurant.name
-                .split(" ")
-                .slice(0, 2)
-                .map((part) => part[0])
-                .join("")
-                .toUpperCase()}
-            </div>
-            <div>
-              <p className="text-lg font-semibold text-zinc-900">
-                {mockMenu.restaurant.name}
-              </p>
-              <p className="text-sm text-zinc-500">{mockMenu.menu.name}</p>
-            </div>
+        <header className="border-b border-zinc-200">
+          <div className="h-44 w-full overflow-hidden bg-zinc-100">
+            <img
+              src={mockMenu.restaurant.banner_image_url}
+              alt={`${mockMenu.restaurant.name} banner`}
+              className="h-full w-full object-cover"
+            />
+          </div>
+          <div className="px-4 pb-3 pt-4">
+            <h1 className="text-2xl font-bold text-zinc-900">
+              {mockMenu.restaurant.name}
+            </h1>
+            <p className="mt-1 text-sm text-zinc-500">{mockMenu.menu.name}</p>
           </div>
         </header>
 

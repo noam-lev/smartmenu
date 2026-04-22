@@ -40,6 +40,7 @@ export type MenuPayload = {
     slug: string;
     theme_color: string;
     currency: string;
+    banner_image_url?: string;
   };
   menu: {
     id: string;

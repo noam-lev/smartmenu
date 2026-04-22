@@ -3,7 +3,8 @@
       "name": "Yossi's Hummus",
       "slug": "yossis-hummus",
       "theme_color": "#FF5733",
-      "currency": "ILS"
+      "currency": "ILS",
+      "banner_image_url": "https://images.unsplash.com/photo-1547592166-23ac45744acd?auto=format&fit=crop&q=80&w=1400"
     },
     "menu": {
       "id": "uuid-menu-123",
