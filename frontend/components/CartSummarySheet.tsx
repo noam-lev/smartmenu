@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect } from "react";
+import { useDraggableSheet } from "../hooks/useDraggableSheet";
 import { formatILSCurrency } from "../utils/currency";
 
 type CartLineItem = {
@@ -20,8 +21,6 @@ type CartSummarySheetProps = {
   onRemove: (itemId: string) => void;
 };
 
-const SHEET_DISMISS_PX = 120;
-
 export default function CartSummarySheet({
   isOpen,
   items,
@@ -31,13 +30,9 @@ export default function CartSummarySheet({
   onDecrease,
   onRemove,
 }: CartSummarySheetProps) {
-  const [sheetOffsetY, setSheetOffsetY] = useState(0);
-  const [sheetDragging, setSheetDragging] = useState(false);
-  const sheetDragRef = useRef<{
-    pointerId: number;
-    startClientY: number;
-    startOffsetY: number;
-  } | null>(null);
+  const { sheetOffsetY, sheetDragging, dragHandlers } = useDraggableSheet({
+    onDismiss: onClose,
+  });
 
   useEffect(() => {
     if (!isOpen) {
@@ -55,53 +50,6 @@ export default function CartSummarySheet({
   if (!isOpen) {
     return null;
   }
-
-  const handleSheetHandlePointerDown = (
-    event: React.PointerEvent<HTMLDivElement>,
-  ) => {
-    event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    sheetDragRef.current = {
-      pointerId: event.pointerId,
-      startClientY: event.clientY,
-      startOffsetY: sheetOffsetY,
-    };
-    setSheetDragging(true);
-  };
-
-  const handleSheetHandlePointerMove = (
-    event: React.PointerEvent<HTMLDivElement>,
-  ) => {
-    const drag = sheetDragRef.current;
-    if (!drag || event.pointerId !== drag.pointerId) {
-      return;
-    }
-
-    const delta = event.clientY - drag.startClientY;
-    setSheetOffsetY(Math.max(0, drag.startOffsetY + delta));
-  };
-
-  const handleSheetHandlePointerUp = (
-    event: React.PointerEvent<HTMLDivElement>,
-  ) => {
-    const drag = sheetDragRef.current;
-    if (!drag || event.pointerId !== drag.pointerId) {
-      return;
-    }
-
-    event.currentTarget.releasePointerCapture(event.pointerId);
-    const delta = event.clientY - drag.startClientY;
-    const endOffset = Math.max(0, drag.startOffsetY + delta);
-    sheetDragRef.current = null;
-    setSheetDragging(false);
-
-    if (endOffset >= SHEET_DISMISS_PX) {
-      onClose();
-      return;
-    }
-
-    setSheetOffsetY(0);
-  };
 
   return (
     <div
@@ -121,10 +69,7 @@ export default function CartSummarySheet({
       >
         <div
           className="-mx-4 -mt-2 flex cursor-grab touch-none justify-center py-3 active:cursor-grabbing"
-          onPointerDown={handleSheetHandlePointerDown}
-          onPointerMove={handleSheetHandlePointerMove}
-          onPointerUp={handleSheetHandlePointerUp}
-          onPointerCancel={handleSheetHandlePointerUp}
+          {...dragHandlers}
           role="presentation"
         >
           <div className="h-1.5 w-12 rounded-full bg-zinc-200" />

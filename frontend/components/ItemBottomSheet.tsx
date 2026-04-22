@@ -1,10 +1,8 @@
 "use client";
 
-import { useRef, useState } from "react";
 import type { MenuItem, UpsellRule } from "../types/menu";
+import { useDraggableSheet } from "../hooks/useDraggableSheet";
 import { formatILSCurrency } from "../utils/currency";
-
-const SHEET_DISMISS_PX = 120;
 
 type ItemBottomSheetProps = {
   selectedItem: MenuItem | null;
@@ -27,64 +25,13 @@ export default function ItemBottomSheet({
   onPrimaryAdd,
   onUpsellDecision,
 }: ItemBottomSheetProps) {
-  const [sheetOffsetY, setSheetOffsetY] = useState(0);
-  const [sheetDragging, setSheetDragging] = useState(false);
-  const sheetDragRef = useRef<{
-    pointerId: number;
-    startClientY: number;
-    startOffsetY: number;
-  } | null>(null);
+  const { sheetOffsetY, sheetDragging, dragHandlers } = useDraggableSheet({
+    onDismiss: onClose,
+  });
 
   if (!selectedItem) {
     return null;
   }
-
-  const handleSheetHandlePointerDown = (
-    event: React.PointerEvent<HTMLDivElement>,
-  ) => {
-    event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    sheetDragRef.current = {
-      pointerId: event.pointerId,
-      startClientY: event.clientY,
-      startOffsetY: sheetOffsetY,
-    };
-    setSheetDragging(true);
-  };
-
-  const handleSheetHandlePointerMove = (
-    event: React.PointerEvent<HTMLDivElement>,
-  ) => {
-    const drag = sheetDragRef.current;
-    if (!drag || event.pointerId !== drag.pointerId) {
-      return;
-    }
-
-    const delta = event.clientY - drag.startClientY;
-    setSheetOffsetY(Math.max(0, drag.startOffsetY + delta));
-  };
-
-  const handleSheetHandlePointerUp = (
-    event: React.PointerEvent<HTMLDivElement>,
-  ) => {
-    const drag = sheetDragRef.current;
-    if (!drag || event.pointerId !== drag.pointerId) {
-      return;
-    }
-
-    event.currentTarget.releasePointerCapture(event.pointerId);
-    const delta = event.clientY - drag.startClientY;
-    const endOffset = Math.max(0, drag.startOffsetY + delta);
-    sheetDragRef.current = null;
-    setSheetDragging(false);
-
-    if (endOffset >= SHEET_DISMISS_PX) {
-      onClose();
-      return;
-    }
-
-    setSheetOffsetY(0);
-  };
 
   return (
     <div
@@ -104,10 +51,7 @@ export default function ItemBottomSheet({
       >
         <div
           className="-mx-4 -mt-2 flex cursor-grab touch-none justify-center py-3 active:cursor-grabbing"
-          onPointerDown={handleSheetHandlePointerDown}
-          onPointerMove={handleSheetHandlePointerMove}
-          onPointerUp={handleSheetHandlePointerUp}
-          onPointerCancel={handleSheetHandlePointerUp}
+          {...dragHandlers}
           role="presentation"
         >
           <div className="h-1.5 w-12 rounded-full bg-zinc-200" />
