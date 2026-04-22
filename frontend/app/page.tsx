@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import CartSummarySheet from "../components/CartSummarySheet";
 import ItemBottomSheet from "../components/ItemBottomSheet";
 import MenuItemCard from "../components/MenuItemCard";
 import mockMenuRaw from "../data/mockMenu.json";
@@ -20,6 +21,7 @@ export default function Home() {
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [isUpsellStep, setIsUpsellStep] = useState(false);
+  const [isCartSheetOpen, setIsCartSheetOpen] = useState(false);
   const [activeCategoryId, setActiveCategoryId] = useState(categories[0]?.id ?? "");
   const hasMounted = useSyncExternalStore(
     () => () => {},
@@ -28,8 +30,12 @@ export default function Home() {
   );
 
   const addSelection = useCartStore((state) => state.addSelection);
+  const itemsByItemId = useCartStore((state) => state.itemsByItemId);
+  const setItemQuantity = useCartStore((state) => state.setItemQuantity);
+  const removeItem = useCartStore((state) => state.removeItem);
   const totalItems = useCartStore((state) => state.totalItems());
   const totalPrice = useCartStore((state) => state.totalPrice());
+  const cartItems = useMemo(() => Object.values(itemsByItemId), [itemsByItemId]);
 
   const upsellRule = selectedItem?.upsell_rules?.[0];
 
@@ -207,9 +213,32 @@ export default function Home() {
         onUpsellDecision={handleUpsellDecision}
       />
 
+      <CartSummarySheet
+        isOpen={isCartSheetOpen}
+        items={cartItems}
+        subtotal={totalPrice}
+        onClose={() => setIsCartSheetOpen(false)}
+        onIncrease={(itemId) => {
+          const item = itemsByItemId[itemId];
+          if (!item) {
+            return;
+          }
+          setItemQuantity(itemId, item.quantity + 1);
+        }}
+        onDecrease={(itemId) => {
+          const item = itemsByItemId[itemId];
+          if (!item) {
+            return;
+          }
+          setItemQuantity(itemId, item.quantity - 1);
+        }}
+        onRemove={removeItem}
+      />
+
       {hasMounted && totalItems > 0 ? (
         <button
           type="button"
+          onClick={() => setIsCartSheetOpen(true)}
           className="fixed bottom-4 left-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-2xl bg-zinc-900 px-4 py-3 text-left text-white shadow-lg active:scale-[0.995]"
         >
           <p className="text-xs font-medium text-zinc-300">Soft ordering</p>

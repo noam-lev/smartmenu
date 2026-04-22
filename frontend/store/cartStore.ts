@@ -3,7 +3,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-type CartItem = {
+export type CartItem = {
   itemId: string;
   name: string;
   displayUnitPrice: number;
@@ -20,6 +20,8 @@ type CartStore = {
   }) => void;
   totalItems: () => number;
   totalPrice: () => number;
+  setItemQuantity: (itemId: string, quantity: number) => void;
+  removeItem: (itemId: string) => void;
 };
 
 export const useCartStore = create<CartStore>()(
@@ -53,6 +55,35 @@ export const useCartStore = create<CartStore>()(
           (sum, item) => sum + item.displayUnitPrice * item.quantity,
           0,
         ),
+      setItemQuantity: (itemId, quantity) =>
+        set((state) => {
+          const existing = state.itemsByItemId[itemId];
+          if (!existing) {
+            return state;
+          }
+
+          if (quantity <= 0) {
+            const nextItems = { ...state.itemsByItemId };
+            delete nextItems[itemId];
+            return { itemsByItemId: nextItems };
+          }
+
+          return {
+            itemsByItemId: {
+              ...state.itemsByItemId,
+              [itemId]: {
+                ...existing,
+                quantity,
+              },
+            },
+          };
+        }),
+      removeItem: (itemId) =>
+        set((state) => {
+          const nextItems = { ...state.itemsByItemId };
+          delete nextItems[itemId];
+          return { itemsByItemId: nextItems };
+        }),
     }),
     {
       name: "smartmenu-cart",
