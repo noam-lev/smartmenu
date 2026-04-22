@@ -22,6 +22,7 @@ export default function Home() {
   const [quantity, setQuantity] = useState(1);
   const [isUpsellStep, setIsUpsellStep] = useState(false);
   const [isCartSheetOpen, setIsCartSheetOpen] = useState(false);
+  const [cartSheetSession, setCartSheetSession] = useState(0);
   const [activeCategoryId, setActiveCategoryId] = useState(categories[0]?.id ?? "");
   const hasMounted = useSyncExternalStore(
     () => () => {},
@@ -133,6 +134,15 @@ export default function Home() {
     });
   };
 
+  const openCartSheet = () => {
+    setCartSheetSession((prev) => prev + 1);
+    setIsCartSheetOpen(true);
+  };
+
+  const closeCartSheet = () => {
+    setIsCartSheetOpen(false);
+  };
+
   return (
     <div className="min-h-screen bg-zinc-50">
       <main className="mx-auto max-w-md bg-white pb-24">
@@ -214,10 +224,11 @@ export default function Home() {
       />
 
       <CartSummarySheet
+        key={`cart-sheet-${cartSheetSession}`}
         isOpen={isCartSheetOpen}
         items={cartItems}
         subtotal={totalPrice}
-        onClose={() => setIsCartSheetOpen(false)}
+        onClose={closeCartSheet}
         onIncrease={(itemId) => {
           const item = itemsByItemId[itemId];
           if (!item) {
@@ -238,7 +249,7 @@ export default function Home() {
       {hasMounted && totalItems > 0 ? (
         <button
           type="button"
-          onClick={() => setIsCartSheetOpen(true)}
+          onClick={openCartSheet}
           className="fixed bottom-4 left-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-2xl bg-zinc-900 px-4 py-3 text-left text-white shadow-lg active:scale-[0.995]"
         >
           <p className="text-xs font-medium text-zinc-300">Soft ordering</p>

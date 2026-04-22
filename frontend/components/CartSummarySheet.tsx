@@ -110,7 +110,7 @@ export default function CartSummarySheet({
       role="presentation"
     >
       <div
-        className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-md rounded-t-3xl bg-white p-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-2xl will-change-transform"
+        className="absolute inset-x-0 bottom-0 mx-auto flex h-[min(74vh,42rem)] w-full max-w-md flex-col rounded-t-3xl bg-white p-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-2xl will-change-transform"
         style={{
           transform: `translateY(${sheetOffsetY}px)`,
           transition: sheetDragging
@@ -141,10 +141,14 @@ export default function CartSummarySheet({
         </div>
 
         {items.length === 0 ? (
-          <p className="py-6 text-center text-sm text-zinc-500">Your cart is empty.</p>
+          <div className="flex flex-1 items-center justify-center">
+            <p className="py-6 text-center text-sm text-zinc-500">
+              Your cart is empty.
+            </p>
+          </div>
         ) : (
           <>
-            <div className="max-h-[52vh] space-y-3 overflow-y-auto pr-1">
+            <div className="flex-1 space-y-3 overflow-y-auto pr-1">
               {items.map((item) => (
                 <div
                   key={item.itemId}
