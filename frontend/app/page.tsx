@@ -1,18 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import ItemBottomSheet from "../components/ItemBottomSheet";
 import MenuItemCard from "../components/MenuItemCard";
 import mockMenuRaw from "../data/mockMenu.json";
 import { useCartStore } from "../store/cartStore";
 import type { MenuCategory, MenuItem, MenuPayload } from "../types/menu";
+import { formatILSCurrency } from "../utils/currency";
 
 const mockMenu = mockMenuRaw as MenuPayload;
-
-const SHEET_DISMISS_PX = 120;
-
-function formatILS(amount: number) {
-  return `${Math.round(amount)} \u20aa`;
-}
 
 export default function Home() {
   const categories = useMemo(
@@ -25,16 +21,13 @@ export default function Home() {
   const [quantity, setQuantity] = useState(1);
   const [isUpsellStep, setIsUpsellStep] = useState(false);
   const [activeCategoryId, setActiveCategoryId] = useState(categories[0]?.id ?? "");
-  const [sheetOffsetY, setSheetOffsetY] = useState(0);
-  const [sheetDragging, setSheetDragging] = useState(false);
-  const [hasMounted, setHasMounted] = useState(false);
-  const sheetDragRef = useRef<{
-    pointerId: number;
-    startClientY: number;
-    startOffsetY: number;
-  } | null>(null);
+  const hasMounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
 
-  const addItem = useCartStore((state) => state.addItem);
+  const addSelection = useCartStore((state) => state.addSelection);
   const totalItems = useCartStore((state) => state.totalItems());
   const totalPrice = useCartStore((state) => state.totalPrice());
 
@@ -44,9 +37,6 @@ export default function Home() {
     setSelectedItem(null);
     setIsUpsellStep(false);
     setQuantity(1);
-    setSheetOffsetY(0);
-    sheetDragRef.current = null;
-    setSheetDragging(false);
   };
 
   const openItemSheet = (item: MenuItem) => {
@@ -60,70 +50,53 @@ export default function Home() {
   };
 
   useEffect(() => {
-    setHasMounted(true);
-  }, []);
+    const sections = categories
+      .map((category) => sectionRefs.current[category.id])
+      .filter((element): element is HTMLElement => Boolean(element));
 
-  useEffect(() => {
-    if (!selectedItem) {
+    if (!sections.length) {
       return;
     }
-    setSheetOffsetY(0);
-    sheetDragRef.current = null;
-    setSheetDragging(false);
-  }, [selectedItem, isUpsellStep]);
 
-  const handleSheetHandlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    (event.currentTarget as HTMLDivElement).setPointerCapture(event.pointerId);
-    sheetDragRef.current = {
-      pointerId: event.pointerId,
-      startClientY: event.clientY,
-      startOffsetY: sheetOffsetY,
-    };
-    setSheetDragging(true);
-  };
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const activeEntry = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
 
-  const handleSheetHandlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    const drag = sheetDragRef.current;
-    if (!drag || event.pointerId !== drag.pointerId) {
-      return;
-    }
-    const delta = event.clientY - drag.startClientY;
-    const next = Math.max(0, drag.startOffsetY + delta);
-    setSheetOffsetY(next);
-  };
+        if (!activeEntry) {
+          return;
+        }
 
-  const handleSheetHandlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
-    const drag = sheetDragRef.current;
-    if (!drag || event.pointerId !== drag.pointerId) {
-      return;
-    }
-    (event.currentTarget as HTMLDivElement).releasePointerCapture(event.pointerId);
-    const delta = event.clientY - drag.startClientY;
-    const endOffset = Math.max(0, drag.startOffsetY + delta);
-    sheetDragRef.current = null;
-    setSheetDragging(false);
+        const nextCategoryId =
+          activeEntry.target.getAttribute("data-category-id") ?? "";
+        if (nextCategoryId) {
+          setActiveCategoryId(nextCategoryId);
+        }
+      },
+      {
+        root: null,
+        rootMargin: "-30% 0px -55% 0px",
+        threshold: [0.1, 0.25, 0.5, 0.75],
+      },
+    );
 
-    if (endOffset >= SHEET_DISMISS_PX) {
-      closeSheet();
-      return;
-    }
-    setSheetOffsetY(0);
-  };
+    sections.forEach((section) => observer.observe(section));
+
+    return () => observer.disconnect();
+  }, [categories]);
 
   const handlePrimaryAdd = () => {
     if (!selectedItem) {
       return;
     }
 
-    addItem(
-      {
-        id: selectedItem.id,
-        name: selectedItem.name,
-        unitPrice: selectedItem.base_price,
-      },
+    addSelection({
+      itemId: selectedItem.id,
       quantity,
-    );
+      name: selectedItem.name,
+      displayUnitPrice: selectedItem.base_price,
+    });
 
     if (selectedItem.upsell_rules?.length) {
       setIsUpsellStep(true);
@@ -135,10 +108,11 @@ export default function Home() {
 
   const handleUpsellDecision = (accept: boolean) => {
     if (accept && upsellRule) {
-      addItem({
-        id: upsellRule.offer_item_snapshot.id,
+      addSelection({
+        itemId: upsellRule.offer_item_snapshot.id,
+        quantity: 1,
         name: upsellRule.offer_item_snapshot.name,
-        unitPrice: upsellRule.discount_price,
+        displayUnitPrice: upsellRule.discount_price,
       });
     }
 
@@ -204,7 +178,7 @@ export default function Home() {
               ref={(el) => {
                 sectionRefs.current[category.id] = el;
               }}
-              onMouseEnter={() => setActiveCategoryId(category.id)}
+              data-category-id={category.id}
             >
               <h2 className="border-b border-zinc-200 px-4 py-3 text-base font-bold text-zinc-900">
                 {category.name}
@@ -221,134 +195,17 @@ export default function Home() {
         </section>
       </main>
 
-      {selectedItem ? (
-        <div
-          className="fixed inset-0 z-[60] bg-black/40"
-          onClick={closeSheet}
-          role="presentation"
-        >
-          <div
-            className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-md rounded-t-3xl bg-white p-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-2xl will-change-transform"
-            style={{
-              transform: `translateY(${sheetOffsetY}px)`,
-              transition: sheetDragging ? "none" : "transform 0.22s cubic-bezier(0.32, 0.72, 0, 1)",
-            }}
-            onClick={(event) => event.stopPropagation()}
-          >
-            {!isUpsellStep ? (
-              <>
-                <div
-                  className="-mx-4 -mt-2 flex cursor-grab touch-none justify-center py-3 active:cursor-grabbing"
-                  onPointerDown={handleSheetHandlePointerDown}
-                  onPointerMove={handleSheetHandlePointerMove}
-                  onPointerUp={handleSheetHandlePointerUp}
-                  onPointerCancel={handleSheetHandlePointerUp}
-                  role="presentation"
-                >
-                  <div className="h-1.5 w-12 rounded-full bg-zinc-200" />
-                </div>
-                <img
-                  src={selectedItem.image_url}
-                  alt={selectedItem.name}
-                  className="h-44 w-full rounded-2xl object-cover"
-                />
-                <h3 className="mt-4 text-xl font-bold text-zinc-900">
-                  {selectedItem.name}
-                </h3>
-                <p className="mt-1 text-sm leading-6 text-zinc-600">
-                  {selectedItem.description}
-                </p>
-
-                <div className="mt-4 flex items-center justify-between">
-                  <p className="text-sm font-medium text-zinc-600">Quantity</p>
-                  <div className="flex items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setQuantity((prev) => Math.max(1, prev - 1))}
-                      className="h-9 w-9 rounded-full border border-zinc-300 text-lg font-medium text-zinc-900 active:scale-[0.96]"
-                    >
-                      -
-                    </button>
-                    <span className="min-w-6 text-center text-base font-semibold text-zinc-900">
-                      {quantity}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setQuantity((prev) => prev + 1)}
-                      className="h-9 w-9 rounded-full border border-zinc-300 text-lg font-medium text-zinc-900 active:scale-[0.96]"
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handlePrimaryAdd}
-                  className="mt-5 w-full rounded-2xl bg-zinc-900 px-4 py-3 text-base font-semibold text-white active:scale-[0.995]"
-                >
-                  Add to order - {formatILS(selectedItem.base_price * quantity)}
-                </button>
-              </>
-            ) : (
-              <>
-                <div
-                  className="-mx-4 -mt-2 flex cursor-grab touch-none justify-center py-3 active:cursor-grabbing"
-                  onPointerDown={handleSheetHandlePointerDown}
-                  onPointerMove={handleSheetHandlePointerMove}
-                  onPointerUp={handleSheetHandlePointerUp}
-                  onPointerCancel={handleSheetHandlePointerUp}
-                  role="presentation"
-                >
-                  <div className="h-1.5 w-12 rounded-full bg-zinc-200" />
-                </div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
-                  Suggested add-on
-                </p>
-                <h3 className="mt-1 text-xl font-bold text-zinc-900">
-                  {upsellRule?.offer_item_snapshot.name}
-                </h3>
-                <p className="mt-2 text-sm leading-6 text-zinc-600">
-                  {upsellRule?.custom_message}
-                </p>
-
-                <div className="mt-4 flex items-center gap-3 rounded-2xl border border-zinc-200 p-3">
-                  <img
-                    src={upsellRule?.offer_item_snapshot.image_url}
-                    alt={upsellRule?.offer_item_snapshot.name}
-                    className="h-16 w-16 rounded-xl object-cover"
-                  />
-                  <div>
-                    <p className="text-sm font-semibold text-zinc-900">
-                      {upsellRule?.offer_item_snapshot.name}
-                    </p>
-                    <p className="text-sm text-zinc-500">
-                      {formatILS(upsellRule?.discount_price ?? 0)}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mt-5 grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => handleUpsellDecision(false)}
-                    className="rounded-2xl border border-zinc-300 px-4 py-3 text-sm font-semibold text-zinc-700 active:scale-[0.99]"
-                  >
-                    No thanks
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleUpsellDecision(true)}
-                    className="rounded-2xl bg-zinc-900 px-4 py-3 text-sm font-semibold text-white active:scale-[0.99]"
-                  >
-                    Add {formatILS(upsellRule?.discount_price ?? 0)}
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      ) : null}
+      <ItemBottomSheet
+        key={selectedItem ? `${selectedItem.id}-${isUpsellStep ? "upsell" : "item"}` : "closed"}
+        selectedItem={selectedItem}
+        isUpsellStep={isUpsellStep}
+        quantity={quantity}
+        upsellRule={upsellRule}
+        onClose={closeSheet}
+        onQuantityChange={setQuantity}
+        onPrimaryAdd={handlePrimaryAdd}
+        onUpsellDecision={handleUpsellDecision}
+      />
 
       {hasMounted && totalItems > 0 ? (
         <button
@@ -358,7 +215,7 @@ export default function Home() {
           <p className="text-xs font-medium text-zinc-300">Soft ordering</p>
           <p className="text-sm font-semibold">
             View Order ({totalItems} {totalItems === 1 ? "item" : "items"}) -{" "}
-            {formatILS(totalPrice)}
+            {formatILSCurrency(totalPrice)}
           </p>
         </button>
       ) : null}

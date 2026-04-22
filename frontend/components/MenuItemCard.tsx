@@ -1,4 +1,5 @@
 import type { MenuItem } from "../types/menu";
+import { formatILSCurrency } from "../utils/currency";
 
 type MenuItemCardProps = {
   item: MenuItem;
@@ -6,7 +7,7 @@ type MenuItemCardProps = {
 };
 
 export default function MenuItemCard({ item, onClick }: MenuItemCardProps) {
-  const formattedPrice = `${item.base_price.toFixed(0)} \u20aa`;
+  const formattedPrice = formatILSCurrency(item.base_price);
 
   return (
     <button

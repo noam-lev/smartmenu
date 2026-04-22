@@ -4,15 +4,20 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 type CartItem = {
-  id: string;
+  itemId: string;
   name: string;
-  unitPrice: number;
+  displayUnitPrice: number;
   quantity: number;
 };
 
 type CartStore = {
-  items: Record<string, CartItem>;
-  addItem: (item: Omit<CartItem, "quantity">, quantity?: number) => void;
+  itemsByItemId: Record<string, CartItem>;
+  addSelection: (payload: {
+    itemId: string;
+    quantity: number;
+    name: string;
+    displayUnitPrice: number;
+  }) => void;
   totalItems: () => number;
   totalPrice: () => number;
 };
@@ -20,27 +25,32 @@ type CartStore = {
 export const useCartStore = create<CartStore>()(
   persist(
     (set, get) => ({
-      items: {},
-      addItem: (item, quantity = 1) =>
+      itemsByItemId: {},
+      addSelection: ({ itemId, quantity, name, displayUnitPrice }) =>
         set((state) => {
-          const existing = state.items[item.id];
+          const existing = state.itemsByItemId[itemId];
           const nextQuantity = (existing?.quantity ?? 0) + quantity;
 
           return {
-            items: {
-              ...state.items,
-              [item.id]: {
-                ...item,
+            itemsByItemId: {
+              ...state.itemsByItemId,
+              [itemId]: {
+                itemId,
+                name,
+                displayUnitPrice,
                 quantity: nextQuantity,
               },
             },
           };
         }),
       totalItems: () =>
-        Object.values(get().items).reduce((sum, item) => sum + item.quantity, 0),
+        Object.values(get().itemsByItemId).reduce(
+          (sum, item) => sum + item.quantity,
+          0,
+        ),
       totalPrice: () =>
-        Object.values(get().items).reduce(
-          (sum, item) => sum + item.unitPrice * item.quantity,
+        Object.values(get().itemsByItemId).reduce(
+          (sum, item) => sum + item.displayUnitPrice * item.quantity,
           0,
         ),
     }),
