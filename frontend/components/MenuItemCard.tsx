@@ -1,7 +1,9 @@
+import { useState } from "react";
 import type { MenuItem } from "../types/menu";
 import { formatILSCurrency } from "../utils/currency";
 import { getLocalizedText } from "../utils/i18n";
 import type { Locale } from "../types/menu";
+import { hasRenderableImage } from "../utils/media";
 
 type MenuItemCardProps = {
   item: MenuItem;
@@ -16,9 +18,12 @@ export default function MenuItemCard({
   unavailableLabel,
   onClick,
 }: MenuItemCardProps) {
+  const [failedImageUrls, setFailedImageUrls] = useState<Record<string, true>>({});
   const formattedPrice = formatILSCurrency(item.base_price);
   const itemName = getLocalizedText(item, "name", locale);
   const itemDescription = getLocalizedText(item, "description", locale);
+  const hasImage =
+    hasRenderableImage(item.image_url) && !failedImageUrls[item.image_url];
 
   return (
     <button
@@ -47,14 +52,23 @@ export default function MenuItemCard({
           </div>
         </div>
 
-        <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-zinc-100">
-          <img
-            src={item.image_url}
-            alt={itemName}
-            loading="lazy"
-            className="h-full w-full object-cover"
-          />
-        </div>
+        {hasImage ? (
+          <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-zinc-100">
+            <img
+              src={item.image_url}
+              alt={itemName}
+              loading="lazy"
+              className="h-full w-full object-cover"
+              onError={(event) => {
+                const failedUrl = event.currentTarget.currentSrc || item.image_url;
+                if (!failedUrl) {
+                  return;
+                }
+                setFailedImageUrls((prev) => ({ ...prev, [failedUrl]: true }));
+              }}
+            />
+          </div>
+        ) : null}
       </div>
     </button>
   );

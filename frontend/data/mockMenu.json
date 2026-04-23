@@ -4,7 +4,7 @@
       "slug": "yossis-hummus",
       "theme_color": "#FF5733",
       "currency": "ILS",
-      "banner_image_url": "https://images.unsplash.com/photo-1547592166-23ac45744acd?auto=format&fit=crop&q=80&w=1400",
+      "banner_image_url": "/yossis-hummus-banner.png",
       "default_locale": "he",
       "translations": {
         "he": {
@@ -232,6 +232,29 @@
                   "id": "uuid-var-6",
                   "name": "Regular",
                   "price": 42.00
+                }
+              ],
+              "upsell_rules": []
+            },
+            {
+              "id": "uuid-item-7",
+              "name": "Tabbouleh Salad",
+              "description": "Fresh parsley, tomato, bulgur, mint, and lemon-olive oil dressing.",
+              "base_price": 39.00,
+              "is_available": true,
+              "image_url": "",
+              "translations": {
+                "he": {
+                  "name": "סלט טאבולה",
+                  "description": "פטרוזיליה טרייה, עגבנייה, בורגול, נענע ורוטב לימון-שמן זית."
+                }
+              },
+              "tags": ["VEGAN"],
+              "variants": [
+                {
+                  "id": "uuid-var-7",
+                  "name": "Regular",
+                  "price": 39.00
                 }
               ],
               "upsell_rules": []

@@ -1,9 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import type { Locale, MenuItem, UpsellRule } from "../types/menu";
 import { useDraggableSheet } from "../hooks/useDraggableSheet";
 import { formatILSCurrency } from "../utils/currency";
 import { getLocalizedText } from "../utils/i18n";
+import { hasRenderableImage } from "../utils/media";
 
 type ItemBottomSheetProps = {
   selectedItem: MenuItem | null;
@@ -36,6 +38,7 @@ export default function ItemBottomSheet({
   onPrimaryAdd,
   onUpsellDecision,
 }: ItemBottomSheetProps) {
+  const [failedImageUrls, setFailedImageUrls] = useState<Record<string, true>>({});
   const { sheetOffsetY, sheetDragging, dragHandlers } = useDraggableSheet({
     onDismiss: onClose,
   });
@@ -52,6 +55,12 @@ export default function ItemBottomSheet({
   const upsellMessage = upsellRule
     ? getLocalizedText(upsellRule, "custom_message", locale)
     : "";
+  const upsellImageUrl = upsellRule?.offer_item_snapshot.image_url;
+  const upsellImageKey = hasRenderableImage(upsellImageUrl) ? upsellImageUrl : null;
+  const hasMainImage =
+    hasRenderableImage(selectedItem.image_url) &&
+    !failedImageUrls[selectedItem.image_url];
+  const hasUpsellImage = upsellImageKey ? !failedImageUrls[upsellImageKey] : false;
 
   return (
     <div
@@ -79,11 +88,21 @@ export default function ItemBottomSheet({
 
         {!isUpsellStep ? (
           <>
-            <img
-              src={selectedItem.image_url}
-              alt={itemName}
-              className="h-44 w-full rounded-2xl object-cover"
-            />
+            {hasMainImage ? (
+              <img
+                src={selectedItem.image_url}
+                alt={itemName}
+                className="h-44 w-full rounded-2xl object-cover"
+                onError={(event) => {
+                  const failedUrl =
+                    event.currentTarget.currentSrc || selectedItem.image_url;
+                  if (!failedUrl) {
+                    return;
+                  }
+                  setFailedImageUrls((prev) => ({ ...prev, [failedUrl]: true }));
+                }}
+              />
+            ) : null}
             <h3 className="mt-4 text-xl font-bold text-zinc-900">
               {itemName}
             </h3>
@@ -136,11 +155,21 @@ export default function ItemBottomSheet({
             </p>
 
             <div className="mt-4 flex items-center gap-3 rounded-2xl border border-zinc-200 p-3">
-              <img
-                src={upsellRule?.offer_item_snapshot.image_url}
-                alt={upsellItemName}
-                className="h-16 w-16 rounded-xl object-cover"
-              />
+              {hasUpsellImage ? (
+                <img
+                  src={upsellImageUrl}
+                  alt={upsellItemName}
+                  className="h-16 w-16 rounded-xl object-cover"
+                  onError={(event) => {
+                    const failedUrl =
+                      event.currentTarget.currentSrc || upsellImageUrl;
+                    if (!failedUrl) {
+                      return;
+                    }
+                    setFailedImageUrls((prev) => ({ ...prev, [failedUrl]: true }));
+                  }}
+                />
+              ) : null}
               <div>
                 <p className="text-sm font-semibold text-zinc-900">
                   {upsellItemName}
