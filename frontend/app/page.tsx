@@ -157,9 +157,18 @@ export default function Home() {
 
   const scrollToCategory = (category: MenuCategory) => {
     setActiveCategoryId(category.id);
-    sectionRefs.current[category.id]?.scrollIntoView({
+    const sectionElement = sectionRefs.current[category.id];
+    if (!sectionElement) {
+      return;
+    }
+
+    const stickyNavOffset = 56;
+    const targetTop =
+      sectionElement.getBoundingClientRect().top + window.scrollY - stickyNavOffset;
+
+    window.scrollTo({
+      top: targetTop,
       behavior: "smooth",
-      block: "start",
     });
   };
 
