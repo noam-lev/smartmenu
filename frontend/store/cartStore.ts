@@ -14,6 +14,8 @@ export type CartItem = {
 
 type CartStore = {
   itemsByItemId: Record<string, CartItem>;
+  totalItems: number;
+  totalPrice: number;
   addSelection: (payload: {
     itemId: string;
     quantity: number;
@@ -21,44 +23,49 @@ type CartStore = {
     translations?: TranslationsMap;
     displayUnitPrice: number;
   }) => void;
-  totalItems: () => number;
-  totalPrice: () => number;
   setItemQuantity: (itemId: string, quantity: number) => void;
   removeItem: (itemId: string) => void;
 };
 
+function computeCartTotals(itemsByItemId: Record<string, CartItem>) {
+  return Object.values(itemsByItemId).reduce(
+    (acc, item) => {
+      acc.totalItems += item.quantity;
+      acc.totalPrice += item.displayUnitPrice * item.quantity;
+      return acc;
+    },
+    { totalItems: 0, totalPrice: 0 },
+  );
+}
+
 export const useCartStore = create<CartStore>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       itemsByItemId: {},
+      totalItems: 0,
+      totalPrice: 0,
       addSelection: ({ itemId, quantity, name, translations, displayUnitPrice }) =>
         set((state) => {
           const existing = state.itemsByItemId[itemId];
           const nextQuantity = (existing?.quantity ?? 0) + quantity;
-
-          return {
-            itemsByItemId: {
-              ...state.itemsByItemId,
-              [itemId]: {
-                itemId,
-                name,
-                translations,
-                displayUnitPrice,
-                quantity: nextQuantity,
-              },
+          const nextItemsByItemId = {
+            ...state.itemsByItemId,
+            [itemId]: {
+              itemId,
+              name,
+              translations,
+              displayUnitPrice,
+              quantity: nextQuantity,
             },
           };
+          const totals = computeCartTotals(nextItemsByItemId);
+
+          return {
+            itemsByItemId: nextItemsByItemId,
+            totalItems: totals.totalItems,
+            totalPrice: totals.totalPrice,
+          };
         }),
-      totalItems: () =>
-        Object.values(get().itemsByItemId).reduce(
-          (sum, item) => sum + item.quantity,
-          0,
-        ),
-      totalPrice: () =>
-        Object.values(get().itemsByItemId).reduce(
-          (sum, item) => sum + item.displayUnitPrice * item.quantity,
-          0,
-        ),
       setItemQuantity: (itemId, quantity) =>
         set((state) => {
           const existing = state.itemsByItemId[itemId];
@@ -69,28 +76,56 @@ export const useCartStore = create<CartStore>()(
           if (quantity <= 0) {
             const nextItems = { ...state.itemsByItemId };
             delete nextItems[itemId];
-            return { itemsByItemId: nextItems };
+            const totals = computeCartTotals(nextItems);
+            return {
+              itemsByItemId: nextItems,
+              totalItems: totals.totalItems,
+              totalPrice: totals.totalPrice,
+            };
           }
 
-          return {
-            itemsByItemId: {
-              ...state.itemsByItemId,
-              [itemId]: {
-                ...existing,
-                quantity,
-              },
+          const nextItemsByItemId = {
+            ...state.itemsByItemId,
+            [itemId]: {
+              ...existing,
+              quantity,
             },
+          };
+          const totals = computeCartTotals(nextItemsByItemId);
+
+          return {
+            itemsByItemId: nextItemsByItemId,
+            totalItems: totals.totalItems,
+            totalPrice: totals.totalPrice,
           };
         }),
       removeItem: (itemId) =>
         set((state) => {
           const nextItems = { ...state.itemsByItemId };
           delete nextItems[itemId];
-          return { itemsByItemId: nextItems };
+          const totals = computeCartTotals(nextItems);
+          return {
+            itemsByItemId: nextItems,
+            totalItems: totals.totalItems,
+            totalPrice: totals.totalPrice,
+          };
         }),
     }),
     {
       name: "smartmenu-cart",
+      version: 2,
+      migrate: (persistedState: unknown) => {
+        const state = (persistedState ?? {}) as Partial<CartStore>;
+        const itemsByItemId = state.itemsByItemId ?? {};
+        const totals = computeCartTotals(itemsByItemId);
+
+        return {
+          ...state,
+          itemsByItemId,
+          totalItems: totals.totalItems,
+          totalPrice: totals.totalPrice,
+        } as CartStore;
+      },
     },
   ),
 );

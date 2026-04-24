@@ -39,8 +39,8 @@ export default function Home() {
   const itemsByItemId = useCartStore((state) => state.itemsByItemId);
   const setItemQuantity = useCartStore((state) => state.setItemQuantity);
   const removeItem = useCartStore((state) => state.removeItem);
-  const totalItems = useCartStore((state) => state.totalItems());
-  const totalPrice = useCartStore((state) => state.totalPrice());
+  const totalItems = useCartStore((state) => state.totalItems);
+  const totalPrice = useCartStore((state) => state.totalPrice);
   const cartItems = useMemo(() => Object.values(itemsByItemId), [itemsByItemId]);
   const isRtl = isRtlLocale(locale);
 
@@ -183,7 +183,7 @@ export default function Home() {
 
   return (
     <div
-      className="min-h-screen bg-zinc-50"
+      className="min-h-[100dvh] bg-zinc-50"
       lang={locale}
       dir={isRtl ? "rtl" : "ltr"}
     >

@@ -35,14 +35,14 @@
             {
               "id": "uuid-item-1",
               "name": "Classic Chickpea Hummus",
-              "description": "House hummus with warm chickpeas, fresh parsley, and premium cold-pressed olive oil.",
+              "description": "Our signature house hummus, slow-cooked overnight using premium organic chickpeas sourced from local farms in the Galilee region. Served warm and silky-smooth, generously topped with whole tender chickpeas, freshly chopped parsley, a drizzle of high-quality cold-pressed extra-virgin olive oil, and a dash of smoky paprika. Pairs beautifully with our freshly baked pita bread or crispy laffa. A beloved classic that has been on our menu since day one — the dish that started it all.",
               "base_price": 32.00,
               "is_available": true,
               "image_url": "https://images.unsplash.com/photo-1577906096429-f73c2c312435?auto=format&fit=crop&q=80&w=200",
               "translations": {
                 "he": {
                   "name": "חומוס גרגרים קלאסי",
-                  "description": "חומוס ביתי עם גרגרים חמים, פטרוזיליה טרייה ושמן זית כתית מעולה."
+                  "description": "החומוס הקלאסי שלנו, שמתבשל לאט לאורך הלילה מגרגרי חומוס איכותיים שנבחרים בקפידה מחוות מקומיות בגליל. מוגש חם, במרקם חלק ועשיר, עם תוספת נדיבה של גרגרים רכים, פטרוזיליה טרייה קצוצה, זילוף של שמן זית כתית מעולה איכותי ונגיעה עדינה של פפריקה מעושנת. משתלב נהדר עם פיתה טרייה שנאפית במקום או לאפה פריכה. זו המנה האהובה שמלווה אותנו מהיום הראשון - המנה שהתחילה את הכל."
                 }
               },
               "tags": ["VEGAN", "GLUTEN_FREE"],

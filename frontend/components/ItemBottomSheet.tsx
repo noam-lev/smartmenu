@@ -69,7 +69,7 @@ export default function ItemBottomSheet({
       role="presentation"
     >
       <div
-        className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-md rounded-t-3xl bg-white p-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-2xl will-change-transform"
+        className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-md overscroll-contain rounded-t-3xl bg-white p-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-2xl will-change-transform"
         style={{
           transform: `translateY(${sheetOffsetY}px)`,
           transition: sheetDragging
