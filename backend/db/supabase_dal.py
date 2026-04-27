@@ -68,7 +68,10 @@ class SupabaseDAL(MenuRepository):
                                 name,
                                 price
                             ),
-                            upsell_rules!upsell_rules_trigger_item_id_fkey(*)
+                            upsell_rules!upsell_rules_trigger_item_id_fkey(
+                                *,
+                                offer_item:menu_items!upsell_rules_offer_item_id_fkey(*)
+                            )
                         )
                     )
                 )
