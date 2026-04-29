@@ -4,19 +4,24 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "reac
 import CartSummarySheet from "../components/CartSummarySheet";
 import ItemBottomSheet from "../components/ItemBottomSheet";
 import MenuItemCard from "../components/MenuItemCard";
-import mockMenuRaw from "../data/mockMenu.json";
+import { fetchMenuBySlug } from "../lib/menuApi";
 import { useCartStore } from "../store/cartStore";
 import type { Locale, MenuCategory, MenuItem, MenuPayload } from "../types/menu";
 import { formatILSCurrency } from "../utils/currency";
 import { getLocalizedText, getUiMessage, isRtlLocale } from "../utils/i18n";
 
-const mockMenu = mockMenuRaw as MenuPayload;
-const defaultLocale: Locale = mockMenu.restaurant.default_locale ?? "en";
+const DINER_MENU_SLUG = "yossis-hummus";
 
 export default function Home() {
+  const [menuPayload, setMenuPayload] = useState<MenuPayload | null>(null);
+  const [isMenuLoading, setIsMenuLoading] = useState(true);
+  const [menuError, setMenuError] = useState<string | null>(null);
   const categories = useMemo(
-    () => [...mockMenu.menu.categories].sort((a, b) => a.sort_order - b.sort_order),
-    [],
+    () =>
+      menuPayload
+        ? [...menuPayload.menu.categories].sort((a, b) => a.sort_order - b.sort_order)
+        : [],
+    [menuPayload],
   );
 
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
@@ -26,8 +31,8 @@ export default function Home() {
   const [isCartSheetOpen, setIsCartSheetOpen] = useState(false);
   const [cartSheetSession, setCartSheetSession] = useState(0);
   const [isLanguageMenuOpen, setIsLanguageMenuOpen] = useState(false);
-  const [locale, setLocale] = useState<Locale>(defaultLocale);
-  const [activeCategoryId, setActiveCategoryId] = useState(categories[0]?.id ?? "");
+  const [locale, setLocale] = useState<Locale>("he");
+  const [activeCategoryId, setActiveCategoryId] = useState("");
   const languageMenuRef = useRef<HTMLDivElement | null>(null);
   const hasMounted = useSyncExternalStore(
     () => () => {},
@@ -45,8 +50,54 @@ export default function Home() {
   const isRtl = isRtlLocale(locale);
 
   const upsellRule = selectedItem?.upsell_rules?.[0];
-  const restaurantName = getLocalizedText(mockMenu.restaurant, "name", locale);
-  const menuName = getLocalizedText(mockMenu.menu, "name", locale);
+  const restaurantName = menuPayload
+    ? getLocalizedText(menuPayload.restaurant, "name", locale)
+    : "";
+  const menuName = menuPayload
+    ? getLocalizedText(menuPayload.menu, "name", locale)
+    : "";
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadMenu() {
+      try {
+        setIsMenuLoading(true);
+        setMenuError(null);
+
+        const data = await fetchMenuBySlug(DINER_MENU_SLUG);
+
+        if (!isMounted) {
+          return;
+        }
+
+        const sortedCategories = [...data.menu.categories].sort(
+          (a, b) => a.sort_order - b.sort_order,
+        );
+        setMenuPayload(data);
+        setLocale(data.restaurant.default_locale ?? "en");
+        setActiveCategoryId(sortedCategories[0]?.id ?? "");
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
+        setMenuError(
+          error instanceof Error ? error.message : "Failed to load menu",
+        );
+      } finally {
+        if (isMounted) {
+          setIsMenuLoading(false);
+        }
+      }
+    }
+
+    void loadMenu();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const closeSheet = () => {
     setSelectedItem(null);
@@ -148,7 +199,8 @@ export default function Home() {
         quantity: 1,
         name: upsellRule.offer_item_snapshot.name,
         translations: upsellRule.offer_item_snapshot.translations,
-        displayUnitPrice: upsellRule.discount_price,
+        displayUnitPrice:
+          upsellRule.discount_price ?? upsellRule.offer_item_snapshot.price,
       });
     }
 
@@ -181,6 +233,30 @@ export default function Home() {
     setIsCartSheetOpen(false);
   };
 
+  if (isMenuLoading) {
+    return (
+      <div className="flex min-h-[100dvh] items-center justify-center bg-zinc-50 px-6">
+        <div className="w-full max-w-xs rounded-3xl bg-white p-6 text-center shadow-sm">
+          <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-zinc-200 border-t-zinc-900" />
+          <p className="text-sm font-semibold text-zinc-900">Loading menu...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (menuError || !menuPayload) {
+    return (
+      <div className="flex min-h-[100dvh] items-center justify-center bg-zinc-50 px-6">
+        <div className="w-full max-w-sm rounded-3xl bg-white p-6 text-center shadow-sm">
+          <h1 className="text-lg font-bold text-zinc-900">Menu unavailable</h1>
+          <p className="mt-2 text-sm text-zinc-500">
+            {menuError ?? "We could not load this menu right now."}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className="min-h-[100dvh] bg-zinc-50"
@@ -190,11 +266,13 @@ export default function Home() {
       <main className="mx-auto max-w-md bg-white pb-24">
         <header className="border-b border-zinc-200">
           <div className="h-44 w-full overflow-hidden bg-zinc-100">
-            <img
-              src={mockMenu.restaurant.banner_image_url}
-              alt={`${restaurantName} banner`}
-              className="h-full w-full object-cover"
-            />
+            {menuPayload.restaurant.banner_image_url ? (
+              <img
+                src={menuPayload.restaurant.banner_image_url}
+                alt={`${restaurantName} banner`}
+                className="h-full w-full object-cover"
+              />
+            ) : null}
           </div>
           <div className="px-4 pb-3 pt-4">
             <div className="flex items-center justify-between gap-3">

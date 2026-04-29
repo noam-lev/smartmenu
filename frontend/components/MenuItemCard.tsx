@@ -22,8 +22,8 @@ export default function MenuItemCard({
   const formattedPrice = formatILSCurrency(item.base_price);
   const itemName = getLocalizedText(item, "name", locale);
   const itemDescription = getLocalizedText(item, "description", locale);
-  const hasImage =
-    hasRenderableImage(item.image_url) && !failedImageUrls[item.image_url];
+  const imageUrl = hasRenderableImage(item.image_url) ? item.image_url : null;
+  const hasImage = imageUrl ? !failedImageUrls[imageUrl] : false;
 
   return (
     <button
@@ -52,15 +52,15 @@ export default function MenuItemCard({
           </div>
         </div>
 
-        {hasImage ? (
+        {hasImage && imageUrl ? (
           <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-zinc-100">
             <img
-              src={item.image_url}
+              src={imageUrl}
               alt={itemName}
               loading="lazy"
               className="h-full w-full object-cover"
               onError={(event) => {
-                const failedUrl = event.currentTarget.currentSrc || item.image_url;
+                const failedUrl = event.currentTarget.currentSrc || imageUrl;
                 if (!failedUrl) {
                   return;
                 }

@@ -63,6 +63,7 @@ class SupabaseDAL(MenuRepository):
                             sort_order,
                             image_url,
                             metadata,
+                            translations,
                             item_variants(
                                 id,
                                 name,
@@ -101,11 +102,16 @@ def _build_menu_payload(
             slug=str(restaurant.get("slug") or ""),
             theme_color=str(settings.get("theme_color") or "#111827"),
             currency=str(settings.get("currency") or "ILS"),
+            banner_image_url=settings.get("banner_image_url"),
+            default_locale=settings.get("default_locale"),
+            translations=_as_optional_dict(settings.get("translations")),
+            settings=settings,
         ),
         menu=MenuResponse(
             id=str(menu.get("id") or ""),
             name=str(menu.get("name") or ""),
             last_updated=str(menu.get("updated_at") or ""),
+            translations=_as_optional_dict(menu.get("translations")),
             categories=[
                 _build_category(category)
                 for category in sorted(
@@ -122,6 +128,7 @@ def _build_category(category: dict[str, Any]) -> CategoryResponse:
         id=str(category.get("id") or ""),
         name=str(category.get("name") or ""),
         sort_order=int(category.get("sort_order") or 0),
+        translations=_as_optional_dict(category.get("translations")),
         items=[
             _build_menu_item(item)
             for item in sorted(
@@ -143,6 +150,8 @@ def _build_menu_item(item: dict[str, Any]) -> MenuItemResponse:
         is_available=bool(item.get("is_available")),
         image_url=str(item.get("image_url") or ""),
         tags=_as_string_list(metadata.get("tags")),
+        metadata=metadata,
+        translations=_as_optional_dict(item.get("translations")),
         variants=[
             _build_variant(variant)
             for variant in _as_list(item.get("item_variants"))
@@ -176,6 +185,7 @@ def _build_upsell_rule(rule: dict[str, Any]) -> UpsellRuleResponse | None:
             "name": offer_item.get("name"),
             "image_url": offer_item.get("image_url"),
             "price": offer_item.get("base_price"),
+            "translations": offer_item.get("translations"),
         }
 
     if not snapshot and rule.get("offer_item_id"):
@@ -195,14 +205,20 @@ def _build_upsell_rule(rule: dict[str, Any]) -> UpsellRuleResponse | None:
             name=str(snapshot.get("name") or ""),
             image_url=str(snapshot.get("image_url") or ""),
             price=_to_float(snapshot.get("price")),
+            translations=_as_optional_dict(snapshot.get("translations")),
         ),
         custom_message=str(rule.get("custom_message") or ""),
         discount_price=_to_optional_float(rule.get("discount_price")),
+        translations=_as_optional_dict(rule.get("translations")),
     )
 
 
 def _as_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
+
+
+def _as_optional_dict(value: Any) -> dict[str, Any] | None:
+    return value if isinstance(value, dict) else None
 
 
 def _as_list(value: Any) -> list[dict[str, Any]]:

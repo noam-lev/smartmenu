@@ -55,11 +55,15 @@ export default function ItemBottomSheet({
   const upsellMessage = upsellRule
     ? getLocalizedText(upsellRule, "custom_message", locale)
     : "";
+  const mainImageUrl = hasRenderableImage(selectedItem.image_url)
+    ? selectedItem.image_url
+    : null;
   const upsellImageUrl = upsellRule?.offer_item_snapshot.image_url;
   const upsellImageKey = hasRenderableImage(upsellImageUrl) ? upsellImageUrl : null;
-  const hasMainImage =
-    hasRenderableImage(selectedItem.image_url) &&
-    !failedImageUrls[selectedItem.image_url];
+  const upsellPrice = upsellRule
+    ? upsellRule.discount_price ?? upsellRule.offer_item_snapshot.price
+    : 0;
+  const hasMainImage = mainImageUrl ? !failedImageUrls[mainImageUrl] : false;
   const hasUpsellImage = upsellImageKey ? !failedImageUrls[upsellImageKey] : false;
 
   return (
@@ -88,14 +92,14 @@ export default function ItemBottomSheet({
 
         {!isUpsellStep ? (
           <>
-            {hasMainImage ? (
+            {hasMainImage && mainImageUrl ? (
               <img
-                src={selectedItem.image_url}
+                src={mainImageUrl}
                 alt={itemName}
                 className="h-44 w-full rounded-2xl object-cover"
                 onError={(event) => {
                   const failedUrl =
-                    event.currentTarget.currentSrc || selectedItem.image_url;
+                    event.currentTarget.currentSrc || mainImageUrl;
                   if (!failedUrl) {
                     return;
                   }
@@ -155,14 +159,14 @@ export default function ItemBottomSheet({
             </p>
 
             <div className="mt-4 flex items-center gap-3 rounded-2xl border border-zinc-200 p-3">
-              {hasUpsellImage ? (
+              {hasUpsellImage && upsellImageKey ? (
                 <img
-                  src={upsellImageUrl}
+                  src={upsellImageKey}
                   alt={upsellItemName}
                   className="h-16 w-16 rounded-xl object-cover"
                   onError={(event) => {
                     const failedUrl =
-                      event.currentTarget.currentSrc || upsellImageUrl;
+                      event.currentTarget.currentSrc || upsellImageKey;
                     if (!failedUrl) {
                       return;
                     }
@@ -175,7 +179,7 @@ export default function ItemBottomSheet({
                   {upsellItemName}
                 </p>
                 <p className="text-sm text-zinc-500">
-                  {formatILSCurrency(upsellRule?.discount_price ?? 0)}
+                  {formatILSCurrency(upsellPrice)}
                 </p>
               </div>
             </div>
@@ -193,7 +197,7 @@ export default function ItemBottomSheet({
                 onClick={() => onUpsellDecision(true)}
                 className="rounded-2xl bg-zinc-900 px-4 py-3 text-sm font-semibold text-white active:scale-[0.99]"
               >
-                {labels.add} {formatILSCurrency(upsellRule?.discount_price ?? 0)}
+                {labels.add} {formatILSCurrency(upsellPrice)}
               </button>
             </div>
           </>
