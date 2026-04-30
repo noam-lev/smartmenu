@@ -95,6 +95,7 @@ def _build_menu_payload(
     menu: dict[str, Any],
 ) -> MenuPayload:
     settings = _as_dict(restaurant.get("settings"))
+    restaurant_id = str(restaurant.get("id") or "")
 
     return MenuPayload(
         restaurant=RestaurantResponse(
@@ -113,7 +114,7 @@ def _build_menu_payload(
             last_updated=str(menu.get("updated_at") or ""),
             translations=_as_optional_dict(menu.get("translations")),
             categories=[
-                _build_category(category)
+                _build_category(category, restaurant_id)
                 for category in sorted(
                     _as_list(menu.get("categories")),
                     key=lambda row: row.get("sort_order") or 0,
@@ -123,14 +124,17 @@ def _build_menu_payload(
     )
 
 
-def _build_category(category: dict[str, Any]) -> CategoryResponse:
+def _build_category(
+    category: dict[str, Any],
+    restaurant_id: str,
+) -> CategoryResponse:
     return CategoryResponse(
         id=str(category.get("id") or ""),
         name=str(category.get("name") or ""),
         sort_order=int(category.get("sort_order") or 0),
         translations=_as_optional_dict(category.get("translations")),
         items=[
-            _build_menu_item(item)
+            _build_menu_item(item, restaurant_id)
             for item in sorted(
                 _as_list(category.get("menu_items")),
                 key=lambda row: row.get("sort_order") or 0,
@@ -139,7 +143,7 @@ def _build_category(category: dict[str, Any]) -> CategoryResponse:
     )
 
 
-def _build_menu_item(item: dict[str, Any]) -> MenuItemResponse:
+def _build_menu_item(item: dict[str, Any], restaurant_id: str) -> MenuItemResponse:
     metadata = _as_dict(item.get("metadata"))
 
     return MenuItemResponse(
@@ -148,7 +152,7 @@ def _build_menu_item(item: dict[str, Any]) -> MenuItemResponse:
         description=str(item.get("description") or ""),
         base_price=_to_float(item.get("base_price")),
         is_available=bool(item.get("is_available")),
-        image_url=str(item.get("image_url") or ""),
+        image_url=_as_optional_string(item.get("image_url")),
         tags=_as_string_list(metadata.get("tags")),
         metadata=metadata,
         translations=_as_optional_dict(item.get("translations")),
@@ -159,7 +163,7 @@ def _build_menu_item(item: dict[str, Any]) -> MenuItemResponse:
         upsell_rules=[
             rule
             for rule in (
-                _build_upsell_rule(row)
+                _build_upsell_rule(row, restaurant_id)
                 for row in _as_list(item.get("upsell_rules"))
             )
             if rule is not None
@@ -175,9 +179,16 @@ def _build_variant(variant: dict[str, Any]) -> VariantResponse:
     )
 
 
-def _build_upsell_rule(rule: dict[str, Any]) -> UpsellRuleResponse | None:
+def _build_upsell_rule(
+    rule: dict[str, Any],
+    restaurant_id: str,
+) -> UpsellRuleResponse | None:
     snapshot = _as_dict(rule.get("offer_item_snapshot"))
     offer_item = _as_dict(rule.get("offer_item"))
+    offer_item_restaurant_id = str(offer_item.get("restaurant_id") or "")
+
+    if offer_item and offer_item_restaurant_id != restaurant_id:
+        return None
 
     if not snapshot and offer_item:
         snapshot = {
@@ -203,7 +214,7 @@ def _build_upsell_rule(rule: dict[str, Any]) -> UpsellRuleResponse | None:
         offer_item_snapshot=OfferItemSnapshotResponse(
             id=str(snapshot.get("id") or ""),
             name=str(snapshot.get("name") or ""),
-            image_url=str(snapshot.get("image_url") or ""),
+            image_url=_as_optional_string(snapshot.get("image_url")),
             price=_to_float(snapshot.get("price")),
             translations=_as_optional_dict(snapshot.get("translations")),
         ),
@@ -219,6 +230,13 @@ def _as_dict(value: Any) -> dict[str, Any]:
 
 def _as_optional_dict(value: Any) -> dict[str, Any] | None:
     return value if isinstance(value, dict) else None
+
+
+def _as_optional_string(value: Any) -> str | None:
+    if isinstance(value, str):
+        trimmed = value.strip()
+        return trimmed or None
+    return None
 
 
 def _as_list(value: Any) -> list[dict[str, Any]]:

@@ -1,7 +1,9 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+
+from core.security import require_admin_context
 
 
-router = APIRouter(tags=["owner"])
+router = APIRouter(tags=["owner"], dependencies=[Depends(require_admin_context)])
 
 
 @router.get("/ping")
