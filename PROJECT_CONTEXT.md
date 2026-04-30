@@ -117,9 +117,12 @@ The data is fetched as a single nested JSON. This is the structure (currently lo
 ```
 
 ## 7. Current Status & Immediate Next Task
-We are currently operating inside the `frontend` (Next.js) directory using a "UI-First" approach based on the Mock Data.
+We are now in a **frontend + backend integration phase**.
 * **Definition of Done (MVP):** A restaurant owner can set up a menu. A diner can scan a QR code and view the menu smoothly. A diner can add an item to a local cart. The Upsell pop-up triggers correctly. Everything is served directly from Supabase.
-* **Frontend Progress (Apr 2026):** We have already implemented the core diner flow end-to-end on mock data: polished Wolt-style item cards, hero banner header, sticky category navigation, item bottom sheet with quantity and upsell transitions, floating cart + cart summary sheet with qty editing/removal, reusable drag-to-dismiss hook, hydration-safe cart rendering, no-image-safe dish rendering, and bilingual Hebrew/English support (JSON-driven translations, RTL/LTR layout, default locale selection, and a custom language popover). The main frontend work still remaining is connecting this UI to real backend/Supabase data and events, then doing final QA/performance polish before production rollout.
+* **Frontend Progress (Apr 2026):** Core diner flow is implemented (Wolt-style UI, sticky categories, item/upsell bottom sheet, floating cart, bilingual support). The UI now fetches live menu data from backend (`/api/diner/menus/{slug}`) instead of reading `mockMenu.json` directly.
+* **Backend Progress (Apr 2026):** FastAPI skeleton is in place (`core/`, `api/`, `db/`, `models/`) with Supabase service-role client, repository pattern, and a public fat endpoint for diner menu retrieval. Seed script (`backend/seed.py`) imports frontend mock JSON into Supabase and is idempotent for repeated local runs.
+* **Security Hardening Completed:** DAL now includes defense-in-depth tenant validation for embedded upsell offer items; owner/admin routers are protected by default dependency boundaries.
+* **Immediate Next Task:** Add Phase-2-ready backend write endpoints (starting with soft-order/event POST flows) and align lightweight analytics/event ingestion with current menu read contract.
 
 ## 8. Visual & UX Architecture (The "Wolt-Style" Experience)
 To ensure all frontend components align with the overall user experience, here is the mental model for the diner's UI:

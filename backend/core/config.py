@@ -13,7 +13,10 @@ class Settings:
         self.environment = os.getenv("ENVIRONMENT", "development")
         self.supabase_url = os.getenv("SUPABASE_URL", "")
         self.supabase_service_key = os.getenv("SUPABASE_SERVICE_KEY", "")
-        self.cors_origins = ["http://localhost:3000"]
+        self.cors_origins = [
+    "http://localhost:3000",
+    "http://10.100.102.11:3000",
+]
 
     @property
     def is_supabase_configured(self) -> bool:
