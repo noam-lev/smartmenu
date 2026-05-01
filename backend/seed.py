@@ -1,9 +1,11 @@
+import argparse
 import json
 import os
 from pathlib import Path
 from typing import Any
 
 from api.dependencies import get_supabase_client
+from postgrest.exceptions import APIError
 
 
 MOCK_MENU_PATH = Path(__file__).resolve().parent.parent / "frontend" / "data" / "mockMenu.json"
@@ -11,9 +13,12 @@ SEEDED_RESTAURANT_SLUG = "yossis-hummus"
 
 
 def main() -> None:
+    args = _parse_args()
     payload = _load_mock_menu()
     supabase = get_supabase_client()
-    _cleanup_seeded_data(supabase, SEEDED_RESTAURANT_SLUG)
+    _assert_required_schema(supabase)
+    if args.reset:
+        _cleanup_seeded_data(supabase, SEEDED_RESTAURANT_SLUG)
 
     restaurant_data = payload["restaurant"]
     menu_data = payload["menu"]
@@ -64,6 +69,40 @@ def main() -> None:
 def _load_mock_menu() -> dict[str, Any]:
     with MOCK_MENU_PATH.open(encoding="utf-8") as file:
         return json.load(file)
+
+
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Seed SmartMenu data from frontend mock JSON."
+    )
+    parser.add_argument(
+        "--reset",
+        action="store_true",
+        help="Delete existing data for the seeded restaurant slug before insert.",
+    )
+    return parser.parse_args()
+
+
+def _assert_required_schema(supabase: Any) -> None:
+    required_translation_columns = {
+        "menus": "translations",
+        "categories": "translations",
+        "upsell_rules": "translations",
+    }
+
+    for table_name, column_name in required_translation_columns.items():
+        try:
+            (
+                supabase.table(table_name)
+                .select(column_name)
+                .limit(1)
+                .execute()
+            )
+        except APIError as exc:
+            raise RuntimeError(
+                f"Schema preflight failed: '{table_name}.{column_name}' is required "
+                "for this seed flow. Apply the migration first."
+            ) from exc
 
 
 def _cleanup_seeded_data(supabase: Any, restaurant_slug: str) -> None:
@@ -138,6 +177,7 @@ def _insert_menu(
     row = {
         "restaurant_id": restaurant_id,
         "name": menu_data["name"],
+        "translations": menu_data.get("translations", {}),
         "is_active": True,
     }
 
@@ -158,6 +198,7 @@ def _insert_category(
         {
             "menu_id": menu_id,
             "name": category_data["name"],
+            "translations": category_data.get("translations", {}),
             "sort_order": category_data.get("sort_order", 0),
             "is_visible": True,
         },
@@ -236,6 +277,7 @@ def _insert_upsell_rules(
                         "offer_item_id": offer_item_id,
                         "custom_message": rule_data.get("custom_message", ""),
                         "discount_price": rule_data.get("discount_price"),
+                        "translations": rule_data.get("translations", {}),
                     },
                 )
 

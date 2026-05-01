@@ -6,7 +6,8 @@ import ItemBottomSheet from "../components/ItemBottomSheet";
 import MenuItemCard from "../components/MenuItemCard";
 import { fetchMenuBySlug } from "../lib/menuApi";
 import { useCartStore } from "../store/cartStore";
-import type { Locale, MenuCategory, MenuItem, MenuPayload } from "../types/menu";
+import { useUiStore } from "../store/uiStore";
+import type { MenuCategory, MenuItem, MenuPayload } from "../types/menu";
 import { formatILSCurrency } from "../utils/currency";
 import { getLocalizedText, getUiMessage, isRtlLocale } from "../utils/i18n";
 
@@ -31,7 +32,6 @@ export default function Home() {
   const [isCartSheetOpen, setIsCartSheetOpen] = useState(false);
   const [cartSheetSession, setCartSheetSession] = useState(0);
   const [isLanguageMenuOpen, setIsLanguageMenuOpen] = useState(false);
-  const [locale, setLocale] = useState<Locale>("he");
   const [activeCategoryId, setActiveCategoryId] = useState("");
   const languageMenuRef = useRef<HTMLDivElement | null>(null);
   const hasMounted = useSyncExternalStore(
@@ -46,6 +46,8 @@ export default function Home() {
   const removeItem = useCartStore((state) => state.removeItem);
   const totalItems = useCartStore((state) => state.totalItems);
   const totalPrice = useCartStore((state) => state.totalPrice);
+  const locale = useUiStore((state) => state.locale);
+  const setLocale = useUiStore((state) => state.setLocale);
   const cartItems = useMemo(() => Object.values(itemsByItemId), [itemsByItemId]);
   const isRtl = isRtlLocale(locale);
 
@@ -97,6 +99,8 @@ export default function Home() {
     return () => {
       isMounted = false;
     };
+    // setLocale from Zustand is stable for this one-time bootstrap load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const closeSheet = () => {

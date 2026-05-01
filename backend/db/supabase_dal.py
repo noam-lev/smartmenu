@@ -61,11 +61,13 @@ class SupabaseDAL(MenuRepository):
                 menus(
                     id,
                     name,
+                    translations,
                     is_active,
                     updated_at,
                     categories(
                         id,
                         name,
+                        translations,
                         sort_order,
                         is_visible,
                         menu_items(
@@ -86,6 +88,7 @@ class SupabaseDAL(MenuRepository):
                             ),
                             upsell_rules!upsell_rules_trigger_item_id_fkey(
                                 *,
+                                translations,
                                 offer_item:menu_items!upsell_rules_offer_item_id_fkey(*)
                             )
                         )

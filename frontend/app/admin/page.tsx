@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import MenuItemCard from "../../components/MenuItemCard";
 import { fetchMenuBySlug, updateItemAvailability } from "../../lib/menuApi";
-import type { Locale, MenuCategory, MenuItem, MenuPayload } from "../../types/menu";
+import { useUiStore } from "../../store/uiStore";
+import type { MenuCategory, MenuItem, MenuPayload } from "../../types/menu";
 import { getLocalizedText, getUiMessage, isRtlLocale } from "../../utils/i18n";
 
 const ADMIN_MENU_SLUG = "yossis-hummus";
@@ -12,9 +13,12 @@ export default function AdminMenuPage() {
   const [menuPayload, setMenuPayload] = useState<MenuPayload | null>(null);
   const [isMenuLoading, setIsMenuLoading] = useState(true);
   const [menuError, setMenuError] = useState<string | null>(null);
-  const [locale, setLocale] = useState<Locale>("he");
   const [activeCategoryId, setActiveCategoryId] = useState("");
+  const [isLanguageMenuOpen, setIsLanguageMenuOpen] = useState(false);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
+  const languageMenuRef = useRef<HTMLDivElement | null>(null);
+  const locale = useUiStore((state) => state.locale);
+  const setLocale = useUiStore((state) => state.setLocale);
 
   const categories = useMemo(
     () =>
@@ -65,6 +69,8 @@ export default function AdminMenuPage() {
     return () => {
       isMounted = false;
     };
+    // setLocale from Zustand is stable for this one-time bootstrap load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -103,6 +109,25 @@ export default function AdminMenuPage() {
 
     return () => observer.disconnect();
   }, [categories]);
+
+  useEffect(() => {
+    if (!isLanguageMenuOpen) {
+      return;
+    }
+
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (!languageMenuRef.current) {
+        return;
+      }
+
+      if (!languageMenuRef.current.contains(event.target as Node)) {
+        setIsLanguageMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, [isLanguageMenuOpen]);
 
   const scrollToCategory = (category: MenuCategory) => {
     setActiveCategoryId(category.id);
@@ -178,12 +203,67 @@ export default function AdminMenuPage() {
                 Menu Editor
               </h1>
             </div>
-            <button
-              type="button"
-              className="rounded-full border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-700 shadow-sm"
-            >
-              Logout
-            </button>
+            <div className="flex items-center gap-2">
+              <div className="relative" ref={languageMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => setIsLanguageMenuOpen((open) => !open)}
+                  aria-haspopup="menu"
+                  aria-expanded={isLanguageMenuOpen}
+                  aria-label="Select language"
+                  className="inline-flex items-center gap-1 rounded-full border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 shadow-sm"
+                >
+                  <span>{locale === "he" ? "עב" : "EN"}</span>
+                  <span className="text-[10px] text-zinc-500">▾</span>
+                </button>
+
+                {isLanguageMenuOpen ? (
+                  <div
+                    role="menu"
+                    className={`absolute z-30 mt-2 min-w-28 rounded-xl border border-zinc-200 bg-white p-1 shadow-lg ${
+                      isRtl ? "left-0" : "right-0"
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setLocale("he");
+                        setIsLanguageMenuOpen(false);
+                      }}
+                      className={`block w-full rounded-lg px-3 py-2 text-sm ${
+                        locale === "he"
+                          ? "bg-zinc-900 text-white"
+                          : "text-zinc-700 hover:bg-zinc-100"
+                      }`}
+                    >
+                      {getUiMessage("languageHebrew", locale)}
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setLocale("en");
+                        setIsLanguageMenuOpen(false);
+                      }}
+                      className={`mt-1 block w-full rounded-lg px-3 py-2 text-sm ${
+                        locale === "en"
+                          ? "bg-zinc-900 text-white"
+                          : "text-zinc-700 hover:bg-zinc-100"
+                      }`}
+                    >
+                      {getUiMessage("languageEnglish", locale)}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                className="rounded-full border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-700 shadow-sm"
+              >
+                Logout
+              </button>
+            </div>
           </div>
         </header>
 
