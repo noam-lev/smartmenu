@@ -12,3 +12,20 @@ export async function fetchMenuBySlug(slug: string): Promise<MenuPayload> {
 
   return response.json() as Promise<MenuPayload>;
 }
+
+export async function updateItemAvailability(
+  itemId: string,
+  isAvailable: boolean,
+): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/owner/items/${itemId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ is_available: isAvailable }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to update availability (${response.status})`);
+  }
+}

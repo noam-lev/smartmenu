@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import MenuItemCard from "../../components/MenuItemCard";
-import { fetchMenuBySlug } from "../../lib/menuApi";
+import { fetchMenuBySlug, updateItemAvailability } from "../../lib/menuApi";
 import type { Locale, MenuCategory, MenuItem, MenuPayload } from "../../types/menu";
 import { getLocalizedText, getUiMessage, isRtlLocale } from "../../utils/i18n";
 
@@ -128,13 +128,37 @@ export default function AdminMenuPage() {
   };
 
   const handleToggleAvailability = (item: MenuItem, newStatus: boolean) => {
-    const itemName = getLocalizedText(item, "name", locale);
-    console.log("Toggle availability", { item, newStatus });
-    alert(
-      `Toggle availability for ${itemName}: ${
-        newStatus ? "Available" : "Out of stock"
-      }`,
-    );
+    const previousPayload = menuPayload;
+
+    setMenuPayload((prev) => {
+      if (!prev) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        menu: {
+          ...prev.menu,
+          categories: prev.menu.categories.map((category) => ({
+            ...category,
+            items: category.items.map((menuItem) =>
+              menuItem.id === item.id
+                ? { ...menuItem, is_available: newStatus }
+                : menuItem,
+            ),
+          })),
+        },
+      };
+    });
+
+    void updateItemAvailability(item.id, newStatus).catch((error) => {
+      setMenuPayload(previousPayload);
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Failed to update availability. Please try again.",
+      );
+    });
   };
 
   return (

@@ -33,6 +33,21 @@ class SupabaseDAL(MenuRepository):
 
         return _build_menu_payload(restaurant=restaurant, menu=active_menu)
 
+    async def update_item_availability(
+        self,
+        item_id: str,
+        is_available: bool,
+    ) -> dict[str, Any] | None:
+        updated = await asyncio.to_thread(
+            self._update_item_availability,
+            item_id,
+            is_available,
+        )
+        if updated is None:
+            return None
+
+        return await asyncio.to_thread(self._fetch_item_availability, item_id)
+
     def _fetch_restaurant_menu(self, slug: str) -> list[dict[str, Any]]:
         response = (
             self._client.table("restaurants")
@@ -88,6 +103,29 @@ class SupabaseDAL(MenuRepository):
         )
 
         return response.data or []
+
+    def _update_item_availability(
+        self,
+        item_id: str,
+        is_available: bool,
+    ) -> dict[str, Any] | None:
+        response = (
+            self._client.table("menu_items")
+            .update({"is_available": is_available})
+            .eq("id", item_id)
+            .execute()
+        )
+        return _first(response.data or [])
+
+    def _fetch_item_availability(self, item_id: str) -> dict[str, Any] | None:
+        response = (
+            self._client.table("menu_items")
+            .select("id,is_available")
+            .eq("id", item_id)
+            .limit(1)
+            .execute()
+        )
+        return _first(response.data or [])
 
 
 def _build_menu_payload(
