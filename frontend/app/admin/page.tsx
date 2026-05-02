@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import EditItemDrawer from "../../components/EditItemDrawer";
 import MenuItemCard from "../../components/MenuItemCard";
-import { fetchMenuBySlug, updateItemAvailability } from "../../lib/menuApi";
+import { fetchMenuBySlug, updateItemAvailability, updateMenuItem } from "../../lib/menuApi";
 import { useUiStore } from "../../store/uiStore";
 import type { MenuCategory, MenuItem, MenuPayload } from "../../types/menu";
 import { getLocalizedText, getUiMessage, isRtlLocale } from "../../utils/i18n";
@@ -15,6 +16,8 @@ export default function AdminMenuPage() {
   const [menuError, setMenuError] = useState<string | null>(null);
   const [activeCategoryId, setActiveCategoryId] = useState("");
   const [isLanguageMenuOpen, setIsLanguageMenuOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
   const languageMenuRef = useRef<HTMLDivElement | null>(null);
   const locale = useUiStore((state) => state.locale);
@@ -54,8 +57,9 @@ export default function AdminMenuPage() {
           return;
         }
 
+        const uiLocale = useUiStore.getState().locale;
         setMenuError(
-          error instanceof Error ? error.message : "Failed to load menu",
+          error instanceof Error ? error.message : getUiMessage("failedToLoadMenu", uiLocale),
         );
       } finally {
         if (isMounted) {
@@ -147,9 +151,47 @@ export default function AdminMenuPage() {
   };
 
   const handleEditClick = (item: MenuItem) => {
-    const itemName = getLocalizedText(item, "name", locale);
-    console.log("Edit item", item);
-    alert(`Edit item: ${itemName}`);
+    setEditingItem(item);
+    setIsDrawerOpen(true);
+  };
+
+  const handleCloseDrawer = () => {
+    setIsDrawerOpen(false);
+    setEditingItem(null);
+  };
+
+  const handleSaveItem = async (updatedData: Partial<MenuItem>) => {
+    if (!menuPayload || !editingItem) {
+      return;
+    }
+
+    const itemId = editingItem.id;
+    const previousPayload = menuPayload;
+
+    setMenuPayload({
+      ...menuPayload,
+      menu: {
+        ...menuPayload.menu,
+        categories: menuPayload.menu.categories.map((category) => ({
+          ...category,
+          items: category.items.map((menuItem) =>
+            menuItem.id === itemId ? { ...menuItem, ...updatedData } : menuItem,
+          ),
+        })),
+      },
+    });
+
+    try {
+      await updateMenuItem(itemId, updatedData);
+      handleCloseDrawer();
+    } catch (error) {
+      setMenuPayload(previousPayload);
+      alert(
+        error instanceof Error
+          ? error.message
+          : getUiMessage("failedToSaveChanges", locale),
+      );
+    }
   };
 
   const handleToggleAvailability = (item: MenuItem, newStatus: boolean) => {
@@ -181,7 +223,7 @@ export default function AdminMenuPage() {
       alert(
         error instanceof Error
           ? error.message
-          : "Failed to update availability. Please try again.",
+          : getUiMessage("failedToUpdateAvailability", locale),
       );
     });
   };
@@ -197,10 +239,10 @@ export default function AdminMenuPage() {
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                Owner Dashboard
+                {getUiMessage("ownerDashboard", locale)}
               </p>
               <h1 className="mt-1 text-2xl font-bold text-zinc-900">
-                Menu Editor
+                {getUiMessage("menuEditor", locale)}
               </h1>
             </div>
             <div className="flex items-center gap-2">
@@ -210,7 +252,7 @@ export default function AdminMenuPage() {
                   onClick={() => setIsLanguageMenuOpen((open) => !open)}
                   aria-haspopup="menu"
                   aria-expanded={isLanguageMenuOpen}
-                  aria-label="Select language"
+                  aria-label={getUiMessage("selectLanguage", locale)}
                   className="inline-flex items-center gap-1 rounded-full border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 shadow-sm"
                 >
                   <span>{locale === "he" ? "עב" : "EN"}</span>
@@ -261,7 +303,7 @@ export default function AdminMenuPage() {
                 type="button"
                 className="rounded-full border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-700 shadow-sm"
               >
-                Logout
+                {getUiMessage("logout", locale)}
               </button>
             </div>
           </div>
@@ -269,14 +311,14 @@ export default function AdminMenuPage() {
 
         {isMenuLoading ? (
           <div className="px-4 py-10 text-center text-sm text-zinc-500">
-            Loading menu...
+            {getUiMessage("loadingMenu", locale)}
           </div>
         ) : null}
 
         {menuError ? (
           <div className="px-4 py-10 text-center">
             <p className="text-sm font-semibold text-zinc-900">
-              Could not load menu
+              {getUiMessage("couldNotLoadMenu", locale)}
             </p>
             <p className="mt-1 text-sm text-zinc-500">{menuError}</p>
           </div>
@@ -323,7 +365,7 @@ export default function AdminMenuPage() {
                       type="button"
                       className="rounded-full bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white active:scale-[0.98]"
                     >
-                      + Add Item
+                      {getUiMessage("addItem", locale)}
                     </button>
                   </div>
                   {category.items.map((item) => (
@@ -343,6 +385,13 @@ export default function AdminMenuPage() {
           </>
         ) : null}
       </main>
+
+      <EditItemDrawer
+        item={editingItem}
+        isOpen={isDrawerOpen}
+        onClose={handleCloseDrawer}
+        onSave={handleSaveItem}
+      />
     </div>
   );
 }

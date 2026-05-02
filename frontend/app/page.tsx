@@ -84,8 +84,9 @@ export default function Home() {
           return;
         }
 
+        const uiLocale = useUiStore.getState().locale;
         setMenuError(
-          error instanceof Error ? error.message : "Failed to load menu",
+          error instanceof Error ? error.message : getUiMessage("failedToLoadMenu", uiLocale),
         );
       } finally {
         if (isMounted) {
@@ -242,7 +243,9 @@ export default function Home() {
       <div className="flex min-h-[100dvh] items-center justify-center bg-zinc-50 px-6">
         <div className="w-full max-w-xs rounded-3xl bg-white p-6 text-center shadow-sm">
           <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-zinc-200 border-t-zinc-900" />
-          <p className="text-sm font-semibold text-zinc-900">Loading menu...</p>
+          <p className="text-sm font-semibold text-zinc-900">
+            {getUiMessage("loadingMenu", locale)}
+          </p>
         </div>
       </div>
     );
@@ -252,9 +255,11 @@ export default function Home() {
     return (
       <div className="flex min-h-[100dvh] items-center justify-center bg-zinc-50 px-6">
         <div className="w-full max-w-sm rounded-3xl bg-white p-6 text-center shadow-sm">
-          <h1 className="text-lg font-bold text-zinc-900">Menu unavailable</h1>
+          <h1 className="text-lg font-bold text-zinc-900">
+            {getUiMessage("menuUnavailable", locale)}
+          </h1>
           <p className="mt-2 text-sm text-zinc-500">
-            {menuError ?? "We could not load this menu right now."}
+            {menuError ?? getUiMessage("menuLoadFallback", locale)}
           </p>
         </div>
       </div>
@@ -289,7 +294,7 @@ export default function Home() {
                   onClick={() => setIsLanguageMenuOpen((open) => !open)}
                   aria-haspopup="menu"
                   aria-expanded={isLanguageMenuOpen}
-                  aria-label="Select language"
+                  aria-label={getUiMessage("selectLanguage", locale)}
                   className="inline-flex items-center gap-1 rounded-full border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 shadow-sm"
                 >
                   <span>{locale === "he" ? "עב" : "EN"}</span>

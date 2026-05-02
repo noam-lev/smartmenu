@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { MenuItem } from "../types/menu";
 import { formatILSCurrency } from "../utils/currency";
-import { getLocalizedText } from "../utils/i18n";
+import { getLocalizedText, getUiMessage, getUiTemplate } from "../utils/i18n";
 import type { Locale } from "../types/menu";
 import { hasRenderableImage } from "../utils/media";
 
@@ -40,7 +40,7 @@ export default function MenuItemCard({
           {mode === "admin" ? (
             <button
               type="button"
-              aria-label={`Edit ${itemName}`}
+              aria-label={getUiTemplate("editMenuItemAria", locale, { name: itemName })}
               onClick={() => onEditClick?.(item)}
               className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-700 shadow-sm active:scale-[0.96]"
             >
@@ -84,13 +84,17 @@ export default function MenuItemCard({
         {mode === "admin" ? (
           <div className="mt-3 flex items-center justify-between rounded-2xl bg-zinc-50 px-3 py-2">
             <span className="text-xs font-semibold text-zinc-600">
-              {item.is_available ? "Available" : "Out of stock"}
+              {item.is_available
+                ? getUiMessage("availabilityAvailable", locale)
+                : getUiMessage("availabilityOutOfStock", locale)}
             </span>
             <button
               type="button"
               role="switch"
               aria-checked={item.is_available}
-              aria-label={`Toggle availability for ${itemName}`}
+              aria-label={getUiTemplate("toggleAvailabilityAria", locale, {
+                name: itemName,
+              })}
               onClick={() => onToggleAvailability?.(item, !item.is_available)}
               className={`relative h-6 w-11 rounded-full transition ${
                 item.is_available ? "bg-zinc-900" : "bg-zinc-300"

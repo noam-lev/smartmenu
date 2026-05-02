@@ -11,6 +11,15 @@ class MenuRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    async def update_menu_item(
+        self,
+        item_id: str,
+        fields: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Apply a partial update to one menu item (e.g. availability, pricing, text)."""
+        raise NotImplementedError
+
+    @abstractmethod
     async def update_item_availability(
         self,
         item_id: str,

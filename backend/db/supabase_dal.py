@@ -38,15 +38,18 @@ class SupabaseDAL(MenuRepository):
         item_id: str,
         is_available: bool,
     ) -> dict[str, Any] | None:
-        updated = await asyncio.to_thread(
-            self._update_item_availability,
-            item_id,
-            is_available,
-        )
+        return await self.update_menu_item(item_id, {"is_available": is_available})
+
+    async def update_menu_item(
+        self,
+        item_id: str,
+        fields: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        updated = await asyncio.to_thread(self._apply_menu_item_patch, item_id, fields)
         if updated is None:
             return None
 
-        return await asyncio.to_thread(self._fetch_item_availability, item_id)
+        return await asyncio.to_thread(self._fetch_menu_item_patch_snapshot, item_id)
 
     def _fetch_restaurant_menu(self, slug: str) -> list[dict[str, Any]]:
         response = (
@@ -107,23 +110,20 @@ class SupabaseDAL(MenuRepository):
 
         return response.data or []
 
-    def _update_item_availability(
+    def _apply_menu_item_patch(
         self,
         item_id: str,
-        is_available: bool,
+        fields: dict[str, Any],
     ) -> dict[str, Any] | None:
         response = (
-            self._client.table("menu_items")
-            .update({"is_available": is_available})
-            .eq("id", item_id)
-            .execute()
+            self._client.table("menu_items").update(fields).eq("id", item_id).execute()
         )
-        return _first(response.data or [])
+        return _first(response.data or []) if response.data else None
 
-    def _fetch_item_availability(self, item_id: str) -> dict[str, Any] | None:
+    def _fetch_menu_item_patch_snapshot(self, item_id: str) -> dict[str, Any] | None:
         response = (
             self._client.table("menu_items")
-            .select("id,is_available")
+            .select("id,name,description,base_price,is_available,translations")
             .eq("id", item_id)
             .limit(1)
             .execute()
