@@ -1,9 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import EditItemDrawer from "../../components/EditItemDrawer";
+import EditItemDrawer, {
+  placeholderMenuItem,
+} from "../../components/EditItemDrawer";
 import MenuItemCard from "../../components/MenuItemCard";
-import { fetchMenuBySlug, updateItemAvailability, updateMenuItem } from "../../lib/menuApi";
+import {
+  createMenuItem,
+  deleteMenuItem,
+  fetchMenuBySlug,
+  updateItemAvailability,
+  updateMenuItem,
+} from "../../lib/menuApi";
+import { useDialogs } from "../../context/DialogProvider";
 import { useUiStore } from "../../store/uiStore";
 import type { MenuCategory, MenuItem, MenuPayload } from "../../types/menu";
 import { getLocalizedText, getUiMessage, isRtlLocale } from "../../utils/i18n";
@@ -17,11 +26,14 @@ export default function AdminMenuPage() {
   const [activeCategoryId, setActiveCategoryId] = useState("");
   const [isLanguageMenuOpen, setIsLanguageMenuOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
+  const [addingToCategory, setAddingToCategory] = useState<string | null>(null);
+  const [creationPendingTempId, setCreationPendingTempId] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
   const languageMenuRef = useRef<HTMLDivElement | null>(null);
   const locale = useUiStore((state) => state.locale);
   const setLocale = useUiStore((state) => state.setLocale);
+  const { confirm, alert } = useDialogs();
 
   const categories = useMemo(
     () =>
@@ -151,17 +163,90 @@ export default function AdminMenuPage() {
   };
 
   const handleEditClick = (item: MenuItem) => {
+    setAddingToCategory(null);
     setEditingItem(item);
+    setIsDrawerOpen(true);
+  };
+
+  const handleAddItemClick = (categoryId: string) => {
+    setEditingItem(null);
+    setAddingToCategory(categoryId);
     setIsDrawerOpen(true);
   };
 
   const handleCloseDrawer = () => {
     setIsDrawerOpen(false);
     setEditingItem(null);
+    setAddingToCategory(null);
   };
 
   const handleSaveItem = async (updatedData: Partial<MenuItem>) => {
-    if (!menuPayload || !editingItem) {
+    if (!menuPayload) {
+      return;
+    }
+
+    if (addingToCategory) {
+      const tempId = `temp-${Date.now()}`;
+      const optimisticItem = placeholderMenuItem(tempId, updatedData);
+      const previousPayload = menuPayload;
+      const targetCategoryId = addingToCategory;
+
+      setCreationPendingTempId(tempId);
+      setMenuPayload({
+        ...menuPayload,
+        menu: {
+          ...menuPayload.menu,
+          categories: menuPayload.menu.categories.map((category) =>
+            category.id !== targetCategoryId
+              ? category
+              : { ...category, items: [...category.items, optimisticItem] },
+          ),
+        },
+      });
+
+      try {
+        const created = await createMenuItem(targetCategoryId, updatedData);
+        setMenuPayload((prev) => {
+          if (!prev) {
+            return prev;
+          }
+
+          return {
+            ...prev,
+            menu: {
+              ...prev.menu,
+              categories: prev.menu.categories.map((category) =>
+                category.id !== targetCategoryId
+                  ? category
+                  : {
+                      ...category,
+                      items: category.items.map((menuItem) =>
+                        menuItem.id === tempId ? created : menuItem,
+                      ),
+                    },
+              ),
+            },
+          };
+        });
+        handleCloseDrawer();
+      } catch (error) {
+        setMenuPayload(previousPayload);
+        void alert({
+          title: getUiMessage("dialogErrorTitle", locale),
+          message:
+            error instanceof Error
+              ? error.message
+              : getUiMessage("failedToSaveChanges", locale),
+          dismissLabel: getUiMessage("dialogDismiss", locale),
+        });
+      } finally {
+        setCreationPendingTempId(null);
+      }
+
+      return;
+    }
+
+    if (!editingItem) {
       return;
     }
 
@@ -186,15 +271,73 @@ export default function AdminMenuPage() {
       handleCloseDrawer();
     } catch (error) {
       setMenuPayload(previousPayload);
-      alert(
-        error instanceof Error
-          ? error.message
-          : getUiMessage("failedToSaveChanges", locale),
-      );
+      void alert({
+        title: getUiMessage("dialogErrorTitle", locale),
+        message:
+          error instanceof Error
+            ? error.message
+            : getUiMessage("failedToSaveChanges", locale),
+        dismissLabel: getUiMessage("dialogDismiss", locale),
+      });
     }
   };
 
+  const handleDeleteItem = async (item: MenuItem) => {
+    if (item.id.startsWith("temp-")) {
+      return;
+    }
+
+    if (!menuPayload) {
+      return;
+    }
+
+    const confirmed = await confirm({
+      title: getUiMessage("confirmDeleteItemTitle", locale),
+      message: getUiMessage("confirmDeleteItemBody", locale),
+      variant: "danger",
+      confirmLabel: getUiMessage("dialogConfirmDelete", locale),
+      cancelLabel: getUiMessage("cancel", locale),
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    if (editingItem?.id === item.id) {
+      handleCloseDrawer();
+    }
+
+    const previousPayload = menuPayload;
+
+    setMenuPayload({
+      ...menuPayload,
+      menu: {
+        ...menuPayload.menu,
+        categories: menuPayload.menu.categories.map((category) => ({
+          ...category,
+          items: category.items.filter((menuItem) => menuItem.id !== item.id),
+        })),
+      },
+    });
+
+    void deleteMenuItem(item.id).catch((error) => {
+      setMenuPayload(previousPayload);
+      void alert({
+        title: getUiMessage("dialogErrorTitle", locale),
+        message:
+          error instanceof Error
+            ? error.message
+            : getUiMessage("failedToDeleteItem", locale),
+        dismissLabel: getUiMessage("dialogDismiss", locale),
+      });
+    });
+  };
+
   const handleToggleAvailability = (item: MenuItem, newStatus: boolean) => {
+    if (item.id.startsWith("temp-")) {
+      return;
+    }
+
     const previousPayload = menuPayload;
 
     setMenuPayload((prev) => {
@@ -220,11 +363,14 @@ export default function AdminMenuPage() {
 
     void updateItemAvailability(item.id, newStatus).catch((error) => {
       setMenuPayload(previousPayload);
-      alert(
-        error instanceof Error
-          ? error.message
-          : getUiMessage("failedToUpdateAvailability", locale),
-      );
+      void alert({
+        title: getUiMessage("dialogErrorTitle", locale),
+        message:
+          error instanceof Error
+            ? error.message
+            : getUiMessage("failedToUpdateAvailability", locale),
+        dismissLabel: getUiMessage("dialogDismiss", locale),
+      });
     });
   };
 
@@ -363,6 +509,7 @@ export default function AdminMenuPage() {
                     </h2>
                     <button
                       type="button"
+                      onClick={() => handleAddItemClick(category.id)}
                       className="rounded-full bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white active:scale-[0.98]"
                     >
                       {getUiMessage("addItem", locale)}
@@ -375,7 +522,9 @@ export default function AdminMenuPage() {
                       item={item}
                       locale={locale}
                       unavailableLabel={getUiMessage("unavailable", locale)}
+                      isCreationPending={creationPendingTempId === item.id}
                       onEditClick={handleEditClick}
+                      onDeleteClick={handleDeleteItem}
                       onToggleAvailability={handleToggleAvailability}
                     />
                   ))}
@@ -388,6 +537,8 @@ export default function AdminMenuPage() {
 
       <EditItemDrawer
         item={editingItem}
+        categoryId={addingToCategory}
+        restaurantDefaultLocale={menuPayload?.restaurant.default_locale ?? "en"}
         isOpen={isDrawerOpen}
         onClose={handleCloseDrawer}
         onSave={handleSaveItem}

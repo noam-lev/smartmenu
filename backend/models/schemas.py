@@ -1,6 +1,6 @@
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class RestaurantResponse(BaseModel):
@@ -68,3 +68,28 @@ class MenuResponse(BaseModel):
 class MenuPayload(BaseModel):
     restaurant: RestaurantResponse
     menu: MenuResponse
+
+
+class MenuItemCreateRequest(BaseModel):
+    """Validated body for creating a menu item under a category."""
+
+    name: str
+    base_price: float = Field(..., ge=0)
+    description: str | None = None
+
+    @field_validator("name")
+    @classmethod
+    def normalize_name(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("Name must not be empty.")
+        return stripped
+
+    @field_validator("description", mode="before")
+    @classmethod
+    def normalize_description(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            return value.strip()
+        return value

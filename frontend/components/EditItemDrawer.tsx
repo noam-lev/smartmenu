@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import type { Locale, MenuItem } from "../types/menu";
+import type { Locale, MenuItem, TranslationsMap } from "../types/menu";
 import { useUiStore } from "../store/uiStore";
 import { getLocalizedText, getUiMessage, isRtlLocale } from "../utils/i18n";
 
@@ -9,45 +9,78 @@ type EditTabId = "general" | "translations" | "upsells";
 
 export type EditItemDrawerProps = {
   item: MenuItem | null;
+  categoryId?: string | null;
+  /** Canonical locale stored in DB `name` / `description`; other locales live under `translations`. */
+  restaurantDefaultLocale?: Locale;
   isOpen: boolean;
   onClose: () => void;
   onSave: (updatedData: Partial<MenuItem>) => Promise<void>;
 };
 
 function buildPatchFromForm(
-  item: MenuItem,
+  item: MenuItem | null,
   locale: Locale,
+  restaurantDefaultLocale: Locale,
   name: string,
   description: string,
   basePrice: number,
 ): Partial<MenuItem> {
+  if (!item) {
+    return {
+      name: name.trim(),
+      description,
+      base_price: basePrice,
+    };
+  }
+
   const patch: Partial<MenuItem> = { base_price: basePrice };
 
-  if (locale === "en") {
-    patch.name = name;
+  const nextTranslations: TranslationsMap = {
+    ...(item.translations ?? {}),
+    [locale]: {
+      ...(item.translations?.[locale] ?? {}),
+      name,
+      description,
+    },
+  };
+
+  patch.translations = nextTranslations;
+
+  if (locale === restaurantDefaultLocale) {
+    patch.name = name.trim();
     patch.description = description;
-  } else {
-    patch.translations = {
-      ...item.translations,
-      [locale]: {
-        ...(item.translations?.[locale] ?? {}),
-        name,
-        description,
-      },
-    };
   }
 
   return patch;
 }
 
+function placeholderMenuItem(tempId: string, patch: Partial<MenuItem>): MenuItem {
+  return {
+    id: tempId,
+    name: patch.name ?? "",
+    description: typeof patch.description === "string" ? patch.description : "",
+    base_price: patch.base_price ?? 0,
+    is_available: true,
+    image_url: null,
+    translations: patch.translations,
+    variants: [],
+    upsell_rules: [],
+  };
+}
+
+export { placeholderMenuItem };
+
 export default function EditItemDrawer({
   item,
+  categoryId = null,
+  restaurantDefaultLocale = "en",
   isOpen,
   onClose,
   onSave,
 }: EditItemDrawerProps) {
   const locale = useUiStore((state) => state.locale);
   const isRtl = isRtlLocale(locale);
+  const isCreateMode = !item;
 
   const [activeTab, setActiveTab] = useState<EditTabId>("general");
   const [name, setName] = useState("");
@@ -56,16 +89,24 @@ export default function EditItemDrawer({
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    if (!isOpen || !item) {
+    if (!isOpen) {
       return;
     }
 
     setActiveTab("general");
+    setIsSaving(false);
+
+    if (isCreateMode) {
+      setName("");
+      setDescription("");
+      setBasePrice("");
+      return;
+    }
+
     setName(getLocalizedText(item, "name", locale));
     setDescription(getLocalizedText(item, "description", locale));
     setBasePrice(String(item.base_price ?? ""));
-    setIsSaving(false);
-  }, [isOpen, item, locale]);
+  }, [isOpen, item, locale, isCreateMode]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -73,7 +114,7 @@ export default function EditItemDrawer({
     }
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && !isSaving) {
         onClose();
       }
     };
@@ -86,9 +127,13 @@ export default function EditItemDrawer({
       document.removeEventListener("keydown", onKeyDown);
       document.body.style.overflow = prevOverflow;
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, isSaving]);
 
-  if (!isOpen || !item) {
+  if (!isOpen) {
+    return null;
+  }
+
+  if (isCreateMode && !categoryId) {
     return null;
   }
 
@@ -101,12 +146,24 @@ export default function EditItemDrawer({
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
 
+    const trimmedName = name.trim();
+    if (isCreateMode && !trimmedName) {
+      return;
+    }
+
     const parsedPrice = Number(basePrice);
     if (!Number.isFinite(parsedPrice) || parsedPrice < 0) {
       return;
     }
 
-    const patch = buildPatchFromForm(item, locale, name, description, parsedPrice);
+    const patch = buildPatchFromForm(
+      item,
+      locale,
+      restaurantDefaultLocale,
+      trimmedName,
+      description,
+      parsedPrice,
+    );
 
     setIsSaving(true);
     try {
@@ -116,6 +173,8 @@ export default function EditItemDrawer({
     }
   };
 
+  const drawerTitleId = "edit-item-drawer-title";
+
   return (
     <div className="fixed inset-0 z-[70]" role="presentation">
       <button
@@ -123,12 +182,13 @@ export default function EditItemDrawer({
         aria-label={getUiMessage("closeEditor", locale)}
         className="absolute inset-0 bg-black/40 backdrop-blur-[1px]"
         onClick={onClose}
+        disabled={isSaving}
       />
 
       <aside
         role="dialog"
         aria-modal="true"
-        aria-labelledby="edit-item-drawer-title"
+        aria-labelledby={drawerTitleId}
         lang={locale}
         dir={isRtl ? "rtl" : "ltr"}
         className={`absolute inset-y-0 z-[71] flex h-full w-full max-w-none flex-col bg-white shadow-2xl md:w-1/3 md:max-w-xl ${
@@ -138,20 +198,22 @@ export default function EditItemDrawer({
         <div className="flex shrink-0 items-start justify-between gap-3 border-b border-zinc-200 px-4 py-4">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-              {getUiMessage("editItemSectionTitle", locale)}
+              {isCreateMode
+                ? getUiMessage("createItemEyebrow", locale)
+                : getUiMessage("editItemSectionTitle", locale)}
             </p>
-            <h2
-              id="edit-item-drawer-title"
-              className="mt-1 truncate text-lg font-bold text-zinc-900"
-            >
-              {getLocalizedText(item, "name", locale)}
+            <h2 id={drawerTitleId} className="mt-1 truncate text-lg font-bold text-zinc-900">
+              {isCreateMode
+                ? getUiMessage("createItemMainTitle", locale)
+                : getLocalizedText(item!, "name", locale)}
             </h2>
           </div>
           <button
             type="button"
             onClick={onClose}
+            disabled={isSaving}
             aria-label={getUiMessage("close", locale)}
-            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-700 shadow-sm active:scale-[0.96]"
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-700 shadow-sm active:scale-[0.96] disabled:opacity-50"
           >
             <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" aria-hidden="true">
               <path
@@ -198,6 +260,7 @@ export default function EditItemDrawer({
                     value={name}
                     onChange={(event) => setName(event.target.value)}
                     autoComplete="off"
+                    required={isCreateMode}
                     className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none focus:border-zinc-400"
                   />
                 </div>
@@ -284,8 +347,12 @@ export default function EditItemDrawer({
                         d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                       />
                     </svg>
-                    {getUiMessage("saving", locale)}
+                    {isCreateMode
+                      ? getUiMessage("creatingItem", locale)
+                      : getUiMessage("saving", locale)}
                   </span>
+                ) : isCreateMode ? (
+                  getUiMessage("createItemButton", locale)
                 ) : (
                   getUiMessage("saveChanges", locale)
                 )}

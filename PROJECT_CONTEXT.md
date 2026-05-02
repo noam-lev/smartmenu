@@ -124,6 +124,11 @@ We are now in a **frontend + backend integration phase**.
 * **Security Hardening Completed:** DAL now includes defense-in-depth tenant validation for embedded upsell offer items; owner/admin routers are protected by default dependency boundaries.
 * **Immediate Next Task:** Add Phase-2-ready backend write endpoints (starting with soft-order/event POST flows) and align lightweight analytics/event ingestion with current menu read contract.
 
+### Owner dashboard & menu item lifecycle (current build)
+* **Admin UI (`/admin`):** Owner-facing menu editor: browse categories, toggle item availability (optimistic PATCH), **create** items (POST + optimistic temp row), **edit** items in a side drawer (`EditItemDrawer`) with tabs (General live; Translations/Upsells placeholders), **delete** items (see below). Edit payloads merge **per-locale** `translations` and respect `restaurant.default_locale` for base `name`/`description` so English and Hebrew do not overwrite each other incorrectly.
+* **Full UI translation:** Diner and admin chrome use a shared **`useUiStore` locale** plus `getUiMessage` / `getUiTemplate` (`frontend/utils/i18n.ts`) for English and Hebrew strings (menus, drawer, errors, aria labels). Menu/category/item **content** still comes from API `translations` JSONB + base fields resolved with `getLocalizedText`.
+* **Menu item deletion (hard delete):** Owner `DELETE /api/owner/items/{item_id}` **physically removes** the row from `menu_items` (and dependent DB rules, e.g. FK cascades, apply as configured in Supabase). The admin UI uses **`DialogProvider` / `useDialogs()`** (`frontend/context/DialogProvider.tsx`): **`confirm()`** for destructive prompts and **`alert()`** for errors — localized via `getUiMessage`, styled modals (`frontend/components/ui/Modal.tsx`, `ConfirmModal.tsx`, `AlertModal.tsx`), **optimistic removal** with **revert + alert** on API failure. **Product note:** Hard delete is acceptable for MVP / no payments. Once we attach **real orders and payments**, we should move to **soft delete** (e.g. `deleted_at` or `is_active` on items) so historical checks, receipts, and refunds can still reference sold items.
+
 ## 8. Visual & UX Architecture (The "Wolt-Style" Experience)
 To ensure all frontend components align with the overall user experience, here is the mental model for the diner's UI:
 
