@@ -7,7 +7,7 @@ export type TranslationsMap = Partial<Record<Locale, LocalizedFields>>;
 export type OfferItemSnapshot = {
   id: string;
   name: string;
-  image_url: string;
+  image_url: string | null;
   price: number;
   translations?: TranslationsMap;
 };
@@ -15,7 +15,7 @@ export type OfferItemSnapshot = {
 export type UpsellRule = {
   offer_item_snapshot: OfferItemSnapshot;
   custom_message: string;
-  discount_price: number;
+  discount_price: number | null;
   translations?: TranslationsMap;
 };
 
@@ -25,8 +25,9 @@ export type MenuItem = {
   description: string;
   base_price: number;
   is_available: boolean;
-  image_url: string;
+  image_url: string | null;
   tags?: string[];
+  metadata?: Record<string, unknown> | null;
   translations?: TranslationsMap;
   variants: Array<{
     id: string;
@@ -50,9 +51,10 @@ export type MenuPayload = {
     slug: string;
     theme_color: string;
     currency: string;
-    banner_image_url?: string;
+    banner_image_url?: string | null;
     default_locale?: Locale;
     translations?: TranslationsMap;
+    settings?: Record<string, unknown> | null;
   };
   menu: {
     id: string;

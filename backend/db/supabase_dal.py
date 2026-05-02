@@ -1,0 +1,524 @@
+import asyncio
+from typing import Any
+
+from supabase import Client
+
+from db.repository import MenuRepository
+from models.schemas import (
+    CategoryResponse,
+    MenuItemResponse,
+    MenuPayload,
+    MenuResponse,
+    OfferItemSnapshotResponse,
+    RestaurantResponse,
+    UpsellRuleResponse,
+    VariantResponse,
+)
+
+
+class SupabaseDAL(MenuRepository):
+    def __init__(self, client: Client) -> None:
+        self._client = client
+
+    async def get_fat_menu_by_slug(self, slug: str) -> MenuPayload | None:
+        response_data = await asyncio.to_thread(self._fetch_restaurant_menu, slug)
+        restaurant = _first(response_data)
+
+        if restaurant is None:
+            return None
+
+        active_menu = _first(_as_list(restaurant.get("menus")))
+        if active_menu is None:
+            return None
+
+        return _build_menu_payload(restaurant=restaurant, menu=active_menu)
+
+    async def get_restaurant_id_by_slug(self, slug: str) -> str | None:
+        return await asyncio.to_thread(self._fetch_restaurant_id_by_slug, slug)
+
+    async def update_item_availability(
+        self,
+        item_id: str,
+        is_available: bool,
+        restaurant_id: str,
+    ) -> dict[str, Any] | None:
+        return await self.update_menu_item(
+            item_id,
+            {"is_available": is_available},
+            restaurant_id,
+        )
+
+    async def update_menu_item(
+        self,
+        item_id: str,
+        fields: dict[str, Any],
+        restaurant_id: str,
+    ) -> dict[str, Any] | None:
+        updated = await asyncio.to_thread(
+            self._apply_menu_item_patch,
+            item_id,
+            fields,
+            restaurant_id,
+        )
+        if updated is None:
+            return None
+
+        return await asyncio.to_thread(
+            self._fetch_menu_item_patch_snapshot,
+            item_id,
+            restaurant_id,
+        )
+
+    async def create_menu_item(
+        self,
+        category_id: str,
+        fields: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        resolved = await asyncio.to_thread(
+            self._resolve_category_restaurant_menu,
+            category_id,
+        )
+        if resolved is None:
+            return None
+
+        restaurant_id, menu_id = resolved
+        next_sort = await asyncio.to_thread(
+            self._next_sort_order_for_category,
+            category_id,
+        )
+
+        description = fields.get("description")
+        row = {
+            "restaurant_id": restaurant_id,
+            "menu_id": menu_id,
+            "category_id": category_id,
+            "name": fields["name"],
+            "description": description if isinstance(description, str) else "",
+            "base_price": float(fields["base_price"]),
+            "is_available": True,
+            "is_visible": True,
+            "sort_order": next_sort,
+            "metadata": {},
+            "translations": {},
+        }
+
+        inserted = await asyncio.to_thread(self._insert_menu_item_row, row)
+        if inserted is None:
+            return None
+
+        item_id = str(inserted.get("id") or "")
+        if not item_id:
+            return None
+
+        return await asyncio.to_thread(self._fetch_menu_item_owner_snapshot_full, item_id)
+
+    async def delete_menu_item(self, item_id: str, restaurant_id: str) -> bool:
+        return await asyncio.to_thread(self._delete_menu_item_row, item_id, restaurant_id)
+
+    def _fetch_restaurant_id_by_slug(self, slug: str) -> str | None:
+        response = (
+            self._client.table("restaurants")
+            .select("id")
+            .eq("slug", slug.lower())
+            .limit(1)
+            .execute()
+        )
+        row = _first(response.data or [])
+        if row is None:
+            return None
+        rid = row.get("id")
+        return str(rid) if rid else None
+
+    def _fetch_restaurant_menu(self, slug: str) -> list[dict[str, Any]]:
+        response = (
+            self._client.table("restaurants")
+            .select(
+                """
+                id,
+                name,
+                slug,
+                settings,
+                is_active,
+                menus(
+                    id,
+                    name,
+                    translations,
+                    is_active,
+                    updated_at,
+                    categories(
+                        id,
+                        name,
+                        translations,
+                        sort_order,
+                        is_visible,
+                        menu_items(
+                            id,
+                            name,
+                            description,
+                            base_price,
+                            is_available,
+                            is_visible,
+                            sort_order,
+                            image_url,
+                            metadata,
+                            translations,
+                            item_variants(
+                                id,
+                                name,
+                                price
+                            ),
+                            upsell_rules!upsell_rules_trigger_item_id_fkey(
+                                *,
+                                translations,
+                                offer_item:menu_items!upsell_rules_offer_item_id_fkey(*)
+                            )
+                        )
+                    )
+                )
+                """
+            )
+            .eq("slug", slug.lower())
+            .eq("is_active", True)
+            .eq("menus.is_active", True)
+            .eq("menus.categories.is_visible", True)
+            .eq("menus.categories.menu_items.is_visible", True)
+            .limit(1)
+            .execute()
+        )
+
+        return response.data or []
+
+    def _apply_menu_item_patch(
+        self,
+        item_id: str,
+        fields: dict[str, Any],
+        restaurant_id: str,
+    ) -> dict[str, Any] | None:
+        response = (
+            self._client.table("menu_items")
+            .update(fields)
+            .eq("id", item_id)
+            .eq("restaurant_id", restaurant_id)
+            .execute()
+        )
+        return _first(response.data or []) if response.data else None
+
+    def _fetch_menu_item_patch_snapshot(
+        self,
+        item_id: str,
+        restaurant_id: str,
+    ) -> dict[str, Any] | None:
+        response = (
+            self._client.table("menu_items")
+            .select("id,name,description,base_price,is_available,translations")
+            .eq("id", item_id)
+            .eq("restaurant_id", restaurant_id)
+            .limit(1)
+            .execute()
+        )
+        return _first(response.data or [])
+
+    def _resolve_category_restaurant_menu(
+        self,
+        category_id: str,
+    ) -> tuple[str, str] | None:
+        cat_resp = (
+            self._client.table("categories")
+            .select("menu_id")
+            .eq("id", category_id)
+            .limit(1)
+            .execute()
+        )
+        cat_row = _first(cat_resp.data or [])
+        if not cat_row:
+            return None
+
+        menu_id = str(cat_row.get("menu_id") or "")
+        if not menu_id:
+            return None
+
+        menu_resp = (
+            self._client.table("menus")
+            .select("restaurant_id")
+            .eq("id", menu_id)
+            .limit(1)
+            .execute()
+        )
+        menu_row = _first(menu_resp.data or [])
+        if not menu_row:
+            return None
+
+        restaurant_id = str(menu_row.get("restaurant_id") or "")
+        if not restaurant_id:
+            return None
+
+        return restaurant_id, menu_id
+
+    def _next_sort_order_for_category(self, category_id: str) -> int:
+        response = (
+            self._client.table("menu_items")
+            .select("sort_order")
+            .eq("category_id", category_id)
+            .order("sort_order", desc=True)
+            .limit(1)
+            .execute()
+        )
+        row = _first(response.data or [])
+        if row is None:
+            return 0
+
+        return int(row.get("sort_order") or 0) + 1
+
+    def _insert_menu_item_row(self, row: dict[str, Any]) -> dict[str, Any] | None:
+        response = self._client.table("menu_items").insert(row).execute()
+        return _first(response.data or [])
+
+    def _delete_menu_item_row(self, item_id: str, restaurant_id: str) -> bool:
+        probe = (
+            self._client.table("menu_items")
+            .select("id")
+            .eq("id", item_id)
+            .eq("restaurant_id", restaurant_id)
+            .limit(1)
+            .execute()
+        )
+        if _first(probe.data or []) is None:
+            return False
+
+        self._client.table("menu_items").delete().eq("id", item_id).eq(
+            "restaurant_id",
+            restaurant_id,
+        ).execute()
+        return True
+
+    def _fetch_menu_item_owner_snapshot_full(self, item_id: str) -> dict[str, Any] | None:
+        response = (
+            self._client.table("menu_items")
+            .select(
+                """
+                id,
+                name,
+                description,
+                base_price,
+                is_available,
+                image_url,
+                metadata,
+                translations,
+                item_variants(
+                    id,
+                    name,
+                    price
+                )
+                """
+            )
+            .eq("id", item_id)
+            .limit(1)
+            .execute()
+        )
+        row = _first(response.data or [])
+        if row is None:
+            return None
+
+        metadata = _as_dict(row.get("metadata"))
+        variants_raw = _as_list(row.get("item_variants"))
+        variants = [
+            {
+                "id": str(v.get("id") or ""),
+                "name": str(v.get("name") or ""),
+                "price": _to_float(v.get("price")),
+            }
+            for v in variants_raw
+        ]
+
+        image_val = row.get("image_url")
+        image_out: str | None
+        if isinstance(image_val, str) and image_val.strip():
+            image_out = image_val.strip()
+        else:
+            image_out = None
+
+        return {
+            "id": str(row.get("id") or ""),
+            "name": str(row.get("name") or ""),
+            "description": str(row.get("description") or ""),
+            "base_price": _to_float(row.get("base_price")),
+            "is_available": bool(row.get("is_available")),
+            "image_url": image_out,
+            "tags": _as_string_list(metadata.get("tags")),
+            "metadata": metadata if metadata else None,
+            "translations": _as_optional_dict(row.get("translations")),
+            "variants": variants,
+            "upsell_rules": [],
+        }
+
+
+def _build_menu_payload(
+    restaurant: dict[str, Any],
+    menu: dict[str, Any],
+) -> MenuPayload:
+    settings = _as_dict(restaurant.get("settings"))
+    restaurant_id = str(restaurant.get("id") or "")
+
+    return MenuPayload(
+        restaurant=RestaurantResponse(
+            name=str(restaurant.get("name") or ""),
+            slug=str(restaurant.get("slug") or ""),
+            theme_color=str(settings.get("theme_color") or "#111827"),
+            currency=str(settings.get("currency") or "ILS"),
+            banner_image_url=settings.get("banner_image_url"),
+            default_locale=settings.get("default_locale"),
+            translations=_as_optional_dict(settings.get("translations")),
+            settings=settings,
+        ),
+        menu=MenuResponse(
+            id=str(menu.get("id") or ""),
+            name=str(menu.get("name") or ""),
+            last_updated=str(menu.get("updated_at") or ""),
+            translations=_as_optional_dict(menu.get("translations")),
+            categories=[
+                _build_category(category, restaurant_id)
+                for category in sorted(
+                    _as_list(menu.get("categories")),
+                    key=lambda row: row.get("sort_order") or 0,
+                )
+            ],
+        ),
+    )
+
+
+def _build_category(
+    category: dict[str, Any],
+    restaurant_id: str,
+) -> CategoryResponse:
+    return CategoryResponse(
+        id=str(category.get("id") or ""),
+        name=str(category.get("name") or ""),
+        sort_order=int(category.get("sort_order") or 0),
+        translations=_as_optional_dict(category.get("translations")),
+        items=[
+            _build_menu_item(item, restaurant_id)
+            for item in sorted(
+                _as_list(category.get("menu_items")),
+                key=lambda row: row.get("sort_order") or 0,
+            )
+        ],
+    )
+
+
+def _build_menu_item(item: dict[str, Any], restaurant_id: str) -> MenuItemResponse:
+    metadata = _as_dict(item.get("metadata"))
+
+    return MenuItemResponse(
+        id=str(item.get("id") or ""),
+        name=str(item.get("name") or ""),
+        description=str(item.get("description") or ""),
+        base_price=_to_float(item.get("base_price")),
+        is_available=bool(item.get("is_available")),
+        image_url=_as_optional_string(item.get("image_url")),
+        tags=_as_string_list(metadata.get("tags")),
+        metadata=metadata,
+        translations=_as_optional_dict(item.get("translations")),
+        variants=[
+            _build_variant(variant)
+            for variant in _as_list(item.get("item_variants"))
+        ],
+        upsell_rules=[
+            rule
+            for rule in (
+                _build_upsell_rule(row, restaurant_id)
+                for row in _as_list(item.get("upsell_rules"))
+            )
+            if rule is not None
+        ],
+    )
+
+
+def _build_variant(variant: dict[str, Any]) -> VariantResponse:
+    return VariantResponse(
+        id=str(variant.get("id") or ""),
+        name=str(variant.get("name") or ""),
+        price=_to_float(variant.get("price")),
+    )
+
+
+def _build_upsell_rule(
+    rule: dict[str, Any],
+    restaurant_id: str,
+) -> UpsellRuleResponse | None:
+    snapshot = _as_dict(rule.get("offer_item_snapshot"))
+    offer_item = _as_dict(rule.get("offer_item"))
+    offer_item_restaurant_id = str(offer_item.get("restaurant_id") or "")
+
+    if offer_item and offer_item_restaurant_id != restaurant_id:
+        return None
+
+    if not snapshot and offer_item:
+        snapshot = {
+            "id": offer_item.get("id"),
+            "name": offer_item.get("name"),
+            "image_url": offer_item.get("image_url"),
+            "price": offer_item.get("base_price"),
+            "translations": offer_item.get("translations"),
+        }
+
+    if not snapshot and rule.get("offer_item_id"):
+        snapshot = {
+            "id": rule.get("offer_item_id"),
+            "name": "",
+            "image_url": "",
+            "price": rule.get("discount_price"),
+        }
+
+    if not snapshot:
+        return None
+
+    return UpsellRuleResponse(
+        offer_item_snapshot=OfferItemSnapshotResponse(
+            id=str(snapshot.get("id") or ""),
+            name=str(snapshot.get("name") or ""),
+            image_url=_as_optional_string(snapshot.get("image_url")),
+            price=_to_float(snapshot.get("price")),
+            translations=_as_optional_dict(snapshot.get("translations")),
+        ),
+        custom_message=str(rule.get("custom_message") or ""),
+        discount_price=_to_optional_float(rule.get("discount_price")),
+        translations=_as_optional_dict(rule.get("translations")),
+    )
+
+
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _as_optional_dict(value: Any) -> dict[str, Any] | None:
+    return value if isinstance(value, dict) else None
+
+
+def _as_optional_string(value: Any) -> str | None:
+    if isinstance(value, str):
+        trimmed = value.strip()
+        return trimmed or None
+    return None
+
+
+def _as_list(value: Any) -> list[dict[str, Any]]:
+    return value if isinstance(value, list) else []
+
+
+def _as_string_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+
+    return [str(item) for item in value if item]
+
+
+def _first(value: list[dict[str, Any]]) -> dict[str, Any] | None:
+    return value[0] if value else None
+
+
+def _to_float(value: Any) -> float:
+    return float(value or 0)
+
+
+def _to_optional_float(value: Any) -> float | None:
+    return float(value) if value is not None else None
