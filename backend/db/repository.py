@@ -48,3 +48,54 @@ class MenuRepository(ABC):
     async def delete_menu_item(self, item_id: str, restaurant_id: str) -> bool:
         """Hard-delete a menu item by id scoped to restaurant_id. Returns True if deleted."""
         raise NotImplementedError
+
+    @abstractmethod
+    async def patch_upsell_rule_message(
+        self,
+        rule_id: str,
+        restaurant_id: str,
+        locale: str,
+        message: str,
+    ) -> bool:
+        """Merge custom_message for locale into upsell_rules.translations; optionally sync base column."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def create_upsell_rule(
+        self,
+        trigger_item_id: str,
+        restaurant_id: str,
+        fields: dict[str, Any],
+    ) -> str | None:
+        """Insert upsell rule; returns new rule id or None if validation failed."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def delete_upsell_rule(self, rule_id: str, restaurant_id: str) -> bool:
+        """Delete upsell rule scoped to restaurant_id."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def create_category(
+        self,
+        restaurant_id: str,
+        fields: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Insert category on active menu; returns owner snapshot or None."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def update_category(
+        self,
+        category_id: str,
+        restaurant_id: str,
+        locale: str,
+        name: str,
+    ) -> dict[str, Any] | None:
+        """Merge name for locale into translations; sync base name when locale is default."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def delete_category(self, category_id: str, restaurant_id: str) -> bool:
+        """Hard-delete category and its menu items (scoped to restaurant)."""
+        raise NotImplementedError

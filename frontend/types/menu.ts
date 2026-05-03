@@ -13,6 +13,8 @@ export type OfferItemSnapshot = {
 };
 
 export type UpsellRule = {
+  /** Present when loaded from API; required for edit/delete upsell admin actions. */
+  id?: string;
   offer_item_snapshot: OfferItemSnapshot;
   custom_message: string;
   discount_price: number | null;

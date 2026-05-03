@@ -115,6 +115,66 @@ class SupabaseDAL(MenuRepository):
     async def delete_menu_item(self, item_id: str, restaurant_id: str) -> bool:
         return await asyncio.to_thread(self._delete_menu_item_row, item_id, restaurant_id)
 
+    async def patch_upsell_rule_message(
+        self,
+        rule_id: str,
+        restaurant_id: str,
+        locale: str,
+        message: str,
+    ) -> bool:
+        return await asyncio.to_thread(
+            self._patch_upsell_rule_message_sync,
+            rule_id,
+            restaurant_id,
+            locale,
+            message.strip(),
+        )
+
+    async def create_upsell_rule(
+        self,
+        trigger_item_id: str,
+        restaurant_id: str,
+        fields: dict[str, Any],
+    ) -> str | None:
+        return await asyncio.to_thread(
+            self._insert_upsell_rule_sync,
+            trigger_item_id,
+            restaurant_id,
+            fields,
+        )
+
+    async def delete_upsell_rule(self, rule_id: str, restaurant_id: str) -> bool:
+        return await asyncio.to_thread(self._delete_upsell_rule_sync, rule_id, restaurant_id)
+
+    async def create_category(
+        self,
+        restaurant_id: str,
+        fields: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        return await asyncio.to_thread(self._insert_category_sync, restaurant_id, fields)
+
+    async def update_category(
+        self,
+        category_id: str,
+        restaurant_id: str,
+        locale: str,
+        name: str,
+    ) -> dict[str, Any] | None:
+        return await asyncio.to_thread(
+            self._patch_category_name_sync,
+            category_id,
+            restaurant_id,
+            locale,
+            name.strip(),
+        )
+
+    async def delete_category(self, category_id: str, restaurant_id: str) -> bool:
+        return await asyncio.to_thread(
+            self._delete_category_cascade_sync,
+            category_id,
+            restaurant_id,
+        )
+
     def _fetch_restaurant_id_by_slug(self, slug: str) -> str | None:
         response = (
             self._client.table("restaurants")
@@ -351,6 +411,305 @@ class SupabaseDAL(MenuRepository):
             "upsell_rules": [],
         }
 
+    def _menu_item_restaurant_id(self, item_id: str) -> str | None:
+        response = (
+            self._client.table("menu_items")
+            .select("restaurant_id")
+            .eq("id", item_id)
+            .limit(1)
+            .execute()
+        )
+        row = _first(response.data or [])
+        if row is None:
+            return None
+        rid = row.get("restaurant_id")
+        return str(rid) if rid else None
+
+    def _restaurant_default_locale(self, restaurant_id: str) -> str:
+        response = (
+            self._client.table("restaurants")
+            .select("settings")
+            .eq("id", restaurant_id)
+            .limit(1)
+            .execute()
+        )
+        row = _first(response.data or [])
+        if row is None:
+            return "en"
+        settings = _as_dict(row.get("settings"))
+        loc = settings.get("default_locale")
+        if isinstance(loc, str) and loc.strip():
+            return loc.strip().lower()
+        return "en"
+
+    def _patch_upsell_rule_message_sync(
+        self,
+        rule_id: str,
+        restaurant_id: str,
+        locale: str,
+        message: str,
+    ) -> bool:
+        probe = (
+            self._client.table("upsell_rules")
+            .select("id,translations")
+            .eq("id", rule_id)
+            .eq("restaurant_id", restaurant_id)
+            .limit(1)
+            .execute()
+        )
+        row = _first(probe.data or [])
+        if row is None:
+            return False
+
+        translations = _as_dict(row.get("translations"))
+        bucket = _as_dict(translations.get(locale))
+        bucket["custom_message"] = message
+        translations[locale] = bucket
+
+        default_locale = self._restaurant_default_locale(restaurant_id)
+        patch: dict[str, Any] = {"translations": translations}
+        if locale == default_locale:
+            patch["custom_message"] = message
+
+        response = (
+            self._client.table("upsell_rules")
+            .update(patch)
+            .eq("id", rule_id)
+            .eq("restaurant_id", restaurant_id)
+            .execute()
+        )
+        return bool(response.data)
+
+    def _insert_upsell_rule_sync(
+        self,
+        trigger_item_id: str,
+        restaurant_id: str,
+        fields: dict[str, Any],
+    ) -> str | None:
+        trigger_rid = self._menu_item_restaurant_id(trigger_item_id)
+        if trigger_rid != restaurant_id:
+            return None
+
+        offer_id = str(fields.get("offer_item_id") or "")
+        if not offer_id or offer_id == trigger_item_id:
+            return None
+
+        offer_rid = self._menu_item_restaurant_id(offer_id)
+        if offer_rid != restaurant_id:
+            return None
+
+        discount_price = float(fields["discount_price"])
+        cm = fields.get("custom_message")
+        custom_message = cm.strip() if isinstance(cm, str) else ""
+
+        row = {
+            "restaurant_id": restaurant_id,
+            "trigger_item_id": trigger_item_id,
+            "offer_item_id": offer_id,
+            "custom_message": custom_message,
+            "discount_price": discount_price,
+            "translations": {},
+        }
+        response = self._client.table("upsell_rules").insert(row).execute()
+        inserted = _first(response.data or [])
+        if inserted is None:
+            return None
+        new_id = inserted.get("id")
+        return str(new_id) if new_id else None
+
+    def _delete_upsell_rule_sync(self, rule_id: str, restaurant_id: str) -> bool:
+        probe = (
+            self._client.table("upsell_rules")
+            .select("id")
+            .eq("id", rule_id)
+            .eq("restaurant_id", restaurant_id)
+            .limit(1)
+            .execute()
+        )
+        if _first(probe.data or []) is None:
+            return False
+
+        self._client.table("upsell_rules").delete().eq("id", rule_id).eq(
+            "restaurant_id",
+            restaurant_id,
+        ).execute()
+        return True
+
+    def _get_active_menu_id_for_restaurant(self, restaurant_id: str) -> str | None:
+        response = (
+            self._client.table("menus")
+            .select("id")
+            .eq("restaurant_id", restaurant_id)
+            .eq("is_active", True)
+            .limit(1)
+            .execute()
+        )
+        row = _first(response.data or [])
+        if row is None:
+            return None
+        mid = row.get("id")
+        return str(mid) if mid else None
+
+    def _next_category_sort_order_for_menu(self, menu_id: str) -> int:
+        response = (
+            self._client.table("categories")
+            .select("sort_order")
+            .eq("menu_id", menu_id)
+            .order("sort_order", desc=True)
+            .limit(1)
+            .execute()
+        )
+        row = _first(response.data or [])
+        if row is None:
+            return 0
+        return int(row.get("sort_order") or 0) + 1
+
+    def _category_restaurant_id(self, category_id: str) -> str | None:
+        cat_resp = (
+            self._client.table("categories")
+            .select("menu_id")
+            .eq("id", category_id)
+            .limit(1)
+            .execute()
+        )
+        cat_row = _first(cat_resp.data or [])
+        if not cat_row:
+            return None
+        menu_id = str(cat_row.get("menu_id") or "")
+        if not menu_id:
+            return None
+        menu_resp = (
+            self._client.table("menus")
+            .select("restaurant_id")
+            .eq("id", menu_id)
+            .limit(1)
+            .execute()
+        )
+        menu_row = _first(menu_resp.data or [])
+        if not menu_row:
+            return None
+        rid = menu_row.get("restaurant_id")
+        return str(rid) if rid else None
+
+    def _insert_category_sync(
+        self,
+        restaurant_id: str,
+        fields: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        menu_id = self._get_active_menu_id_for_restaurant(restaurant_id)
+        if not menu_id:
+            return None
+
+        locale = str(fields.get("locale") or "en")
+        name = str(fields.get("name") or "").strip()
+        if not name:
+            return None
+
+        next_sort = self._next_category_sort_order_for_menu(menu_id)
+        default_locale = self._restaurant_default_locale(restaurant_id)
+        translations: dict[str, Any] = {locale: {"name": name}}
+
+        row = {
+            "menu_id": menu_id,
+            "name": name,
+            "sort_order": next_sort,
+            "is_visible": True,
+            "translations": translations,
+        }
+        response = self._client.table("categories").insert(row).execute()
+        inserted = _first(response.data or [])
+        if inserted is None:
+            return None
+        cid = str(inserted.get("id") or "")
+        if not cid:
+            return None
+        return {
+            "id": cid,
+            "name": str(inserted.get("name") or ""),
+            "sort_order": int(inserted.get("sort_order") or 0),
+            "translations": _as_optional_dict(inserted.get("translations")),
+        }
+
+    def _patch_category_name_sync(
+        self,
+        category_id: str,
+        restaurant_id: str,
+        locale: str,
+        name: str,
+    ) -> dict[str, Any] | None:
+        if self._category_restaurant_id(category_id) != restaurant_id:
+            return None
+
+        probe = (
+            self._client.table("categories")
+            .select("id,name,translations,sort_order")
+            .eq("id", category_id)
+            .limit(1)
+            .execute()
+        )
+        row = _first(probe.data or [])
+        if row is None:
+            return None
+
+        translations = _as_dict(row.get("translations"))
+        bucket = _as_dict(translations.get(locale))
+        bucket["name"] = name
+        translations[locale] = bucket
+
+        default_locale = self._restaurant_default_locale(restaurant_id)
+        patch: dict[str, Any] = {"translations": translations}
+        if locale == default_locale:
+            patch["name"] = name
+
+        response = (
+            self._client.table("categories")
+            .update(patch)
+            .eq("id", category_id)
+            .execute()
+        )
+        if not response.data:
+            return None
+        updated = _first(response.data or [])
+        if updated is None:
+            return None
+        return {
+            "id": str(updated.get("id") or ""),
+            "name": str(updated.get("name") or ""),
+            "sort_order": int(updated.get("sort_order") or 0),
+            "translations": _as_optional_dict(updated.get("translations")),
+        }
+
+    def _delete_category_cascade_sync(self, category_id: str, restaurant_id: str) -> bool:
+        if self._category_restaurant_id(category_id) != restaurant_id:
+            return False
+
+        probe = (
+            self._client.table("categories")
+            .select("id")
+            .eq("id", category_id)
+            .limit(1)
+            .execute()
+        )
+        if _first(probe.data or []) is None:
+            return False
+
+        items_resp = (
+            self._client.table("menu_items")
+            .select("id")
+            .eq("category_id", category_id)
+            .execute()
+        )
+        item_ids = [str(r.get("id")) for r in (items_resp.data or []) if r.get("id")]
+
+        if item_ids:
+            self._client.table("item_variants").delete().in_("menu_item_id", item_ids).execute()
+            self._client.table("upsell_rules").delete().in_("trigger_item_id", item_ids).execute()
+            self._client.table("upsell_rules").delete().in_("offer_item_id", item_ids).execute()
+            self._client.table("menu_items").delete().in_("id", item_ids).execute()
+
+        self._client.table("categories").delete().eq("id", category_id).execute()
+        return True
+
 
 def _build_menu_payload(
     restaurant: dict[str, Any],
@@ -472,7 +831,12 @@ def _build_upsell_rule(
     if not snapshot:
         return None
 
+    rule_id = str(rule.get("id") or "")
+    if not rule_id:
+        return None
+
     return UpsellRuleResponse(
+        id=rule_id,
         offer_item_snapshot=OfferItemSnapshotResponse(
             id=str(snapshot.get("id") or ""),
             name=str(snapshot.get("name") or ""),

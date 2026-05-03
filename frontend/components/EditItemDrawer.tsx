@@ -4,14 +4,47 @@ import { useEffect, useState, type FormEvent } from "react";
 import type { Locale, MenuItem, TranslationsMap } from "../types/menu";
 import { useUiStore } from "../store/uiStore";
 import { getLocalizedText, getUiMessage, isRtlLocale } from "../utils/i18n";
+import UpsellTab from "./UpsellTab";
 
 type EditTabId = "general" | "translations" | "upsells";
+
+/** Detect text that likely belongs in the English translation bucket (Latin, no Hebrew letters). */
+function looksLikeEnglishBucketText(value: string): boolean {
+  const t = value.trim();
+  if (!t) {
+    return false;
+  }
+  return /[A-Za-z]/.test(t) && !/[\u0590-\u05FF]/.test(t);
+}
+
+/** Detect text that likely belongs in the Hebrew translation bucket. */
+function looksLikeHebrewBucketText(value: string): boolean {
+  const t = value.trim();
+  if (!t) {
+    return false;
+  }
+  return /[\u0590-\u05FF]/.test(t);
+}
+
+function shouldCopyBaseFieldToOtherLocale(
+  baseValue: string,
+  otherLocale: Locale,
+): boolean {
+  if (otherLocale === "en") {
+    return looksLikeEnglishBucketText(baseValue);
+  }
+  return looksLikeHebrewBucketText(baseValue);
+}
 
 export type EditItemDrawerProps = {
   item: MenuItem | null;
   categoryId?: string | null;
   /** Canonical locale stored in DB `name` / `description`; other locales live under `translations`. */
   restaurantDefaultLocale?: Locale;
+  /** Flat list of menu items (e.g. for upsell offer picker). */
+  allMenuItems?: MenuItem[];
+  /** Reload menu from API after upsell mutations (keeps drawer item in sync). */
+  onRefreshMenu?: () => Promise<void>;
   isOpen: boolean;
   onClose: () => void;
   onSave: (updatedData: Partial<MenuItem>) => Promise<void>;
@@ -34,8 +67,9 @@ function buildPatchFromForm(
   }
 
   const patch: Partial<MenuItem> = { base_price: basePrice };
+  const trimmedName = name.trim();
 
-  const nextTranslations: TranslationsMap = {
+  let nextTranslations: TranslationsMap = {
     ...(item.translations ?? {}),
     [locale]: {
       ...(item.translations?.[locale] ?? {}),
@@ -44,12 +78,42 @@ function buildPatchFromForm(
     },
   };
 
-  patch.translations = nextTranslations;
-
   if (locale === restaurantDefaultLocale) {
-    patch.name = name.trim();
+    const otherLocale: Locale = restaurantDefaultLocale === "en" ? "he" : "en";
+    const otherBucket = nextTranslations[otherLocale] ?? {};
+    const otherNameMissing =
+      typeof otherBucket.name !== "string" || otherBucket.name.trim().length === 0;
+    const otherDescMissing =
+      otherBucket === undefined || typeof otherBucket.description !== "string";
+
+    const additions: Record<string, string> = {};
+
+    if (otherNameMissing && shouldCopyBaseFieldToOtherLocale(item.name, otherLocale)) {
+      additions.name = item.name;
+    }
+    if (
+      otherDescMissing &&
+      typeof item.description === "string" &&
+      shouldCopyBaseFieldToOtherLocale(item.description, otherLocale)
+    ) {
+      additions.description = item.description;
+    }
+
+    if (Object.keys(additions).length > 0) {
+      nextTranslations = {
+        ...nextTranslations,
+        [otherLocale]: {
+          ...otherBucket,
+          ...additions,
+        },
+      };
+    }
+
+    patch.name = trimmedName;
     patch.description = description;
   }
+
+  patch.translations = nextTranslations;
 
   return patch;
 }
@@ -74,6 +138,8 @@ export default function EditItemDrawer({
   item,
   categoryId = null,
   restaurantDefaultLocale = "en",
+  allMenuItems = [],
+  onRefreshMenu,
   isOpen,
   onClose,
   onSave,
@@ -304,9 +370,22 @@ export default function EditItemDrawer({
             ) : null}
 
             {activeTab === "upsells" ? (
-              <p className="text-sm text-zinc-500">
-                {getUiMessage("upsellsComingSoon", locale)}
-              </p>
+              !item ? (
+                <p className="text-sm text-zinc-500">
+                  {getUiMessage("upsellUpsellsNeedSavedItem", locale)}
+                </p>
+              ) : onRefreshMenu ? (
+                <UpsellTab
+                  triggerItemId={item.id}
+                  upsellRules={item.upsell_rules}
+                  allMenuItems={allMenuItems}
+                  locale={locale}
+                  isRtl={isRtl}
+                  onRefreshMenu={onRefreshMenu}
+                />
+              ) : (
+                <p className="text-sm text-zinc-500">{getUiMessage("upsellsComingSoon", locale)}</p>
+              )
             ) : null}
           </div>
 

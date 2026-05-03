@@ -29,6 +29,7 @@ class OfferItemSnapshotResponse(BaseModel):
 
 
 class UpsellRuleResponse(BaseModel):
+    id: str
     offer_item_snapshot: OfferItemSnapshotResponse
     custom_message: str
     discount_price: float | None = None
@@ -68,6 +69,52 @@ class MenuResponse(BaseModel):
 class MenuPayload(BaseModel):
     restaurant: RestaurantResponse
     menu: MenuResponse
+
+
+class CategoryCreateRequest(BaseModel):
+    """Create a category on the restaurant's active menu."""
+
+    name: str
+    locale: str = Field(..., min_length=2, max_length=2)
+
+    @field_validator("name")
+    @classmethod
+    def normalize_name(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("Name must not be empty.")
+        return stripped
+
+    @field_validator("locale")
+    @classmethod
+    def normalize_locale(cls, value: str) -> str:
+        low = value.strip().lower()
+        if low not in ("en", "he"):
+            raise ValueError("locale must be 'en' or 'he'.")
+        return low
+
+
+class CategoryUpdateRequest(BaseModel):
+    """Patch category display name for one UI locale (merges into translations JSON)."""
+
+    name: str
+    locale: str = Field(..., min_length=2, max_length=2)
+
+    @field_validator("name")
+    @classmethod
+    def normalize_name(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("Name must not be empty.")
+        return stripped
+
+    @field_validator("locale")
+    @classmethod
+    def normalize_locale(cls, value: str) -> str:
+        low = value.strip().lower()
+        if low not in ("en", "he"):
+            raise ValueError("locale must be 'en' or 'he'.")
+        return low
 
 
 class MenuItemCreateRequest(BaseModel):
