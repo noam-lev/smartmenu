@@ -118,7 +118,7 @@ The data is fetched as a single nested JSON. This is the structure (currently lo
 
 ## 7. Current Status & Immediate Next Task
 We are now in a **frontend + backend integration phase**.
-* **Definition of Done (MVP):** A restaurant owner can set up a menu. A diner can scan a QR code and view the menu smoothly. A diner can add an item to a local cart. The Upsell pop-up triggers correctly. Everything is served directly from Supabase.
+* **Definition of Done (MVP):** A restaurant owner can set up a menu. A diner can scan a QR code and view the menu smoothly. A diner can add an item to a local cart. Upsell prompts trigger only for **applicable** rules (offered item not already in cart; see **Recent engineering changes** under section 7). Everything is served directly from Supabase.
 * **Frontend Progress (Apr 2026):** Core diner flow is implemented (Wolt-style UI, sticky categories, item/upsell bottom sheet, floating cart, bilingual support). The UI now fetches live menu data from backend (`/api/diner/menus/{slug}`) instead of reading `mockMenu.json` directly.
 * **Backend Progress (Apr 2026):** FastAPI skeleton is in place (`core/`, `api/`, `db/`, `models/`) with Supabase service-role client, repository pattern, and a public fat endpoint for diner menu retrieval. Seed script (`backend/seed.py`) imports frontend mock JSON into Supabase and is idempotent for repeated local runs.
 * **Security Hardening Completed:** DAL now includes defense-in-depth tenant validation for embedded upsell offer items; owner/admin routers are protected by default dependency boundaries.
@@ -128,6 +128,22 @@ We are now in a **frontend + backend integration phase**.
 * **Admin UI (`/admin`):** Owner-facing menu editor: browse categories, toggle item availability (optimistic PATCH), **create** items (POST + optimistic temp row), **edit** items in a side drawer (`EditItemDrawer`) with tabs (General live; Translations/Upsells placeholders), **delete** items (see below). Edit payloads merge **per-locale** `translations` and respect `restaurant.default_locale` for base `name`/`description` so English and Hebrew do not overwrite each other incorrectly.
 * **Full UI translation:** Diner and admin chrome use a shared **`useUiStore` locale** plus `getUiMessage` / `getUiTemplate` (`frontend/utils/i18n.ts`) for English and Hebrew strings (menus, drawer, errors, aria labels). Menu/category/item **content** still comes from API `translations` JSONB + base fields resolved with `getLocalizedText`.
 * **Menu item deletion (hard delete):** Owner `DELETE /api/owner/items/{item_id}` **physically removes** the row from `menu_items` (and dependent DB rules, e.g. FK cascades, apply as configured in Supabase). The admin UI uses **`DialogProvider` / `useDialogs()`** (`frontend/context/DialogProvider.tsx`): **`confirm()`** for destructive prompts and **`alert()`** for errors — localized via `getUiMessage`, styled modals (`frontend/components/ui/Modal.tsx`, `ConfirmModal.tsx`, `AlertModal.tsx`), **optimistic removal** with **revert + alert** on API failure. **Product note:** Hard delete is acceptable for MVP / no payments. Once we attach **real orders and payments**, we should move to **soft delete** (e.g. `deleted_at` or `is_active` on items) so historical checks, receipts, and refunds can still reference sold items.
+
+### Recent engineering changes (May 2026)
+
+These updates are in the repo so future work can assume this behavior without rediscovering it.
+
+**Next.js 16 / local dev (`frontend/`)**
+
+- **`next.config.ts`:** `turbopack.root` is set to the absolute directory that contains `next.config.ts` (the real app root). That stops Turbopack from occasionally treating `frontend/app` as the workspace root, which broke resolution (`next/package.json` not found from the wrong cwd).
+- **`package.json` scripts:** Default dev is **`next dev --webpack`** so day-to-day dev avoids Turbopack Rust panics seen on Next 16.2.x when compiling heavy routes. **`yarn dev:turbo`** runs plain **`next dev`** if you want Turbopack again after the explicit root fix.
+- **Operational note:** Only one `next dev` per `frontend` folder should bind a port; a second instance exits with “Another next dev server is already running.” Mixed **yarn** + **npm** lockfiles under `frontend` can confuse tooling; prefer one package manager there.
+
+**Diner cart and smart upsell (`frontend/store/cartStore.ts`, `frontend/app/page.tsx`)**
+
+- **`hasItemInCart(itemId)`** on the cart store: returns whether that menu item id is present in the persisted cart with quantity **greater than zero** (same ids as `addSelection` / `CartItem.itemId`).
+- **Upsell interception:** After the diner confirms “Add to order”, the main item is added first. Then the client scans **`upsell_rules` in array order** and picks the **first** rule whose offered item id (`offer_item_snapshot.id`, i.e. the payload’s offer item) is **not** already in the cart. If one exists, the bottom sheet moves to the upsell step and shows **that** rule (`activeUpsellRule` state—not always `upsell_rules[0]`). If every rule’s offer is already in the cart (or there are no rules), the sheet **closes immediately** with no upsell frame, so there is no “flash then skip” UX.
+- **Accept path:** Upsell “Add” still uses `addSelection` with the snapshot name, translations, and `discount_price ?? snapshot.price` for the offered line item.
 
 ## 8. Visual & UX Architecture (The "Wolt-Style" Experience)
 To ensure all frontend components align with the overall user experience, here is the mental model for the diner's UI:
@@ -141,7 +157,7 @@ To ensure all frontend components align with the overall user experience, here i
 * **The Interaction & Upsell Flow (Bottom Sheet):**
   * Tapping a `MenuItemCard` does NOT immediately add it to the cart. Instead, it slides up a **Bottom Sheet** (modal).
   * Inside the Bottom Sheet: A larger image, item details, a quantity selector (+/-), and a prominent primary button: "Add to order - 32 ₪".
-  * *The Upsell Transition:* If the item has an associated `upsell_rule`, clicking "Add to order" does not close the sheet. Instead, the sheet content smoothly transitions to the upsell offer ("Add a side of fries for 12 ₪?"). The user can click "Add" or "No thanks", which finally closes the sheet.
+  * *The Upsell Transition:* If the item has **`upsell_rules`** and at least one rule’s offered item is **not** already in the cart, clicking "Add to order" does not close the sheet; it transitions to the **first applicable** upsell offer. If the offered item is **already** in the cart for a rule, that rule is skipped; if no rules remain, the sheet closes right away. The user can click "Add" or "No thanks" on the upsell step, which finally closes the sheet.
 * **The Floating Cart (Sticky Footer):**
   * Invisible when the cart is empty.
   * Once an item is added, a floating button appears anchored to the bottom of the screen.

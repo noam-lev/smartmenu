@@ -27,6 +27,8 @@ export type MenuItem = {
   description: string;
   base_price: number;
   is_available: boolean;
+  /** Server ordering within category; used for admin drag-and-drop. */
+  sort_order?: number;
   image_url: string | null;
   tags?: string[];
   metadata?: Record<string, unknown> | null;

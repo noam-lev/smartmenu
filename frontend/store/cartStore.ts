@@ -16,6 +16,8 @@ type CartStore = {
   itemsByItemId: Record<string, CartItem>;
   totalItems: number;
   totalPrice: number;
+  /** True if this menu item id is in the cart with a positive quantity. */
+  hasItemInCart: (itemId: string) => boolean;
   addSelection: (payload: {
     itemId: string;
     quantity: number;
@@ -40,10 +42,14 @@ function computeCartTotals(itemsByItemId: Record<string, CartItem>) {
 
 export const useCartStore = create<CartStore>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       itemsByItemId: {},
       totalItems: 0,
       totalPrice: 0,
+      hasItemInCart: (itemId) => {
+        const row = get().itemsByItemId[itemId];
+        return Boolean(row && row.quantity > 0);
+      },
       addSelection: ({ itemId, quantity, name, translations, displayUnitPrice }) =>
         set((state) => {
           const existing = state.itemsByItemId[itemId];

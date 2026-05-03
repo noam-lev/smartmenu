@@ -99,3 +99,13 @@ class MenuRepository(ABC):
     async def delete_category(self, category_id: str, restaurant_id: str) -> bool:
         """Hard-delete category and its menu items (scoped to restaurant)."""
         raise NotImplementedError
+
+    @abstractmethod
+    async def bulk_update_item_orders(
+        self,
+        category_id: str,
+        restaurant_id: str,
+        updates: list[dict[str, Any]],
+    ) -> bool:
+        """Set sort_order for menu items in category_id; all must belong to restaurant_id."""
+        raise NotImplementedError

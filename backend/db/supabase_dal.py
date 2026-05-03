@@ -175,6 +175,19 @@ class SupabaseDAL(MenuRepository):
             restaurant_id,
         )
 
+    async def bulk_update_item_orders(
+        self,
+        category_id: str,
+        restaurant_id: str,
+        updates: list[dict[str, Any]],
+    ) -> bool:
+        return await asyncio.to_thread(
+            self._bulk_update_item_orders_sync,
+            category_id,
+            restaurant_id,
+            updates,
+        )
+
     def _fetch_restaurant_id_by_slug(self, slug: str) -> str | None:
         response = (
             self._client.table("restaurants")
@@ -361,6 +374,7 @@ class SupabaseDAL(MenuRepository):
                 description,
                 base_price,
                 is_available,
+                sort_order,
                 image_url,
                 metadata,
                 translations,
@@ -403,6 +417,7 @@ class SupabaseDAL(MenuRepository):
             "description": str(row.get("description") or ""),
             "base_price": _to_float(row.get("base_price")),
             "is_available": bool(row.get("is_available")),
+            "sort_order": int(row.get("sort_order") or 0),
             "image_url": image_out,
             "tags": _as_string_list(metadata.get("tags")),
             "metadata": metadata if metadata else None,
@@ -710,6 +725,49 @@ class SupabaseDAL(MenuRepository):
         self._client.table("categories").delete().eq("id", category_id).execute()
         return True
 
+    def _bulk_update_item_orders_sync(
+        self,
+        category_id: str,
+        restaurant_id: str,
+        updates: list[dict[str, Any]],
+    ) -> bool:
+        if self._category_restaurant_id(category_id) != restaurant_id:
+            return False
+
+        requested_ids: list[str] = []
+        for u in updates:
+            iid = str(u.get("item_id") or "")
+            if not iid:
+                return False
+            requested_ids.append(iid)
+
+        if len(requested_ids) != len(set(requested_ids)):
+            return False
+
+        probe = (
+            self._client.table("menu_items")
+            .select("id,category_id,restaurant_id")
+            .eq("category_id", category_id)
+            .in_("id", requested_ids)
+            .execute()
+        )
+        rows = probe.data or []
+        if len(rows) != len(set(requested_ids)):
+            return False
+
+        for row in rows:
+            if str(row.get("restaurant_id") or "") != restaurant_id:
+                return False
+
+        for entry in updates:
+            item_id = str(entry["item_id"])
+            sort_order = int(entry["sort_order"])
+            self._client.table("menu_items").update({"sort_order": sort_order}).eq(
+                "id", item_id
+            ).eq("restaurant_id", restaurant_id).eq("category_id", category_id).execute()
+
+        return True
+
 
 def _build_menu_payload(
     restaurant: dict[str, Any],
@@ -773,6 +831,7 @@ def _build_menu_item(item: dict[str, Any], restaurant_id: str) -> MenuItemRespon
         description=str(item.get("description") or ""),
         base_price=_to_float(item.get("base_price")),
         is_available=bool(item.get("is_available")),
+        sort_order=int(item.get("sort_order") or 0),
         image_url=_as_optional_string(item.get("image_url")),
         tags=_as_string_list(metadata.get("tags")),
         metadata=metadata,

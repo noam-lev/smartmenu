@@ -125,6 +125,7 @@ function placeholderMenuItem(tempId: string, patch: Partial<MenuItem>): MenuItem
     description: typeof patch.description === "string" ? patch.description : "",
     base_price: patch.base_price ?? 0,
     is_available: true,
+    sort_order: patch.sort_order ?? 0,
     image_url: null,
     translations: patch.translations,
     variants: [],

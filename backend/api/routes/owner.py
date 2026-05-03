@@ -8,6 +8,7 @@ from db.repository import MenuRepository
 from models.schemas import (
     CategoryCreateRequest,
     CategoryUpdateRequest,
+    ItemReorderRequest,
     MenuItemCreateRequest,
 )
 
@@ -160,6 +161,33 @@ async def delete_category_route(
         )
 
     return {"success": True, "deleted_id": category_id}
+
+
+# TODO: ADD AUTH
+@router.patch("/categories/{category_id}/items/reorder")
+async def reorder_category_items(
+    category_id: str,
+    payload: ItemReorderRequest,
+    db: MenuRepository = Depends(get_db),
+) -> dict[str, object]:
+    # TODO: ADD AUTH — slug placeholder until authenticated tenant context (resolved to UUID for writes).
+    restaurant_id = "yossis-hummus"
+    tenant_restaurant_uuid = await db.get_restaurant_id_by_slug(restaurant_id)
+    if tenant_restaurant_uuid is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Restaurant not found.",
+        )
+
+    body = [row.model_dump() for row in payload.items]
+    ok = await db.bulk_update_item_orders(category_id, tenant_restaurant_uuid, body)
+    if not ok:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Could not reorder items. Check category and item ids.",
+        )
+
+    return {"success": True}
 
 
 # TODO: ADD AUTH

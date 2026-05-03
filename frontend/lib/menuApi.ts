@@ -261,3 +261,28 @@ export async function deleteCategory(categoryId: string): Promise<void> {
     throw new Error(`Failed to delete category (${response.status})`);
   }
 }
+
+export async function reorderCategoryItems(
+  categoryId: string,
+  items: { id: string; sort_order: number }[],
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/owner/categories/${encodeURIComponent(categoryId)}/items/reorder`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        items: items.map((row) => ({
+          item_id: row.id,
+          sort_order: row.sort_order,
+        })),
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to reorder items (${response.status})`);
+  }
+}

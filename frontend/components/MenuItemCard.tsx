@@ -1,3 +1,5 @@
+import type { DraggableAttributes, DraggableSyntheticListeners } from "@dnd-kit/core";
+import { GripVertical } from "lucide-react";
 import { useState } from "react";
 import type { MenuItem } from "../types/menu";
 import { formatILSCurrency } from "../utils/currency";
@@ -12,6 +14,10 @@ type MenuItemCardProps = {
   mode?: "diner" | "admin";
   /** Optimistic-create row: server save in flight */
   isCreationPending?: boolean;
+  /** When set (admin + sortable), grip receives DnD listeners only — rest of card stays clickable. */
+  dragHandleListeners?: DraggableSyntheticListeners;
+  dragHandleAttributes?: DraggableAttributes;
+  dragHandleLabel?: string;
   onClick?: () => void;
   onEditClick?: (item: MenuItem) => void;
   onDeleteClick?: (item: MenuItem) => void;
@@ -24,6 +30,9 @@ export default function MenuItemCard({
   unavailableLabel,
   mode = "diner",
   isCreationPending = false,
+  dragHandleListeners,
+  dragHandleAttributes,
+  dragHandleLabel,
   onClick,
   onEditClick,
   onDeleteClick,
@@ -199,9 +208,22 @@ export default function MenuItemCard({
   );
 
   if (mode === "admin") {
+    const showHandle = Boolean(dragHandleListeners && dragHandleAttributes);
+
     return (
-      <article className="w-full border-b border-zinc-200 bg-white px-4 py-3 text-start">
-        {cardContent}
+      <article className="flex w-full items-stretch border-b border-zinc-200 bg-white text-start">
+        {showHandle ? (
+          <button
+            type="button"
+            className="touch-none shrink-0 cursor-grab border-e border-zinc-100 px-2 py-3 text-zinc-400 active:cursor-grabbing"
+            aria-label={dragHandleLabel ?? "Drag to reorder"}
+            {...dragHandleAttributes}
+            {...dragHandleListeners}
+          >
+            <GripVertical className="h-5 w-5" strokeWidth={2} aria-hidden />
+          </button>
+        ) : null}
+        <div className="min-w-0 flex-1 px-4 py-3">{cardContent}</div>
       </article>
     );
   }

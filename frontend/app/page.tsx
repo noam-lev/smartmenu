@@ -7,7 +7,7 @@ import MenuItemCard from "../components/MenuItemCard";
 import { fetchMenuBySlug } from "../lib/menuApi";
 import { useCartStore } from "../store/cartStore";
 import { useUiStore } from "../store/uiStore";
-import type { MenuCategory, MenuItem, MenuPayload } from "../types/menu";
+import type { MenuCategory, MenuItem, MenuPayload, UpsellRule } from "../types/menu";
 import { formatILSCurrency } from "../utils/currency";
 import { getLocalizedText, getUiMessage, isRtlLocale } from "../utils/i18n";
 
@@ -29,6 +29,7 @@ export default function Home() {
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [isUpsellStep, setIsUpsellStep] = useState(false);
+  const [activeUpsellRule, setActiveUpsellRule] = useState<UpsellRule | null>(null);
   const [isCartSheetOpen, setIsCartSheetOpen] = useState(false);
   const [cartSheetSession, setCartSheetSession] = useState(0);
   const [isLanguageMenuOpen, setIsLanguageMenuOpen] = useState(false);
@@ -51,7 +52,7 @@ export default function Home() {
   const cartItems = useMemo(() => Object.values(itemsByItemId), [itemsByItemId]);
   const isRtl = isRtlLocale(locale);
 
-  const upsellRule = selectedItem?.upsell_rules?.[0];
+  const upsellRule = isUpsellStep ? activeUpsellRule ?? undefined : undefined;
   const restaurantName = menuPayload
     ? getLocalizedText(menuPayload.restaurant, "name", locale)
     : "";
@@ -107,6 +108,7 @@ export default function Home() {
   const closeSheet = () => {
     setSelectedItem(null);
     setIsUpsellStep(false);
+    setActiveUpsellRule(null);
     setQuantity(1);
   };
 
@@ -117,6 +119,7 @@ export default function Home() {
 
     setSelectedItem(item);
     setIsUpsellStep(false);
+    setActiveUpsellRule(null);
     setQuantity(1);
   };
 
@@ -189,7 +192,19 @@ export default function Home() {
       displayUnitPrice: selectedItem.base_price,
     });
 
-    if (selectedItem.upsell_rules?.length) {
+    const rules = selectedItem.upsell_rules ?? [];
+    if (!rules.length) {
+      closeSheet();
+      return;
+    }
+
+    const { hasItemInCart } = useCartStore.getState();
+    const nextRule = rules.find(
+      (rule) => !hasItemInCart(rule.offer_item_snapshot.id),
+    );
+
+    if (nextRule) {
+      setActiveUpsellRule(nextRule);
       setIsUpsellStep(true);
       return;
     }
@@ -198,14 +213,14 @@ export default function Home() {
   };
 
   const handleUpsellDecision = (accept: boolean) => {
-    if (accept && upsellRule) {
+    if (accept && activeUpsellRule) {
       addSelection({
-        itemId: upsellRule.offer_item_snapshot.id,
+        itemId: activeUpsellRule.offer_item_snapshot.id,
         quantity: 1,
-        name: upsellRule.offer_item_snapshot.name,
-        translations: upsellRule.offer_item_snapshot.translations,
+        name: activeUpsellRule.offer_item_snapshot.name,
+        translations: activeUpsellRule.offer_item_snapshot.translations,
         displayUnitPrice:
-          upsellRule.discount_price ?? upsellRule.offer_item_snapshot.price,
+          activeUpsellRule.discount_price ?? activeUpsellRule.offer_item_snapshot.price,
       });
     }
 
@@ -395,7 +410,11 @@ export default function Home() {
       </main>
 
       <ItemBottomSheet
-        key={selectedItem ? `${selectedItem.id}-${isUpsellStep ? "upsell" : "item"}` : "closed"}
+        key={
+          selectedItem
+            ? `${selectedItem.id}-${isUpsellStep ? `upsell-${activeUpsellRule?.offer_item_snapshot.id ?? "x"}` : "item"}`
+            : "closed"
+        }
         selectedItem={selectedItem}
         isUpsellStep={isUpsellStep}
         quantity={quantity}

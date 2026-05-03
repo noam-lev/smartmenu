@@ -42,12 +42,22 @@ class MenuItemResponse(BaseModel):
     description: str
     base_price: float
     is_available: bool
+    sort_order: int = 0
     image_url: str | None = None
     tags: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] | None = None
     translations: dict[str, Any] | None = None
     variants: list[VariantResponse] = Field(default_factory=list)
     upsell_rules: list[UpsellRuleResponse] = Field(default_factory=list)
+
+
+class ItemReorderItem(BaseModel):
+    item_id: str
+    sort_order: int = Field(..., ge=0)
+
+
+class ItemReorderRequest(BaseModel):
+    items: list[ItemReorderItem] = Field(..., min_length=1)
 
 
 class CategoryResponse(BaseModel):

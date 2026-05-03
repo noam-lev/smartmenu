@@ -5,13 +5,14 @@ import EditCategoryDrawer from "../../components/EditCategoryDrawer";
 import EditItemDrawer, {
   placeholderMenuItem,
 } from "../../components/EditItemDrawer";
-import MenuItemCard from "../../components/MenuItemCard";
+import SortableItemList from "../../components/SortableItemList";
 import {
   createCategory,
   createMenuItem,
   deleteCategory,
   deleteMenuItem,
   fetchMenuBySlug,
+  reorderCategoryItems,
   updateCategory,
   updateItemAvailability,
   updateMenuItem,
@@ -442,6 +443,48 @@ export default function AdminMenuPage() {
     });
   };
 
+  const handleReorderItems = async (categoryId: string, nextOrder: MenuItem[]) => {
+    if (!menuPayload) {
+      return;
+    }
+    if (nextOrder.some((i) => i.id.startsWith("temp-"))) {
+      return;
+    }
+
+    const withSort = nextOrder.map((item, index) => ({
+      ...item,
+      sort_order: index,
+    }));
+    const previousPayload = menuPayload;
+
+    setMenuPayload({
+      ...menuPayload,
+      menu: {
+        ...menuPayload.menu,
+        categories: menuPayload.menu.categories.map((c) =>
+          c.id === categoryId ? { ...c, items: withSort } : c,
+        ),
+      },
+    });
+
+    try {
+      await reorderCategoryItems(
+        categoryId,
+        withSort.map((item, index) => ({ id: item.id, sort_order: index })),
+      );
+    } catch (error) {
+      setMenuPayload(previousPayload);
+      void alert({
+        title: getUiMessage("dialogErrorTitle", locale),
+        message:
+          error instanceof Error
+            ? error.message
+            : getUiMessage("failedToSaveChanges", locale),
+        dismissLabel: getUiMessage("dialogDismiss", locale),
+      });
+    }
+  };
+
   const handleSaveItem = async (updatedData: Partial<MenuItem>) => {
     if (!menuPayload) {
       return;
@@ -838,19 +881,16 @@ export default function AdminMenuPage() {
                       {getUiMessage("addItem", locale)}
                     </button>
                   </div>
-                  {category.items.map((item) => (
-                    <MenuItemCard
-                      key={item.id}
-                      mode="admin"
-                      item={item}
-                      locale={locale}
-                      unavailableLabel={getUiMessage("unavailable", locale)}
-                      isCreationPending={creationPendingTempId === item.id}
-                      onEditClick={handleEditClick}
-                      onDeleteClick={handleDeleteItem}
-                      onToggleAvailability={handleToggleAvailability}
-                    />
-                  ))}
+                  <SortableItemList
+                    items={category.items}
+                    onReorder={(next) => void handleReorderItems(category.id, next)}
+                    locale={locale}
+                    unavailableLabel={getUiMessage("unavailable", locale)}
+                    creationPendingItemId={creationPendingTempId}
+                    onEditClick={handleEditClick}
+                    onDeleteClick={handleDeleteItem}
+                    onToggleAvailability={handleToggleAvailability}
+                  />
                 </div>
               ))}
             </section>
