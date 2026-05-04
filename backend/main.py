@@ -49,7 +49,7 @@ async def health_check() -> dict[str, str]:
 
 app.include_router(diner.router, prefix="/api/diner")
 app.include_router(owner.router, prefix="/api/owner")
-app.include_router(superadmin.router, prefix="/api/admin")
+app.include_router(superadmin.router, prefix="/api/superadmin")
 
 
 def main() -> None:
