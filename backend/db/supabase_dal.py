@@ -796,7 +796,10 @@ def _build_menu_payload(
                 _build_category(category, restaurant_id)
                 for category in sorted(
                     _as_list(menu.get("categories")),
-                    key=lambda row: row.get("sort_order") or 0,
+                    key=lambda row: (
+                        int(row.get("sort_order") or 0),
+                        str(row.get("id") or ""),
+                    ),
                 )
             ],
         ),
@@ -816,7 +819,10 @@ def _build_category(
             _build_menu_item(item, restaurant_id)
             for item in sorted(
                 _as_list(category.get("menu_items")),
-                key=lambda row: row.get("sort_order") or 0,
+                key=lambda row: (
+                    int(row.get("sort_order") or 0),
+                    str(row.get("id") or ""),
+                ),
             )
         ],
     )
