@@ -17,6 +17,7 @@ class Settings:
     "http://localhost:3000",
     "http://10.100.102.11:3000",
     "http://10.100.102.2:3000",
+    "http://10.100.102.3:3000",
 ]
 
     @property

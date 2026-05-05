@@ -109,3 +109,8 @@ class MenuRepository(ABC):
     ) -> bool:
         """Set sort_order for menu items in category_id; all must belong to restaurant_id."""
         raise NotImplementedError
+
+    @abstractmethod
+    async def import_full_restaurant(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Import a full restaurant/category/items tree from parsed onboarding payload."""
+        raise NotImplementedError

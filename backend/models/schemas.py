@@ -150,3 +150,27 @@ class MenuItemCreateRequest(BaseModel):
         if isinstance(value, str):
             return value.strip()
         return value
+
+
+class ParsedItem(BaseModel):
+    name_he: str
+    name_en: str
+    description_he: str | None = None
+    description_en: str | None = None
+    base_price: float
+
+
+class ParsedCategory(BaseModel):
+    name_he: str
+    name_en: str
+    items: list[ParsedItem] = Field(default_factory=list)
+
+
+class ParsedMenu(BaseModel):
+    categories: list[ParsedCategory] = Field(default_factory=list)
+
+
+class RestaurantImportPayload(BaseModel):
+    restaurant_name: str
+    restaurant_slug: str
+    categories: list[ParsedCategory] = Field(default_factory=list)

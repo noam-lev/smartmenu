@@ -112,3 +112,67 @@ export async function superadminFetch(
 
   return response;
 }
+
+export type ParsedItem = {
+  name_he: string;
+  name_en: string;
+  description_he: string | null;
+  description_en: string | null;
+  base_price: number;
+};
+
+export type ParsedCategory = {
+  name_he: string;
+  name_en: string;
+  items: ParsedItem[];
+};
+
+export type ParsedMenu = {
+  categories: ParsedCategory[];
+};
+
+export type RestaurantImportPayload = {
+  restaurant_name: string;
+  restaurant_slug: string;
+  categories: ParsedCategory[];
+};
+
+export async function parseMenuImage(file: File): Promise<ParsedMenu> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await superadminFetch("/api/superadmin/magic-parse", {
+    method: "POST",
+    body: formData,
+  });
+
+  const raw = await response.text();
+  if (!response.ok) {
+    throw new Error(readDetailFromBody(raw));
+  }
+
+  return JSON.parse(raw) as ParsedMenu;
+}
+
+export async function importRestaurant(
+  data: RestaurantImportPayload,
+): Promise<{ success: boolean; message: string; restaurant_slug: string }> {
+  const response = await superadminFetch("/api/superadmin/restaurants/import", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+
+  const raw = await response.text();
+  if (!response.ok) {
+    throw new Error(readDetailFromBody(raw));
+  }
+
+  return JSON.parse(raw) as {
+    success: boolean;
+    message: string;
+    restaurant_slug: string;
+  };
+}

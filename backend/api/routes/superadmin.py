@@ -6,10 +6,15 @@ import logging
 import os
 import secrets
 import time
+import base64
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, UploadFile, status
 from pydantic import BaseModel, ConfigDict
+from api.dependencies import get_db
+from db.repository import MenuRepository
+from models.schemas import ParsedMenu, RestaurantImportPayload
+from services.ai_service import parse_menu_image
 
 logger = logging.getLogger(__name__)
 
@@ -138,3 +143,41 @@ async def superadmin_logout(
 @router.get("/ping")
 async def ping_superadmin(_session: dict[str, Any] = Depends(verify_superadmin_token)) -> dict[str, str]:
     return {"status": "ok", "scope": "superadmin"}
+
+
+@router.post("/magic-parse", response_model=ParsedMenu)
+async def superadmin_magic_parse(
+    _session: dict[str, Any] = Depends(verify_superadmin_token),
+    file: UploadFile = File(...),
+) -> ParsedMenu:
+    content_type = file.content_type or "application/octet-stream"
+    file_bytes = await file.read()
+    if not file_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Uploaded file is empty.",
+        )
+
+    base64_str = base64.b64encode(file_bytes).decode("utf-8")
+    image_data_url = f"data:{content_type};base64,{base64_str}"
+    return await parse_menu_image(image_data_url)
+
+
+@router.post("/restaurants/import")
+async def superadmin_import_restaurant(
+    payload: RestaurantImportPayload,
+    _session: dict[str, Any] = Depends(verify_superadmin_token),
+    db: MenuRepository = Depends(get_db),
+) -> dict[str, Any]:
+    try:
+        result = await db.import_full_restaurant(payload.model_dump())
+        return {
+            "success": True,
+            "message": "Restaurant imported successfully.",
+            **result,
+        }
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc

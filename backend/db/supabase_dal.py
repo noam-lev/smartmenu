@@ -188,6 +188,9 @@ class SupabaseDAL(MenuRepository):
             updates,
         )
 
+    async def import_full_restaurant(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return await asyncio.to_thread(self._import_full_restaurant_sync, payload)
+
     def _fetch_restaurant_id_by_slug(self, slug: str) -> str | None:
         response = (
             self._client.table("restaurants")
@@ -767,6 +770,166 @@ class SupabaseDAL(MenuRepository):
             ).eq("restaurant_id", restaurant_id).eq("category_id", category_id).execute()
 
         return True
+
+    def _import_full_restaurant_sync(self, payload: dict[str, Any]) -> dict[str, Any]:
+        restaurant_name = str(payload.get("restaurant_name") or "").strip()
+        restaurant_slug = str(payload.get("restaurant_slug") or "").strip().lower()
+        categories = payload.get("categories")
+        if not restaurant_name:
+            raise RuntimeError("restaurant_name is required.")
+        if not restaurant_slug:
+            raise RuntimeError("restaurant_slug is required.")
+        if not isinstance(categories, list):
+            raise RuntimeError("categories must be a list.")
+
+        existing = (
+            self._client.table("restaurants")
+            .select("id")
+            .or_(f"id.eq.{restaurant_slug},slug.eq.{restaurant_slug}")
+            .limit(1)
+            .execute()
+        )
+        if _first(existing.data or []) is not None:
+            raise RuntimeError(f"Restaurant slug already exists: {restaurant_slug}")
+
+        try:
+            self._insert_import_restaurant_row(restaurant_name, restaurant_slug)
+
+            menu_insert = (
+                self._client.table("menus")
+                .insert(
+                    {
+                        "restaurant_id": restaurant_slug,
+                        "name": "Main Menu",
+                        "is_active": True,
+                        "translations": {},
+                    }
+                )
+                .execute()
+            )
+            menu_row = _first(menu_insert.data or [])
+            if menu_row is None:
+                raise RuntimeError("Failed to create menu for imported restaurant.")
+            menu_id = str(menu_row.get("id") or "")
+            if not menu_id:
+                raise RuntimeError("Created menu has no id.")
+
+            inserted_categories = 0
+            inserted_items = 0
+
+            for category_index, category in enumerate(categories):
+                if not isinstance(category, dict):
+                    continue
+                name_he = str(category.get("name_he") or "").strip()
+                name_en = str(category.get("name_en") or "").strip()
+                if not name_he:
+                    continue
+
+                category_insert = (
+                    self._client.table("categories")
+                    .insert(
+                        {
+                            "menu_id": menu_id,
+                            "name": name_he,
+                            "sort_order": category_index,
+                            "is_visible": True,
+                            "translations": {"en": {"name": name_en}},
+                        }
+                    )
+                    .execute()
+                )
+                category_row = _first(category_insert.data or [])
+                if category_row is None:
+                    raise RuntimeError(f"Failed to create category: {name_he}")
+                category_id = str(category_row.get("id") or "")
+                if not category_id:
+                    raise RuntimeError("Created category has no id.")
+                inserted_categories += 1
+
+                items = category.get("items")
+                if not isinstance(items, list):
+                    continue
+
+                for item_index, item in enumerate(items):
+                    if not isinstance(item, dict):
+                        continue
+                    item_name_he = str(item.get("name_he") or "").strip()
+                    if not item_name_he:
+                        continue
+
+                    description_he_raw = item.get("description_he")
+                    description_he = (
+                        str(description_he_raw).strip()
+                        if isinstance(description_he_raw, str)
+                        else ""
+                    )
+                    description_en_raw = item.get("description_en")
+                    description_en = (
+                        str(description_en_raw).strip()
+                        if isinstance(description_en_raw, str)
+                        else ""
+                    )
+
+                    base_price = float(item.get("base_price") or 0)
+                    item_insert = (
+                        self._client.table("menu_items")
+                        .insert(
+                            {
+                                "restaurant_id": restaurant_slug,
+                                "menu_id": menu_id,
+                                "category_id": category_id,
+                                "name": item_name_he,
+                                "description": description_he,
+                                "base_price": base_price,
+                                "is_available": True,
+                                "is_visible": True,
+                                "sort_order": item_index,
+                                "metadata": {},
+                                "translations": {
+                                    "en": {
+                                        "name": str(item.get("name_en") or "").strip(),
+                                        "description": description_en,
+                                    }
+                                },
+                            }
+                        )
+                        .execute()
+                    )
+                    if _first(item_insert.data or []) is None:
+                        raise RuntimeError(f"Failed to create item: {item_name_he}")
+                    inserted_items += 1
+
+            return {
+                "restaurant_slug": restaurant_slug,
+                "restaurant_name": restaurant_name,
+                "categories_imported": inserted_categories,
+                "items_imported": inserted_items,
+            }
+        except Exception as exc:
+            raise RuntimeError(f"Restaurant import failed: {exc}") from exc
+
+    def _insert_import_restaurant_row(self, restaurant_name: str, restaurant_slug: str) -> None:
+        base_row = {
+            "id": restaurant_slug,
+            "name": restaurant_name,
+            "slug": restaurant_slug,
+            "is_active": True,
+            "settings": {
+                "default_locale": "he",
+                "theme_color": "#111827",
+                "currency": "ILS",
+            },
+        }
+        try:
+            self._client.table("restaurants").insert(
+                {
+                    **base_row,
+                    "default_locale": "he",
+                }
+            ).execute()
+        except Exception:
+            # Some schemas store default_locale inside settings only.
+            self._client.table("restaurants").insert(base_row).execute()
 
 
 def _build_menu_payload(
