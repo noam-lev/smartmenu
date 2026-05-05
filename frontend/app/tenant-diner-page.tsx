@@ -44,11 +44,12 @@ export function TenantDinerPage({ restaurantSlug = "yossis-hummus" }: DinerPageP
   );
 
   const addSelection = useCartStore((state) => state.addSelection);
-  const itemsByItemId = useCartStore((state) => state.itemsByItemId);
+  const cartBucket = useCartStore((state) => state.cartsByRestaurant[restaurantSlug]);
   const setItemQuantity = useCartStore((state) => state.setItemQuantity);
   const removeItem = useCartStore((state) => state.removeItem);
-  const totalItems = useCartStore((state) => state.totalItems);
-  const totalPrice = useCartStore((state) => state.totalPrice);
+  const itemsByItemId = cartBucket?.itemsByItemId ?? {};
+  const totalItems = cartBucket?.totalItems ?? 0;
+  const totalPrice = cartBucket?.totalPrice ?? 0;
   const locale = useUiStore((state) => state.locale);
   const setLocale = useUiStore((state) => state.setLocale);
   const cartItems = useMemo(() => Object.values(itemsByItemId), [itemsByItemId]);
@@ -203,7 +204,7 @@ export function TenantDinerPage({ restaurantSlug = "yossis-hummus" }: DinerPageP
 
     const { hasItemInCart } = useCartStore.getState();
     const nextRule = rules.find(
-      (rule) => !hasItemInCart(rule.offer_item_snapshot.id),
+      (rule) => !hasItemInCart(restaurantSlug, rule.offer_item_snapshot.id),
     );
 
     if (nextRule) {
@@ -457,16 +458,16 @@ export function TenantDinerPage({ restaurantSlug = "yossis-hummus" }: DinerPageP
           if (!item) {
             return;
           }
-          setItemQuantity(itemId, item.quantity + 1);
+          setItemQuantity(restaurantSlug, itemId, item.quantity + 1);
         }}
         onDecrease={(itemId) => {
           const item = itemsByItemId[itemId];
           if (!item) {
             return;
           }
-          setItemQuantity(itemId, item.quantity - 1);
+          setItemQuantity(restaurantSlug, itemId, item.quantity - 1);
         }}
-        onRemove={removeItem}
+        onRemove={(itemId) => removeItem(restaurantSlug, itemId)}
       />
 
       {hasMounted && totalItems > 0 ? (

@@ -12,13 +12,16 @@ export type CartItem = {
   quantity: number;
 };
 
-type CartStore = {
-  restaurantSlug: string | null;
+export type CartBucket = {
   itemsByItemId: Record<string, CartItem>;
   totalItems: number;
   totalPrice: number;
+};
+
+type CartStore = {
+  cartsByRestaurant: Record<string, CartBucket>;
   /** True if this menu item id is in the cart with a positive quantity. */
-  hasItemInCart: (itemId: string) => boolean;
+  hasItemInCart: (restaurantSlug: string, itemId: string) => boolean;
   addSelection: (payload: {
     restaurantSlug: string;
     itemId: string;
@@ -27,9 +30,9 @@ type CartStore = {
     translations?: TranslationsMap;
     displayUnitPrice: number;
   }) => void;
-  setItemQuantity: (itemId: string, quantity: number) => void;
-  removeItem: (itemId: string) => void;
-  clearCart: () => void;
+  setItemQuantity: (restaurantSlug: string, itemId: string, quantity: number) => void;
+  removeItem: (restaurantSlug: string, itemId: string) => void;
+  clearCart: (restaurantSlug: string) => void;
 };
 
 function computeCartTotals(itemsByItemId: Record<string, CartItem>) {
@@ -43,15 +46,22 @@ function computeCartTotals(itemsByItemId: Record<string, CartItem>) {
   );
 }
 
+function makeCartBucket(itemsByItemId: Record<string, CartItem>): CartBucket {
+  const totals = computeCartTotals(itemsByItemId);
+  return {
+    itemsByItemId,
+    totalItems: totals.totalItems,
+    totalPrice: totals.totalPrice,
+  };
+}
+
 export const useCartStore = create<CartStore>()(
   persist(
     (set, get) => ({
-      restaurantSlug: null,
-      itemsByItemId: {},
-      totalItems: 0,
-      totalPrice: 0,
-      hasItemInCart: (itemId) => {
-        const row = get().itemsByItemId[itemId];
+      cartsByRestaurant: {},
+      hasItemInCart: (restaurantSlug, itemId) => {
+        const bucket = get().cartsByRestaurant[restaurantSlug];
+        const row = bucket?.itemsByItemId[itemId];
         return Boolean(row && row.quantity > 0);
       },
       addSelection: ({
@@ -63,9 +73,8 @@ export const useCartStore = create<CartStore>()(
         displayUnitPrice,
       }) =>
         set((state) => {
-          const isCrossRestaurant =
-            state.restaurantSlug !== null && state.restaurantSlug !== restaurantSlug;
-          const baseItems = isCrossRestaurant ? {} : state.itemsByItemId;
+          const baseItems =
+            state.cartsByRestaurant[restaurantSlug]?.itemsByItemId ?? {};
           const existing = baseItems[itemId];
           const nextQuantity = (existing?.quantity ?? 0) + quantity;
           const nextItemsByItemId = {
@@ -78,84 +87,123 @@ export const useCartStore = create<CartStore>()(
               quantity: nextQuantity,
             },
           };
-          const totals = computeCartTotals(nextItemsByItemId);
+          const nextBucket = makeCartBucket(nextItemsByItemId);
 
           return {
-            restaurantSlug,
-            itemsByItemId: nextItemsByItemId,
-            totalItems: totals.totalItems,
-            totalPrice: totals.totalPrice,
+            cartsByRestaurant: {
+              ...state.cartsByRestaurant,
+              [restaurantSlug]: nextBucket,
+            },
           };
         }),
-      setItemQuantity: (itemId, quantity) =>
+      setItemQuantity: (restaurantSlug, itemId, quantity) =>
         set((state) => {
-          const existing = state.itemsByItemId[itemId];
+          const bucket = state.cartsByRestaurant[restaurantSlug];
+          if (!bucket) {
+            return state;
+          }
+
+          const existing = bucket.itemsByItemId[itemId];
           if (!existing) {
             return state;
           }
 
           if (quantity <= 0) {
-            const nextItems = { ...state.itemsByItemId };
+            const nextItems = { ...bucket.itemsByItemId };
             delete nextItems[itemId];
-            const totals = computeCartTotals(nextItems);
+            const nextCarts = { ...state.cartsByRestaurant };
+            if (Object.keys(nextItems).length === 0) {
+              delete nextCarts[restaurantSlug];
+              return { cartsByRestaurant: nextCarts };
+            }
+
             return {
-              restaurantSlug: Object.keys(nextItems).length ? state.restaurantSlug : null,
-              itemsByItemId: nextItems,
-              totalItems: totals.totalItems,
-              totalPrice: totals.totalPrice,
+              cartsByRestaurant: {
+                ...nextCarts,
+                [restaurantSlug]: makeCartBucket(nextItems),
+              },
             };
           }
 
           const nextItemsByItemId = {
-            ...state.itemsByItemId,
+            ...bucket.itemsByItemId,
             [itemId]: {
               ...existing,
               quantity,
             },
           };
-          const totals = computeCartTotals(nextItemsByItemId);
 
           return {
-            itemsByItemId: nextItemsByItemId,
-            totalItems: totals.totalItems,
-            totalPrice: totals.totalPrice,
+            cartsByRestaurant: {
+              ...state.cartsByRestaurant,
+              [restaurantSlug]: makeCartBucket(nextItemsByItemId),
+            },
           };
         }),
-      removeItem: (itemId) =>
+      removeItem: (restaurantSlug, itemId) =>
         set((state) => {
-          const nextItems = { ...state.itemsByItemId };
+          const bucket = state.cartsByRestaurant[restaurantSlug];
+          if (!bucket) {
+            return state;
+          }
+
+          const nextItems = { ...bucket.itemsByItemId };
           delete nextItems[itemId];
-          const totals = computeCartTotals(nextItems);
+          const nextCarts = { ...state.cartsByRestaurant };
+          if (Object.keys(nextItems).length === 0) {
+            delete nextCarts[restaurantSlug];
+            return { cartsByRestaurant: nextCarts };
+          }
+
           return {
-            restaurantSlug: Object.keys(nextItems).length ? state.restaurantSlug : null,
-            itemsByItemId: nextItems,
-            totalItems: totals.totalItems,
-            totalPrice: totals.totalPrice,
+            cartsByRestaurant: {
+              ...nextCarts,
+              [restaurantSlug]: makeCartBucket(nextItems),
+            },
           };
         }),
-      clearCart: () =>
-        set(() => ({
-          restaurantSlug: null,
-          itemsByItemId: {},
-          totalItems: 0,
-          totalPrice: 0,
-        })),
+      clearCart: (restaurantSlug) =>
+        set((state) => {
+          const nextCarts = { ...state.cartsByRestaurant };
+          delete nextCarts[restaurantSlug];
+          return { cartsByRestaurant: nextCarts };
+        }),
     }),
     {
       name: "smartmenu-cart",
-      version: 3,
+      version: 4,
       migrate: (persistedState: unknown) => {
-        const state = (persistedState ?? {}) as Partial<CartStore>;
-        const itemsByItemId = state.itemsByItemId ?? {};
-        const totals = computeCartTotals(itemsByItemId);
+        const state = (persistedState ?? {}) as Partial<
+          CartStore & {
+            restaurantSlug?: string | null;
+            itemsByItemId?: Record<string, CartItem>;
+          }
+        >;
 
+        if (state.cartsByRestaurant && typeof state.cartsByRestaurant === "object") {
+          return {
+            cartsByRestaurant: Object.entries(state.cartsByRestaurant).reduce(
+              (acc, [slug, bucket]) => {
+                const items = bucket?.itemsByItemId ?? {};
+                if (slug && Object.keys(items).length > 0) {
+                  acc[slug] = makeCartBucket(items);
+                }
+                return acc;
+              },
+              {} as Record<string, CartBucket>,
+            ),
+          } as Pick<CartStore, "cartsByRestaurant">;
+        }
+
+        const legacySlug = state.restaurantSlug ?? null;
+        const legacyItems = state.itemsByItemId ?? {};
+        const cartsByRestaurant: Record<string, CartBucket> = {};
+        if (legacySlug && Object.keys(legacyItems).length > 0) {
+          cartsByRestaurant[legacySlug] = makeCartBucket(legacyItems);
+        }
         return {
-          ...state,
-          restaurantSlug: state.restaurantSlug ?? null,
-          itemsByItemId,
-          totalItems: totals.totalItems,
-          totalPrice: totals.totalPrice,
-        } as CartStore;
+          cartsByRestaurant,
+        } as Pick<CartStore, "cartsByRestaurant">;
       },
     },
   ),
