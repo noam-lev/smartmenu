@@ -55,6 +55,7 @@ export type MenuPayload = {
     slug: string;
     theme_color: string;
     currency: string;
+    banner_url?: string | null;
     banner_image_url?: string | null;
     default_locale?: Locale;
     translations?: TranslationsMap;

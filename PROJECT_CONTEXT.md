@@ -145,6 +145,26 @@ These updates are in the repo so future work can assume this behavior without re
 - **Upsell interception:** After the diner confirms “Add to order”, the main item is added first. Then the client scans **`upsell_rules` in array order** and picks the **first** rule whose offered item id (`offer_item_snapshot.id`, i.e. the payload’s offer item) is **not** already in the cart. If one exists, the bottom sheet moves to the upsell step and shows **that** rule (`activeUpsellRule` state—not always `upsell_rules[0]`). If every rule’s offer is already in the cart (or there are no rules), the sheet **closes immediately** with no upsell frame, so there is no “flash then skip” UX.
 - **Accept path:** Upsell “Add” still uses `addSelection` with the snapshot name, translations, and `discount_price ?? snapshot.price` for the offered line item.
 
+**Superadmin + Magic Onboarding (May 2026)**
+
+- **Secure MVP auth (`backend/api/routes/superadmin.py`):** in-memory session tokens with expiry + IP binding (`X-Superadmin-Token`), login lockout on repeated failures (per-IP), logout endpoint, and protected superadmin routes.
+- **AI parse pipeline (no direct diner impact):** `POST /api/superadmin/magic-parse` accepts image upload, encodes to data URL, calls OpenAI (`gpt-4o`) with structured output into strict schemas (`ParsedMenu`, `ParsedCategory`, `ParsedItem`), then returns editable preview data.
+- **Import pipeline:** `POST /api/superadmin/restaurants/import` receives edited bilingual payload (`RestaurantImportPayload`) and creates tenant + menu + categories + items with Hebrew base fields and English `translations` mapping.
+- **Important DB reality check:** `restaurants.id` is **UUID**, `restaurants.slug` is text. Slug is used for routing; backend resolves slug -> UUID for owner writes and FK-safe inserts.
+- **Onboarding UI (`/superadmin/onboarding`):** upload, loading, editable bilingual preview, restaurant name+slug inputs, slug auto-follow-until-manual-edit behavior, save button, success/error feedback.
+
+**Multi-tenant routing + owner API (May 2026)**
+
+- **Frontend route model:** tenant-aware pages under `app/[restaurant_slug]` and `app/[restaurant_slug]/admin`; `app/superadmin` remains global. Root `app/page.tsx` is now a platform landing page (no auto redirect).
+- **Owner API paths:** owner routes now include `/{restaurant_slug}/...` and no longer use hardcoded `\"yossis-hummus\"`.
+- **Client API signatures:** owner-side frontend API helpers now require `restaurantSlug` and interpolate slug in all owner fetch URLs.
+- **Cart isolation across tenants:** cart store now keeps `restaurantSlug`; adding an item from a different tenant auto-clears old cart then adds the new item (Secure MVP behavior to avoid cross-restaurant cart leakage/confusion).
+- **Next.js 16 dynamic params:** slug wrapper routes were updated to await async `params` to avoid runtime warnings/errors.
+
+**Operational updates**
+
+- **Backend log timestamps:** Uvicorn log format now includes timestamps for error/access logs in app startup config and in `backend/uvicorn_log_config.json` for CLI launches (`uvicorn ... --log-config ...`).
+
 ## 8. Visual & UX Architecture (The "Wolt-Style" Experience)
 To ensure all frontend components align with the overall user experience, here is the mental model for the diner's UI:
 

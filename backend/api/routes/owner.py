@@ -1,10 +1,14 @@
 from typing import Any
+from pathlib import Path
+from urllib.parse import unquote, urlparse
+import uuid
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
-from api.dependencies import get_db
+from api.dependencies import get_db, get_supabase_client
 from db.repository import MenuRepository
+from supabase import Client
 from models.schemas import (
     CategoryCreateRequest,
     CategoryUpdateRequest,
@@ -25,6 +29,7 @@ class MenuItemPatchPayload(BaseModel):
     name: str | None = None
     description: str | None = None
     base_price: float | None = None
+    image_url: str | None = None
     translations: dict[str, Any] | None = None
 
     @field_validator("name", "description", mode="before")
@@ -74,6 +79,48 @@ class UpsellRuleCreatePayload(BaseModel):
         return value
 
 
+class DeleteImagePayload(BaseModel):
+    file_url: str
+
+    @field_validator("file_url")
+    @classmethod
+    def normalize_file_url(cls, value: str) -> str:
+        trimmed = value.strip()
+        if not trimmed:
+            raise ValueError("file_url is required.")
+        return trimmed
+
+
+class RestaurantPatchPayload(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    banner_url: str | None = None
+
+    @field_validator("banner_url", mode="before")
+    @classmethod
+    def normalize_banner_url(cls, value: Any) -> Any:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            trimmed = value.strip()
+            return trimmed or None
+        return value
+
+
+class CategoryReorderPayload(BaseModel):
+    category_ids: list[str] = Field(default_factory=list, min_length=1)
+
+    @field_validator("category_ids")
+    @classmethod
+    def validate_category_ids(cls, value: list[str]) -> list[str]:
+        normalized = [str(item or "").strip() for item in value]
+        if any(not item for item in normalized):
+            raise ValueError("category_ids must contain non-empty ids.")
+        if len(normalized) != len(set(normalized)):
+            raise ValueError("category_ids must not contain duplicates.")
+        return normalized
+
+
 async def _resolve_restaurant_uuid(
     restaurant_slug: str,
     db: MenuRepository,
@@ -85,6 +132,19 @@ async def _resolve_restaurant_uuid(
             detail="Restaurant not found.",
         )
     return tenant_restaurant_uuid
+
+
+def _extract_storage_path_from_public_url(file_url: str) -> str:
+    parsed = urlparse(file_url)
+    path = unquote(parsed.path or "")
+    marker = "/storage/v1/object/public/menu-images/"
+    marker_index = path.find(marker)
+    if marker_index == -1:
+        raise ValueError("Could not parse storage path from file_url.")
+    relative_path = path[marker_index + len(marker) :].strip("/")
+    if not relative_path:
+        raise ValueError("Invalid storage path.")
+    return relative_path
 
 
 @router.get("/ping")
@@ -137,6 +197,26 @@ async def patch_category(
         )
 
     return {"success": True, "category": updated}
+
+
+# TODO: ADD AUTH
+@router.put("/{restaurant_slug}/categories/reorder")
+async def reorder_categories(
+    restaurant_slug: str,
+    payload: CategoryReorderPayload,
+    db: MenuRepository = Depends(get_db),
+) -> dict[str, object]:
+    tenant_restaurant_uuid = await _resolve_restaurant_uuid(restaurant_slug, db)
+    ok = await db.update_categories_order(
+        tenant_restaurant_uuid,
+        payload.category_ids,
+    )
+    if not ok:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Could not reorder categories. Check category ids.",
+        )
+    return {"success": True}
 
 
 # TODO: ADD AUTH
@@ -226,6 +306,90 @@ async def patch_menu_item(
             detail="Menu item not found.",
         )
     return {"success": True, "item": updated_item}
+
+
+# TODO: ADD AUTH
+@router.patch("/{restaurant_slug}/restaurant")
+async def patch_restaurant(
+    restaurant_slug: str,
+    payload: RestaurantPatchPayload,
+    db: MenuRepository = Depends(get_db),
+) -> dict[str, object]:
+    tenant_restaurant_uuid = await _resolve_restaurant_uuid(restaurant_slug, db)
+    updated = await db.update_restaurant_banner_url(
+        tenant_restaurant_uuid,
+        payload.banner_url,
+    )
+    if updated is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Restaurant not found.",
+        )
+    return {"success": True, "restaurant": updated}
+
+
+# TODO: ADD AUTH
+@router.post("/{restaurant_slug}/upload-image")
+async def upload_image(
+    restaurant_slug: str,
+    file: UploadFile = File(...),
+    db: MenuRepository = Depends(get_db),
+    supabase_client: Client = Depends(get_supabase_client),
+) -> dict[str, str]:
+    _ = await _resolve_restaurant_uuid(restaurant_slug, db)
+
+    content_type = (file.content_type or "").lower()
+    if not content_type.startswith("image/"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Uploaded file must be an image.",
+        )
+
+    raw_bytes = await file.read()
+    if not raw_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Uploaded file is empty.",
+        )
+
+    ext = Path(file.filename or "").suffix.lower() or ".jpg"
+    object_path = f"{restaurant_slug}/{uuid.uuid4()}{ext}"
+    bucket = supabase_client.storage.from_("menu-images")
+    bucket.upload(
+        path=object_path,
+        file=raw_bytes,
+        file_options={"content-type": file.content_type or "image/jpeg", "upsert": "false"},
+    )
+    public_url = bucket.get_public_url(object_path)
+    return {"public_url": public_url}
+
+
+# TODO: ADD AUTH
+@router.post("/{restaurant_slug}/delete-image")
+async def delete_image(
+    restaurant_slug: str,
+    payload: DeleteImagePayload,
+    db: MenuRepository = Depends(get_db),
+    supabase_client: Client = Depends(get_supabase_client),
+) -> dict[str, object]:
+    _ = await _resolve_restaurant_uuid(restaurant_slug, db)
+
+    try:
+        object_path = _extract_storage_path_from_public_url(payload.file_url)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+    if not object_path.startswith(f"{restaurant_slug}/"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot delete images outside this restaurant scope.",
+        )
+
+    supabase_client.storage.from_("menu-images").remove([object_path])
+    return {"success": True, "deleted_path": object_path}
 
 
 # TODO: ADD AUTH

@@ -1,6 +1,32 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ChangeEvent,
+  type ReactNode,
+} from "react";
+import { GripVertical } from "lucide-react";
+import type { DraggableAttributes, DraggableSyntheticListeners } from "@dnd-kit/core";
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import EditCategoryDrawer from "../components/EditCategoryDrawer";
 import EditItemDrawer, {
   placeholderMenuItem,
@@ -11,8 +37,12 @@ import {
   createMenuItem,
   deleteCategory,
   deleteMenuItem,
+  reorderCategories,
   fetchMenuBySlug,
   reorderCategoryItems,
+  deleteOwnerImage,
+  updateRestaurantBannerUrl,
+  uploadOwnerImage,
   updateCategory,
   updateItemAvailability,
   updateMenuItem,
@@ -21,10 +51,39 @@ import { useDialogs } from "../context/DialogProvider";
 import { useUiStore } from "../store/uiStore";
 import type { Locale, MenuCategory, MenuItem, MenuPayload } from "../types/menu";
 import { getLocalizedText, getUiMessage, getUiTemplate, isRtlLocale } from "../utils/i18n";
+import { hasRenderableImage } from "../utils/media";
 
 type AdminMenuPageProps = {
   restaurantSlug?: string;
 };
+
+type SortableCategorySectionProps = {
+  categoryId: string;
+  children: (props: {
+    dragHandleListeners?: DraggableSyntheticListeners;
+    dragHandleAttributes: DraggableAttributes;
+  }) => ReactNode;
+};
+
+function SortableCategorySection({ categoryId, children }: SortableCategorySectionProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: categoryId,
+  });
+  const style: CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.6 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      {children({
+        dragHandleAttributes: attributes,
+        dragHandleListeners: listeners,
+      })}
+    </div>
+  );
+}
 
 export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuPageProps) {
   const [menuPayload, setMenuPayload] = useState<MenuPayload | null>(null);
@@ -36,10 +95,14 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
   const [addingToCategory, setAddingToCategory] = useState<string | null>(null);
   const [creationPendingTempId, setCreationPendingTempId] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isBannerUploading, setIsBannerUploading] = useState(false);
+  const [isBannerRemoving, setIsBannerRemoving] = useState(false);
+  const [bannerError, setBannerError] = useState<string | null>(null);
   const [editingCategory, setEditingCategory] = useState<MenuCategory | null>(null);
   const [isCategoryDrawerOpen, setIsCategoryDrawerOpen] = useState(false);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
   const languageMenuRef = useRef<HTMLDivElement | null>(null);
+  const bannerFileInputRef = useRef<HTMLInputElement | null>(null);
   const locale = useUiStore((state) => state.locale);
   const setLocale = useUiStore((state) => state.setLocale);
   const { confirm, alert } = useDialogs();
@@ -81,6 +144,11 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
   }, [restaurantSlug]);
 
   const isRtl = isRtlLocale(locale);
+  const categoryDnDSensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 8 },
+    }),
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -683,6 +751,132 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
     });
   };
 
+  const handleReorderCategories = async (nextOrder: MenuCategory[]) => {
+    if (!menuPayload) {
+      return;
+    }
+
+    const previousPayload = menuPayload;
+    const normalizedNext = nextOrder.map((category, index) => ({
+      ...category,
+      sort_order: index,
+    }));
+
+    setMenuPayload({
+      ...menuPayload,
+      menu: {
+        ...menuPayload.menu,
+        categories: normalizedNext,
+      },
+    });
+
+    try {
+      await reorderCategories(
+        restaurantSlug,
+        normalizedNext.map((category) => category.id),
+      );
+    } catch (error) {
+      setMenuPayload(previousPayload);
+      void alert({
+        title: getUiMessage("dialogErrorTitle", locale),
+        message:
+          error instanceof Error
+            ? error.message
+            : getUiMessage("failedToSaveChanges", locale),
+        dismissLabel: getUiMessage("dialogDismiss", locale),
+      });
+    }
+  };
+
+  const handleCategoryDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) {
+      return;
+    }
+
+    const oldIndex = categories.findIndex((category) => category.id === active.id);
+    const newIndex = categories.findIndex((category) => category.id === over.id);
+    if (oldIndex < 0 || newIndex < 0) {
+      return;
+    }
+
+    void handleReorderCategories(arrayMove(categories, oldIndex, newIndex));
+  };
+
+  const bannerUrl = menuPayload?.restaurant.banner_url ?? null;
+  const isBannerBusy = isBannerUploading || isBannerRemoving;
+
+  const handleBannerPick = () => {
+    if (isBannerBusy) {
+      return;
+    }
+    bannerFileInputRef.current?.click();
+  };
+
+  const handleBannerFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) {
+      return;
+    }
+    if (!file.type.startsWith("image/")) {
+      setBannerError("Please select a valid image file.");
+      return;
+    }
+
+    setBannerError(null);
+    setIsBannerUploading(true);
+    try {
+      const uploadedUrl = await uploadOwnerImage(restaurantSlug, file);
+      await updateRestaurantBannerUrl(restaurantSlug, uploadedUrl);
+
+      setMenuPayload((prev) =>
+        prev
+          ? {
+              ...prev,
+              restaurant: {
+                ...prev.restaurant,
+                banner_url: uploadedUrl,
+                banner_image_url: uploadedUrl,
+              },
+            }
+          : prev,
+      );
+    } catch (error) {
+      setBannerError(error instanceof Error ? error.message : "Failed to upload banner.");
+    } finally {
+      setIsBannerUploading(false);
+    }
+  };
+
+  const handleRemoveBanner = async () => {
+    if (!bannerUrl || isBannerBusy) {
+      return;
+    }
+    setBannerError(null);
+    setIsBannerRemoving(true);
+    try {
+      await deleteOwnerImage(restaurantSlug, bannerUrl);
+      await updateRestaurantBannerUrl(restaurantSlug, null);
+      setMenuPayload((prev) =>
+        prev
+          ? {
+              ...prev,
+              restaurant: {
+                ...prev.restaurant,
+                banner_url: null,
+                banner_image_url: null,
+              },
+            }
+          : prev,
+      );
+    } catch (error) {
+      setBannerError(error instanceof Error ? error.message : "Failed to remove banner.");
+    } finally {
+      setIsBannerRemoving(false);
+    }
+  };
+
   return (
     <div
       className="min-h-[100dvh] bg-zinc-50"
@@ -763,6 +957,62 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
             </div>
           </div>
         </header>
+        {menuPayload ? (
+          <section className="border-b border-zinc-200 px-4 py-4">
+            <input
+              ref={bannerFileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(event) => void handleBannerFileChange(event)}
+            />
+            <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-zinc-600">
+                Restaurant Banner
+              </p>
+              <div className="mt-2 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleBannerPick}
+                  disabled={isBannerBusy}
+                  className="inline-flex items-center gap-2 rounded-full bg-zinc-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                >
+                  {isBannerUploading ? (
+                    <>
+                      <span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                      Uploading...
+                    </>
+                  ) : (
+                    "Upload Banner"
+                  )}
+                </button>
+                {hasRenderableImage(bannerUrl) ? (
+                  <button
+                    type="button"
+                    onClick={() => void handleRemoveBanner()}
+                    disabled={isBannerBusy}
+                    className="inline-flex items-center gap-2 rounded-full border border-zinc-300 bg-white px-3 py-2 text-xs font-semibold text-zinc-700 disabled:opacity-60"
+                  >
+                    {isBannerRemoving ? (
+                      <>
+                        <span className="h-3 w-3 animate-spin rounded-full border-2 border-zinc-500 border-t-transparent" />
+                        Removing...
+                      </>
+                    ) : (
+                      "Remove Banner"
+                    )}
+                  </button>
+                ) : null}
+              </div>
+              {hasRenderableImage(bannerUrl) ? (
+                <div className="mt-3 h-32 w-full overflow-hidden rounded-xl border border-zinc-200 bg-white">
+                  <img src={bannerUrl!} alt="Restaurant banner preview" className="h-full w-full object-cover" />
+                </div>
+              ) : null}
+              {bannerError ? <p className="mt-2 text-xs text-red-600">{bannerError}</p> : null}
+            </div>
+          </section>
+        ) : null}
 
         {isMenuLoading ? (
           <div className="px-4 py-10 text-center text-sm text-zinc-500">
@@ -804,99 +1054,122 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
             </nav>
 
             <section>
-              {categories.map((category) => (
-                <div
-                  key={category.id}
-                  ref={(el) => {
-                    sectionRefs.current[category.id] = el;
-                  }}
-                  data-category-id={category.id}
+              <DndContext
+                sensors={categoryDnDSensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleCategoryDragEnd}
+              >
+                <SortableContext
+                  items={categories.map((category) => category.id)}
+                  strategy={verticalListSortingStrategy}
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 px-4 py-3">
-                    <div className="flex min-w-0 flex-1 items-center gap-2">
-                      <h2 className="min-w-0 truncate text-base font-bold text-zinc-900">
-                        {getLocalizedText(category, "name", locale)}
-                      </h2>
-                      <button
-                        type="button"
-                        onClick={() => handleEditCategoryClick(category)}
-                        aria-label={getUiTemplate("editCategoryAria", locale, {
-                          name: getLocalizedText(category, "name", locale),
-                        })}
-                        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-700 shadow-sm active:scale-[0.96]"
-                      >
-                        <svg
-                          aria-hidden="true"
-                          viewBox="0 0 20 20"
-                          className="h-3.5 w-3.5"
-                          fill="none"
+                  {categories.map((category) => (
+                    <SortableCategorySection key={category.id} categoryId={category.id}>
+                      {({ dragHandleAttributes, dragHandleListeners }) => (
+                        <div
+                          ref={(el) => {
+                            sectionRefs.current[category.id] = el;
+                          }}
+                          data-category-id={category.id}
                         >
-                          <path
-                            d="M4 13.5V16h2.5L14 8.5 11.5 6 4 13.5Z"
-                            stroke="currentColor"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth="1.6"
+                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 px-4 py-3">
+                            <div className="flex min-w-0 flex-1 items-center gap-2">
+                              <button
+                                type="button"
+                                aria-label="Drag to reorder category"
+                                className="inline-flex h-8 w-8 shrink-0 touch-none items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-500 shadow-sm active:cursor-grabbing"
+                                {...dragHandleAttributes}
+                                {...dragHandleListeners}
+                              >
+                                <GripVertical className="h-4 w-4" strokeWidth={2} aria-hidden />
+                              </button>
+                              <h2 className="min-w-0 truncate text-base font-bold text-zinc-900">
+                                {getLocalizedText(category, "name", locale)}
+                              </h2>
+                              <button
+                                type="button"
+                                onClick={() => handleEditCategoryClick(category)}
+                                aria-label={getUiTemplate("editCategoryAria", locale, {
+                                  name: getLocalizedText(category, "name", locale),
+                                })}
+                                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-700 shadow-sm active:scale-[0.96]"
+                              >
+                                <svg
+                                  aria-hidden="true"
+                                  viewBox="0 0 20 20"
+                                  className="h-3.5 w-3.5"
+                                  fill="none"
+                                >
+                                  <path
+                                    d="M4 13.5V16h2.5L14 8.5 11.5 6 4 13.5Z"
+                                    stroke="currentColor"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth="1.6"
+                                  />
+                                  <path
+                                    d="m12 5.5 1-1a1.4 1.4 0 0 1 2 0l.5.5a1.4 1.4 0 0 1 0 2l-1 1"
+                                    stroke="currentColor"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth="1.6"
+                                  />
+                                </svg>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteCategory(category)}
+                                aria-label={getUiTemplate("deleteCategoryAria", locale, {
+                                  name: getLocalizedText(category, "name", locale),
+                                })}
+                                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-500 shadow-sm active:scale-[0.96]"
+                              >
+                                <svg
+                                  aria-hidden="true"
+                                  viewBox="0 0 20 20"
+                                  className="h-3.5 w-3.5"
+                                  fill="none"
+                                >
+                                  <path
+                                    d="M6 6.5h8M8 6.5V5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5m2.5 0v8.5a1.5 1.5 0 0 1-1.5 1.5h-7A1.5 1.5 0 0 1 5.5 15V6.5h9Z"
+                                    stroke="currentColor"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth="1.5"
+                                  />
+                                  <path
+                                    d="M8 10v4M12 10v4"
+                                    stroke="currentColor"
+                                    strokeLinecap="round"
+                                    strokeWidth="1.5"
+                                  />
+                                </svg>
+                              </button>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleAddItemClick(category.id)}
+                              className="shrink-0 rounded-full bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white active:scale-[0.98]"
+                            >
+                              {getUiMessage("addItem", locale)}
+                            </button>
+                          </div>
+                          <SortableItemList
+                            items={category.items}
+                            onReorder={(next) => void handleReorderItems(category.id, next)}
+                            locale={locale}
+                            unavailableLabel={getUiMessage("unavailable", locale)}
+                            creationPendingItemId={creationPendingTempId}
+                            onEditClick={handleEditClick}
+                            onDeleteClick={handleDeleteItem}
+                            onToggleAvailability={handleToggleAvailability}
                           />
-                          <path
-                            d="m12 5.5 1-1a1.4 1.4 0 0 1 2 0l.5.5a1.4 1.4 0 0 1 0 2l-1 1"
-                            stroke="currentColor"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth="1.6"
-                          />
-                        </svg>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteCategory(category)}
-                        aria-label={getUiTemplate("deleteCategoryAria", locale, {
-                          name: getLocalizedText(category, "name", locale),
-                        })}
-                        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-500 shadow-sm active:scale-[0.96]"
-                      >
-                        <svg
-                          aria-hidden="true"
-                          viewBox="0 0 20 20"
-                          className="h-3.5 w-3.5"
-                          fill="none"
-                        >
-                          <path
-                            d="M6 6.5h8M8 6.5V5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5m2.5 0v8.5a1.5 1.5 0 0 1-1.5 1.5h-7A1.5 1.5 0 0 1 5.5 15V6.5h9Z"
-                            stroke="currentColor"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth="1.5"
-                          />
-                          <path
-                            d="M8 10v4M12 10v4"
-                            stroke="currentColor"
-                            strokeLinecap="round"
-                            strokeWidth="1.5"
-                          />
-                        </svg>
-                      </button>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleAddItemClick(category.id)}
-                      className="shrink-0 rounded-full bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white active:scale-[0.98]"
-                    >
-                      {getUiMessage("addItem", locale)}
-                    </button>
-                  </div>
-                  <SortableItemList
-                    items={category.items}
-                    onReorder={(next) => void handleReorderItems(category.id, next)}
-                    locale={locale}
-                    unavailableLabel={getUiMessage("unavailable", locale)}
-                    creationPendingItemId={creationPendingTempId}
-                    onEditClick={handleEditClick}
-                    onDeleteClick={handleDeleteItem}
-                    onToggleAvailability={handleToggleAvailability}
-                  />
-                </div>
-              ))}
+                        </div>
+                      )}
+                    </SortableCategorySection>
+                  ))}
+                </SortableContext>
+              </DndContext>
             </section>
 
             <div className="border-t border-zinc-200 px-4 py-4">

@@ -294,9 +294,9 @@ export function TenantDinerPage({ restaurantSlug = "yossis-hummus" }: DinerPageP
       <main className="mx-auto max-w-md bg-white pb-24">
         <header className="border-b border-zinc-200">
           <div className="h-44 w-full overflow-hidden bg-zinc-100">
-            {menuPayload.restaurant.banner_image_url ? (
+            {menuPayload.restaurant.banner_url ? (
               <img
-                src={menuPayload.restaurant.banner_image_url}
+                src={menuPayload.restaurant.banner_url}
                 alt={`${restaurantName} banner`}
                 className="h-full w-full object-cover"
               />

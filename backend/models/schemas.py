@@ -8,6 +8,7 @@ class RestaurantResponse(BaseModel):
     slug: str
     theme_color: str
     currency: str
+    banner_url: str | None = None
     banner_image_url: str | None = None
     default_locale: str | None = None
     translations: dict[str, Any] | None = None
@@ -133,6 +134,7 @@ class MenuItemCreateRequest(BaseModel):
     name: str
     base_price: float = Field(..., ge=0)
     description: str | None = None
+    image_url: str | None = None
 
     @field_validator("name")
     @classmethod
@@ -149,6 +151,16 @@ class MenuItemCreateRequest(BaseModel):
             return None
         if isinstance(value, str):
             return value.strip()
+        return value
+
+    @field_validator("image_url", mode="before")
+    @classmethod
+    def normalize_image_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            trimmed = value.strip()
+            return trimmed or None
         return value
 
 

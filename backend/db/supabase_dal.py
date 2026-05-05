@@ -95,6 +95,7 @@ class SupabaseDAL(MenuRepository):
             "name": fields["name"],
             "description": description if isinstance(description, str) else "",
             "base_price": float(fields["base_price"]),
+            "image_url": _as_optional_string(fields.get("image_url")),
             "is_available": True,
             "is_visible": True,
             "sort_order": next_sort,
@@ -188,8 +189,30 @@ class SupabaseDAL(MenuRepository):
             updates,
         )
 
+    async def update_categories_order(
+        self,
+        restaurant_id: str,
+        category_ids: list[str],
+    ) -> bool:
+        return await asyncio.to_thread(
+            self._bulk_update_category_orders_sync,
+            restaurant_id,
+            category_ids,
+        )
+
     async def import_full_restaurant(self, payload: dict[str, Any]) -> dict[str, Any]:
         return await asyncio.to_thread(self._import_full_restaurant_sync, payload)
+
+    async def update_restaurant_banner_url(
+        self,
+        restaurant_id: str,
+        banner_url: str | None,
+    ) -> dict[str, Any] | None:
+        return await asyncio.to_thread(
+            self._update_restaurant_banner_url_sync,
+            restaurant_id,
+            banner_url,
+        )
 
     def _fetch_restaurant_id_by_slug(self, slug: str) -> str | None:
         response = (
@@ -263,6 +286,39 @@ class SupabaseDAL(MenuRepository):
         )
 
         return response.data or []
+
+    def _update_restaurant_banner_url_sync(
+        self,
+        restaurant_id: str,
+        banner_url: str | None,
+    ) -> dict[str, Any] | None:
+        probe = (
+            self._client.table("restaurants")
+            .select("id,settings")
+            .eq("id", restaurant_id)
+            .limit(1)
+            .execute()
+        )
+        row = _first(probe.data or [])
+        if row is None:
+            return None
+
+        settings = _as_dict(row.get("settings"))
+        settings["banner_image_url"] = banner_url
+        response = (
+            self._client.table("restaurants")
+            .update({"settings": settings})
+            .eq("id", restaurant_id)
+            .execute()
+        )
+        updated_row = _first(response.data or [])
+        if updated_row is None:
+            return None
+
+        return {
+            "id": str(updated_row.get("id") or ""),
+            "banner_url": _as_optional_string(settings.get("banner_image_url")),
+        }
 
     def _apply_menu_item_patch(
         self,
@@ -771,6 +827,45 @@ class SupabaseDAL(MenuRepository):
 
         return True
 
+    def _bulk_update_category_orders_sync(
+        self,
+        restaurant_id: str,
+        category_ids: list[str],
+    ) -> bool:
+        clean_ids: list[str] = []
+        for category_id in category_ids:
+            normalized = str(category_id or "").strip()
+            if not normalized:
+                return False
+            clean_ids.append(normalized)
+
+        if not clean_ids:
+            return True
+        if len(clean_ids) != len(set(clean_ids)):
+            return False
+
+        menu_id = self._get_active_menu_id_for_restaurant(restaurant_id)
+        if not menu_id:
+            return False
+
+        probe = (
+            self._client.table("categories")
+            .select("id")
+            .eq("menu_id", menu_id)
+            .in_("id", clean_ids)
+            .execute()
+        )
+        found_ids = {str(row.get("id") or "") for row in (probe.data or [])}
+        if len(found_ids) != len(clean_ids):
+            return False
+
+        for index, category_id in enumerate(clean_ids):
+            self._client.table("categories").update({"sort_order": index}).eq(
+                "id",
+                category_id,
+            ).eq("menu_id", menu_id).execute()
+        return True
+
     def _import_full_restaurant_sync(self, payload: dict[str, Any]) -> dict[str, Any]:
         restaurant_name = str(payload.get("restaurant_name") or "").strip()
         restaurant_slug = str(payload.get("restaurant_slug") or "").strip().lower()
@@ -945,6 +1040,9 @@ def _build_menu_payload(
 ) -> MenuPayload:
     settings = _as_dict(restaurant.get("settings"))
     restaurant_id = str(restaurant.get("id") or "")
+    banner_url = _as_optional_string(restaurant.get("banner_url"))
+    if banner_url is None:
+        banner_url = _as_optional_string(settings.get("banner_image_url"))
 
     return MenuPayload(
         restaurant=RestaurantResponse(
@@ -952,7 +1050,8 @@ def _build_menu_payload(
             slug=str(restaurant.get("slug") or ""),
             theme_color=str(settings.get("theme_color") or "#111827"),
             currency=str(settings.get("currency") or "ILS"),
-            banner_image_url=settings.get("banner_image_url"),
+            banner_url=banner_url,
+            banner_image_url=banner_url,
             default_locale=settings.get("default_locale"),
             translations=_as_optional_dict(settings.get("translations")),
             settings=settings,

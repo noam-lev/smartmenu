@@ -111,6 +111,24 @@ class MenuRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    async def update_categories_order(
+        self,
+        restaurant_id: str,
+        category_ids: list[str],
+    ) -> bool:
+        """Set category sort_order values according to provided category id order."""
+        raise NotImplementedError
+
+    @abstractmethod
     async def import_full_restaurant(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Import a full restaurant/category/items tree from parsed onboarding payload."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def update_restaurant_banner_url(
+        self,
+        restaurant_id: str,
+        banner_url: str | None,
+    ) -> dict[str, Any] | None:
+        """Patch restaurants.banner_url scoped by restaurant_id."""
         raise NotImplementedError

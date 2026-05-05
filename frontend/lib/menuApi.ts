@@ -25,7 +25,10 @@ export async function updateMenuItem(
   restaurantSlug: string,
   itemId: string,
   data: Partial<
-    Pick<MenuItem, "name" | "description" | "base_price" | "translations" | "is_available">
+    Pick<
+      MenuItem,
+      "name" | "description" | "base_price" | "translations" | "is_available" | "image_url"
+    >
   >,
 ): Promise<void> {
   const body: Record<string, unknown> = {};
@@ -45,6 +48,9 @@ export async function updateMenuItem(
   if (data.is_available !== undefined) {
     body.is_available = data.is_available;
   }
+  if (data.image_url !== undefined) {
+    body.image_url = data.image_url;
+  }
 
   const response = await fetch(
     `${API_BASE_URL}/api/owner/${encodeURIComponent(restaurantSlug)}/items/${encodeURIComponent(itemId)}`,
@@ -59,6 +65,73 @@ export async function updateMenuItem(
 
   if (!response.ok) {
     throw new Error(`Failed to update item (${response.status})`);
+  }
+}
+
+export async function uploadOwnerImage(
+  restaurantSlug: string,
+  file: File,
+): Promise<string> {
+  const form = new FormData();
+  form.append("file", file);
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/owner/${encodeURIComponent(restaurantSlug)}/upload-image`,
+    {
+      method: "POST",
+      body: form,
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to upload image (${response.status})`);
+  }
+
+  const payload = (await response.json()) as { public_url?: string };
+  if (!payload.public_url) {
+    throw new Error("Upload succeeded but no public URL was returned.");
+  }
+
+  return payload.public_url;
+}
+
+export async function deleteOwnerImage(
+  restaurantSlug: string,
+  fileUrl: string,
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/owner/${encodeURIComponent(restaurantSlug)}/delete-image`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ file_url: fileUrl }),
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to delete image (${response.status})`);
+  }
+}
+
+export async function updateRestaurantBannerUrl(
+  restaurantSlug: string,
+  bannerUrl: string | null,
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/owner/${encodeURIComponent(restaurantSlug)}/restaurant`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ banner_url: bannerUrl }),
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to update restaurant banner (${response.status})`);
   }
 }
 
@@ -86,6 +159,11 @@ export async function createMenuItem(
 
   if (typeof data.description === "string" && data.description.trim().length > 0) {
     body.description = data.description.trim();
+  }
+  if (typeof data.image_url === "string") {
+    body.image_url = data.image_url.trim();
+  } else if (data.image_url === null) {
+    body.image_url = null;
   }
 
   const response = await fetch(
@@ -310,5 +388,25 @@ export async function reorderCategoryItems(
 
   if (!response.ok) {
     throw new Error(`Failed to reorder items (${response.status})`);
+  }
+}
+
+export async function reorderCategories(
+  restaurantSlug: string,
+  categoryIds: string[],
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/owner/${encodeURIComponent(restaurantSlug)}/categories/reorder`,
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ category_ids: categoryIds }),
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to reorder categories (${response.status})`);
   }
 }

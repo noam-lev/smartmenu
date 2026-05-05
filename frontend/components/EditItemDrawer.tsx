@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import type { Locale, MenuItem, TranslationsMap } from "../types/menu";
 import { useUiStore } from "../store/uiStore";
 import { getLocalizedText, getUiMessage, isRtlLocale } from "../utils/i18n";
 import UpsellTab from "./UpsellTab";
+import { deleteOwnerImage, uploadOwnerImage } from "../lib/menuApi";
+import { hasRenderableImage } from "../utils/media";
 
 type EditTabId = "general" | "translations" | "upsells";
 
@@ -58,12 +60,14 @@ function buildPatchFromForm(
   name: string,
   description: string,
   basePrice: number,
+  imageUrl: string | null,
 ): Partial<MenuItem> {
   if (!item) {
     return {
       name: name.trim(),
       description,
       base_price: basePrice,
+      image_url: imageUrl,
     };
   }
 
@@ -115,6 +119,7 @@ function buildPatchFromForm(
   }
 
   patch.translations = nextTranslations;
+  patch.image_url = imageUrl;
 
   return patch;
 }
@@ -155,6 +160,11 @@ export default function EditItemDrawer({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [basePrice, setBasePrice] = useState("");
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [isImageUploading, setIsImageUploading] = useState(false);
+  const [isImageRemoving, setIsImageRemoving] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
@@ -169,12 +179,20 @@ export default function EditItemDrawer({
       setName("");
       setDescription("");
       setBasePrice("");
+      setImageUrl(null);
+      setImageError(null);
+      setIsImageUploading(false);
+      setIsImageRemoving(false);
       return;
     }
 
     setName(getLocalizedText(item, "name", locale));
     setDescription(getLocalizedText(item, "description", locale));
     setBasePrice(String(item.base_price ?? ""));
+    setImageUrl(item.image_url ?? null);
+    setImageError(null);
+    setIsImageUploading(false);
+    setIsImageRemoving(false);
   }, [isOpen, item, locale, isCreateMode]);
 
   useEffect(() => {
@@ -232,6 +250,7 @@ export default function EditItemDrawer({
       trimmedName,
       description,
       parsedPrice,
+      imageUrl,
     );
 
     setIsSaving(true);
@@ -243,6 +262,53 @@ export default function EditItemDrawer({
   };
 
   const drawerTitleId = "edit-item-drawer-title";
+  const isImageBusy = isImageUploading || isImageRemoving;
+
+  const handlePickImageClick = () => {
+    if (isImageBusy || isSaving) {
+      return;
+    }
+    fileInputRef.current?.click();
+  };
+
+  const handleImageInputChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const pickedFile = event.target.files?.[0];
+    event.target.value = "";
+    if (!pickedFile) {
+      return;
+    }
+    if (!pickedFile.type.startsWith("image/")) {
+      setImageError("Please select an image file.");
+      return;
+    }
+
+    setImageError(null);
+    setIsImageUploading(true);
+    try {
+      const uploadedUrl = await uploadOwnerImage(restaurantSlug, pickedFile);
+      setImageUrl(uploadedUrl);
+    } catch (error) {
+      setImageError(error instanceof Error ? error.message : "Image upload failed.");
+    } finally {
+      setIsImageUploading(false);
+    }
+  };
+
+  const handleRemoveImage = async () => {
+    if (!imageUrl || isImageBusy || isSaving) {
+      return;
+    }
+    setImageError(null);
+    setIsImageRemoving(true);
+    try {
+      await deleteOwnerImage(restaurantSlug, imageUrl);
+      setImageUrl(null);
+    } catch (error) {
+      setImageError(error instanceof Error ? error.message : "Failed to remove image.");
+    } finally {
+      setIsImageRemoving(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-[70]" role="presentation">
@@ -362,6 +428,58 @@ export default function EditItemDrawer({
                     onChange={(event) => setBasePrice(event.target.value)}
                     className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none focus:border-zinc-400"
                   />
+                </div>
+                <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-zinc-600">
+                    Image Management
+                  </p>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleImageInputChange}
+                  />
+                  <div className="mt-2 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handlePickImageClick}
+                      disabled={isImageBusy || isSaving}
+                      className="inline-flex items-center gap-2 rounded-full bg-zinc-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                    >
+                      {isImageUploading ? (
+                        <>
+                          <span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                          Uploading...
+                        </>
+                      ) : (
+                        "Upload Image"
+                      )}
+                    </button>
+                    {hasRenderableImage(imageUrl) ? (
+                      <button
+                        type="button"
+                        onClick={() => void handleRemoveImage()}
+                        disabled={isImageBusy || isSaving}
+                        className="inline-flex items-center gap-2 rounded-full border border-zinc-300 bg-white px-3 py-2 text-xs font-semibold text-zinc-700 disabled:opacity-60"
+                      >
+                        {isImageRemoving ? (
+                          <>
+                            <span className="h-3 w-3 animate-spin rounded-full border-2 border-zinc-500 border-t-transparent" />
+                            Removing...
+                          </>
+                        ) : (
+                          "Remove Image"
+                        )}
+                      </button>
+                    ) : null}
+                  </div>
+                  {hasRenderableImage(imageUrl) ? (
+                    <div className="mt-3 h-20 w-20 overflow-hidden rounded-xl border border-zinc-200 bg-white">
+                      <img src={imageUrl!} alt="Item image preview" className="h-full w-full object-cover" />
+                    </div>
+                  ) : null}
+                  {imageError ? <p className="mt-2 text-xs text-red-600">{imageError}</p> : null}
                 </div>
               </div>
             ) : null}
