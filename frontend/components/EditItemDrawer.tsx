@@ -278,7 +278,7 @@ export default function EditItemDrawer({
       return;
     }
     if (!pickedFile.type.startsWith("image/")) {
-      setImageError("Please select an image file.");
+      setImageError(getUiMessage("selectImageFileError", locale));
       return;
     }
 
@@ -288,7 +288,9 @@ export default function EditItemDrawer({
       const uploadedUrl = await uploadOwnerImage(restaurantSlug, pickedFile);
       setImageUrl(uploadedUrl);
     } catch (error) {
-      setImageError(error instanceof Error ? error.message : "Image upload failed.");
+      setImageError(
+        error instanceof Error ? error.message : getUiMessage("imageUploadFailed", locale),
+      );
     } finally {
       setIsImageUploading(false);
     }
@@ -304,7 +306,9 @@ export default function EditItemDrawer({
       await deleteOwnerImage(restaurantSlug, imageUrl);
       setImageUrl(null);
     } catch (error) {
-      setImageError(error instanceof Error ? error.message : "Failed to remove image.");
+      setImageError(
+        error instanceof Error ? error.message : getUiMessage("imageRemoveFailed", locale),
+      );
     } finally {
       setIsImageRemoving(false);
     }
@@ -431,7 +435,7 @@ export default function EditItemDrawer({
                 </div>
                 <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-3">
                   <p className="text-xs font-semibold uppercase tracking-wide text-zinc-600">
-                    Image Management
+                    {getUiMessage("imageManagementTitle", locale)}
                   </p>
                   <input
                     ref={fileInputRef}
@@ -450,10 +454,10 @@ export default function EditItemDrawer({
                       {isImageUploading ? (
                         <>
                           <span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                          Uploading...
+                          {getUiMessage("uploading", locale)}
                         </>
                       ) : (
-                        "Upload Image"
+                        getUiMessage("uploadImage", locale)
                       )}
                     </button>
                     {hasRenderableImage(imageUrl) ? (
@@ -466,17 +470,21 @@ export default function EditItemDrawer({
                         {isImageRemoving ? (
                           <>
                             <span className="h-3 w-3 animate-spin rounded-full border-2 border-zinc-500 border-t-transparent" />
-                            Removing...
+                            {getUiMessage("removing", locale)}
                           </>
                         ) : (
-                          "Remove Image"
+                          getUiMessage("removeImage", locale)
                         )}
                       </button>
                     ) : null}
                   </div>
                   {hasRenderableImage(imageUrl) ? (
                     <div className="mt-3 h-20 w-20 overflow-hidden rounded-xl border border-zinc-200 bg-white">
-                      <img src={imageUrl!} alt="Item image preview" className="h-full w-full object-cover" />
+                      <img
+                        src={imageUrl!}
+                        alt={getUiMessage("itemImagePreviewAlt", locale)}
+                        className="h-full w-full object-cover"
+                      />
                     </div>
                   ) : null}
                   {imageError ? <p className="mt-2 text-xs text-red-600">{imageError}</p> : null}

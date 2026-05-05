@@ -820,7 +820,7 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
       return;
     }
     if (!file.type.startsWith("image/")) {
-      setBannerError("Please select a valid image file.");
+      setBannerError(getUiMessage("selectImageFileError", locale));
       return;
     }
 
@@ -843,7 +843,9 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
           : prev,
       );
     } catch (error) {
-      setBannerError(error instanceof Error ? error.message : "Failed to upload banner.");
+      setBannerError(
+        error instanceof Error ? error.message : getUiMessage("bannerUploadFailed", locale),
+      );
     } finally {
       setIsBannerUploading(false);
     }
@@ -871,7 +873,9 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
           : prev,
       );
     } catch (error) {
-      setBannerError(error instanceof Error ? error.message : "Failed to remove banner.");
+      setBannerError(
+        error instanceof Error ? error.message : getUiMessage("bannerRemoveFailed", locale),
+      );
     } finally {
       setIsBannerRemoving(false);
     }
@@ -968,7 +972,7 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
             />
             <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-zinc-600">
-                Restaurant Banner
+                {getUiMessage("restaurantBannerTitle", locale)}
               </p>
               <div className="mt-2 flex items-center gap-2">
                 <button
@@ -980,10 +984,10 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
                   {isBannerUploading ? (
                     <>
                       <span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                      Uploading...
+                      {getUiMessage("uploading", locale)}
                     </>
                   ) : (
-                    "Upload Banner"
+                    getUiMessage("uploadBanner", locale)
                   )}
                 </button>
                 {hasRenderableImage(bannerUrl) ? (
@@ -996,17 +1000,21 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
                     {isBannerRemoving ? (
                       <>
                         <span className="h-3 w-3 animate-spin rounded-full border-2 border-zinc-500 border-t-transparent" />
-                        Removing...
+                        {getUiMessage("removing", locale)}
                       </>
                     ) : (
-                      "Remove Banner"
+                      getUiMessage("removeBanner", locale)
                     )}
                   </button>
                 ) : null}
               </div>
               {hasRenderableImage(bannerUrl) ? (
                 <div className="mt-3 h-32 w-full overflow-hidden rounded-xl border border-zinc-200 bg-white">
-                  <img src={bannerUrl!} alt="Restaurant banner preview" className="h-full w-full object-cover" />
+                  <img
+                    src={bannerUrl!}
+                    alt={getUiMessage("restaurantBannerPreviewAlt", locale)}
+                    className="h-full w-full object-cover"
+                  />
                 </div>
               ) : null}
               {bannerError ? <p className="mt-2 text-xs text-red-600">{bannerError}</p> : null}
