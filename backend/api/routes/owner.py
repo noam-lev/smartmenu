@@ -74,25 +74,32 @@ class UpsellRuleCreatePayload(BaseModel):
         return value
 
 
+async def _resolve_restaurant_uuid(
+    restaurant_slug: str,
+    db: MenuRepository,
+) -> str:
+    tenant_restaurant_uuid = await db.get_restaurant_id_by_slug(restaurant_slug)
+    if tenant_restaurant_uuid is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Restaurant not found.",
+        )
+    return tenant_restaurant_uuid
+
+
 @router.get("/ping")
 async def ping_owner() -> dict[str, str]:
     return {"status": "ok", "scope": "owner"}
 
 
 # TODO: ADD AUTH
-@router.post("/categories")
+@router.post("/{restaurant_slug}/categories")
 async def create_category(
+    restaurant_slug: str,
     payload: CategoryCreateRequest,
     db: MenuRepository = Depends(get_db),
 ) -> dict[str, object]:
-    # TODO: ADD AUTH — slug placeholder until authenticated tenant context (resolved to UUID for writes).
-    restaurant_id = "yossis-hummus"
-    tenant_restaurant_uuid = await db.get_restaurant_id_by_slug(restaurant_id)
-    if tenant_restaurant_uuid is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Restaurant not found.",
-        )
+    tenant_restaurant_uuid = await _resolve_restaurant_uuid(restaurant_slug, db)
 
     created = await db.create_category(
         tenant_restaurant_uuid,
@@ -108,20 +115,14 @@ async def create_category(
 
 
 # TODO: ADD AUTH
-@router.patch("/categories/{category_id}")
+@router.patch("/{restaurant_slug}/categories/{category_id}")
 async def patch_category(
+    restaurant_slug: str,
     category_id: str,
     payload: CategoryUpdateRequest,
     db: MenuRepository = Depends(get_db),
 ) -> dict[str, object]:
-    # TODO: ADD AUTH — slug placeholder until authenticated tenant context (resolved to UUID for writes).
-    restaurant_id = "yossis-hummus"
-    tenant_restaurant_uuid = await db.get_restaurant_id_by_slug(restaurant_id)
-    if tenant_restaurant_uuid is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Restaurant not found.",
-        )
+    tenant_restaurant_uuid = await _resolve_restaurant_uuid(restaurant_slug, db)
 
     updated = await db.update_category(
         category_id,
@@ -139,19 +140,13 @@ async def patch_category(
 
 
 # TODO: ADD AUTH
-@router.delete("/categories/{category_id}")
+@router.delete("/{restaurant_slug}/categories/{category_id}")
 async def delete_category_route(
+    restaurant_slug: str,
     category_id: str,
     db: MenuRepository = Depends(get_db),
 ) -> dict[str, object]:
-    # TODO: ADD AUTH — slug placeholder until authenticated tenant context (resolved to UUID for writes).
-    restaurant_id = "yossis-hummus"
-    tenant_restaurant_uuid = await db.get_restaurant_id_by_slug(restaurant_id)
-    if tenant_restaurant_uuid is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Restaurant not found.",
-        )
+    tenant_restaurant_uuid = await _resolve_restaurant_uuid(restaurant_slug, db)
 
     deleted = await db.delete_category(category_id, tenant_restaurant_uuid)
     if not deleted:
@@ -164,20 +159,14 @@ async def delete_category_route(
 
 
 # TODO: ADD AUTH
-@router.patch("/categories/{category_id}/items/reorder")
+@router.patch("/{restaurant_slug}/categories/{category_id}/items/reorder")
 async def reorder_category_items(
+    restaurant_slug: str,
     category_id: str,
     payload: ItemReorderRequest,
     db: MenuRepository = Depends(get_db),
 ) -> dict[str, object]:
-    # TODO: ADD AUTH — slug placeholder until authenticated tenant context (resolved to UUID for writes).
-    restaurant_id = "yossis-hummus"
-    tenant_restaurant_uuid = await db.get_restaurant_id_by_slug(restaurant_id)
-    if tenant_restaurant_uuid is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Restaurant not found.",
-        )
+    tenant_restaurant_uuid = await _resolve_restaurant_uuid(restaurant_slug, db)
 
     body = [row.model_dump() for row in payload.items]
     ok = await db.bulk_update_item_orders(category_id, tenant_restaurant_uuid, body)
@@ -191,12 +180,14 @@ async def reorder_category_items(
 
 
 # TODO: ADD AUTH
-@router.post("/categories/{category_id}/items")
+@router.post("/{restaurant_slug}/categories/{category_id}/items")
 async def create_menu_item(
+    restaurant_slug: str,
     category_id: str,
     payload: MenuItemCreateRequest,
     db: MenuRepository = Depends(get_db),
 ) -> dict[str, object]:
+    _ = await _resolve_restaurant_uuid(restaurant_slug, db)
     created = await db.create_menu_item(
         category_id,
         payload.model_dump(exclude_none=True),
@@ -212,8 +203,9 @@ async def create_menu_item(
 
 
 # TODO: ADD AUTH
-@router.patch("/items/{item_id}")
+@router.patch("/{restaurant_slug}/items/{item_id}")
 async def patch_menu_item(
+    restaurant_slug: str,
     item_id: str,
     payload: MenuItemPatchPayload,
     db: MenuRepository = Depends(get_db),
@@ -225,14 +217,7 @@ async def patch_menu_item(
             detail="No fields to update.",
         )
 
-    # TODO: ADD AUTH — slug placeholder until authenticated tenant context (resolved to UUID for writes).
-    restaurant_id = "yossis-hummus"
-    tenant_restaurant_uuid = await db.get_restaurant_id_by_slug(restaurant_id)
-    if tenant_restaurant_uuid is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Restaurant not found.",
-        )
+    tenant_restaurant_uuid = await _resolve_restaurant_uuid(restaurant_slug, db)
     updated_item = await db.update_menu_item(item_id, patch, tenant_restaurant_uuid)
 
     if updated_item is None:
@@ -244,19 +229,13 @@ async def patch_menu_item(
 
 
 # TODO: ADD AUTH
-@router.delete("/items/{item_id}")
+@router.delete("/{restaurant_slug}/items/{item_id}")
 async def delete_menu_item(
+    restaurant_slug: str,
     item_id: str,
     db: MenuRepository = Depends(get_db),
 ) -> dict[str, object]:
-    # TODO: ADD AUTH — slug placeholder until authenticated tenant context (resolved to UUID for writes).
-    restaurant_id = "yossis-hummus"
-    tenant_restaurant_uuid = await db.get_restaurant_id_by_slug(restaurant_id)
-    if tenant_restaurant_uuid is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Restaurant not found.",
-        )
+    tenant_restaurant_uuid = await _resolve_restaurant_uuid(restaurant_slug, db)
     deleted = await db.delete_menu_item(item_id, tenant_restaurant_uuid)
 
     if not deleted:
@@ -269,20 +248,14 @@ async def delete_menu_item(
 
 
 # TODO: ADD AUTH
-@router.patch("/upsells/{rule_id}")
+@router.patch("/{restaurant_slug}/upsells/{rule_id}")
 async def patch_upsell_rule(
+    restaurant_slug: str,
     rule_id: str,
     payload: UpsellRulePatchPayload,
     db: MenuRepository = Depends(get_db),
 ) -> dict[str, object]:
-    # TODO: ADD AUTH — slug placeholder until authenticated tenant context (resolved to UUID for writes).
-    restaurant_id = "yossis-hummus"
-    tenant_restaurant_uuid = await db.get_restaurant_id_by_slug(restaurant_id)
-    if tenant_restaurant_uuid is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Restaurant not found.",
-        )
+    tenant_restaurant_uuid = await _resolve_restaurant_uuid(restaurant_slug, db)
 
     updated = await db.patch_upsell_rule_message(
         rule_id,
@@ -300,20 +273,14 @@ async def patch_upsell_rule(
 
 
 # TODO: ADD AUTH
-@router.post("/items/{item_id}/upsells")
+@router.post("/{restaurant_slug}/items/{item_id}/upsells")
 async def create_item_upsell_rule(
+    restaurant_slug: str,
     item_id: str,
     payload: UpsellRuleCreatePayload,
     db: MenuRepository = Depends(get_db),
 ) -> dict[str, object]:
-    # TODO: ADD AUTH — slug placeholder until authenticated tenant context (resolved to UUID for writes).
-    restaurant_id = "yossis-hummus"
-    tenant_restaurant_uuid = await db.get_restaurant_id_by_slug(restaurant_id)
-    if tenant_restaurant_uuid is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Restaurant not found.",
-        )
+    tenant_restaurant_uuid = await _resolve_restaurant_uuid(restaurant_slug, db)
 
     body = payload.model_dump(exclude_none=True)
     new_id = await db.create_upsell_rule(item_id, tenant_restaurant_uuid, body)
@@ -327,19 +294,13 @@ async def create_item_upsell_rule(
 
 
 # TODO: ADD AUTH
-@router.delete("/upsells/{rule_id}")
+@router.delete("/{restaurant_slug}/upsells/{rule_id}")
 async def delete_upsell_rule_route(
+    restaurant_slug: str,
     rule_id: str,
     db: MenuRepository = Depends(get_db),
 ) -> dict[str, object]:
-    # TODO: ADD AUTH — slug placeholder until authenticated tenant context (resolved to UUID for writes).
-    restaurant_id = "yossis-hummus"
-    tenant_restaurant_uuid = await db.get_restaurant_id_by_slug(restaurant_id)
-    if tenant_restaurant_uuid is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Restaurant not found.",
-        )
+    tenant_restaurant_uuid = await _resolve_restaurant_uuid(restaurant_slug, db)
 
     deleted = await db.delete_upsell_rule(rule_id, tenant_restaurant_uuid)
     if not deleted:

@@ -1,11 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import EditCategoryDrawer from "../../components/EditCategoryDrawer";
+import EditCategoryDrawer from "../components/EditCategoryDrawer";
 import EditItemDrawer, {
   placeholderMenuItem,
-} from "../../components/EditItemDrawer";
-import SortableItemList from "../../components/SortableItemList";
+} from "../components/EditItemDrawer";
+import SortableItemList from "../components/SortableItemList";
 import {
   createCategory,
   createMenuItem,
@@ -16,15 +16,17 @@ import {
   updateCategory,
   updateItemAvailability,
   updateMenuItem,
-} from "../../lib/menuApi";
-import { useDialogs } from "../../context/DialogProvider";
-import { useUiStore } from "../../store/uiStore";
-import type { Locale, MenuCategory, MenuItem, MenuPayload } from "../../types/menu";
-import { getLocalizedText, getUiMessage, getUiTemplate, isRtlLocale } from "../../utils/i18n";
+} from "../lib/menuApi";
+import { useDialogs } from "../context/DialogProvider";
+import { useUiStore } from "../store/uiStore";
+import type { Locale, MenuCategory, MenuItem, MenuPayload } from "../types/menu";
+import { getLocalizedText, getUiMessage, getUiTemplate, isRtlLocale } from "../utils/i18n";
 
-const ADMIN_MENU_SLUG = "yossis-hummus";
+type AdminMenuPageProps = {
+  restaurantSlug?: string;
+};
 
-export default function AdminMenuPage() {
+export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuPageProps) {
   const [menuPayload, setMenuPayload] = useState<MenuPayload | null>(null);
   const [isMenuLoading, setIsMenuLoading] = useState(true);
   const [menuError, setMenuError] = useState<string | null>(null);
@@ -56,7 +58,7 @@ export default function AdminMenuPage() {
   );
 
   const refreshMenuForDrawer = useCallback(async () => {
-    const data = await fetchMenuBySlug(ADMIN_MENU_SLUG);
+    const data = await fetchMenuBySlug(restaurantSlug);
     setMenuPayload(data);
     setEditingItem((prev) => {
       if (!prev) {
@@ -76,7 +78,7 @@ export default function AdminMenuPage() {
       }
       return data.menu.categories.find((c) => c.id === prev.id) ?? prev;
     });
-  }, []);
+  }, [restaurantSlug]);
 
   const isRtl = isRtlLocale(locale);
 
@@ -88,7 +90,7 @@ export default function AdminMenuPage() {
         setIsMenuLoading(true);
         setMenuError(null);
 
-        const data = await fetchMenuBySlug(ADMIN_MENU_SLUG);
+        const data = await fetchMenuBySlug(restaurantSlug);
 
         if (!isMounted) {
           return;
@@ -123,7 +125,7 @@ export default function AdminMenuPage() {
     };
     // setLocale from Zustand is stable for this one-time bootstrap load.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [restaurantSlug]);
 
   useEffect(() => {
     const sections = categories
@@ -288,6 +290,7 @@ export default function AdminMenuPage() {
 
       try {
         const created = await createCategory({
+          restaurantSlug,
           name: payload.name,
           locale: payload.locale,
         });
@@ -340,7 +343,7 @@ export default function AdminMenuPage() {
     });
 
     try {
-      const updated = await updateCategory(categoryId, payload.locale, { name: payload.name });
+      const updated = await updateCategory(restaurantSlug, categoryId, payload.locale, { name: payload.name });
       setMenuPayload((prev) => {
         if (!prev) {
           return prev;
@@ -430,7 +433,7 @@ export default function AdminMenuPage() {
       return remaining[0]?.id ?? "";
     });
 
-    void deleteCategory(removedId).catch((error) => {
+    void deleteCategory(restaurantSlug, removedId).catch((error) => {
       setMenuPayload(previousPayload);
       void alert({
         title: getUiMessage("dialogErrorTitle", locale),
@@ -469,6 +472,7 @@ export default function AdminMenuPage() {
 
     try {
       await reorderCategoryItems(
+        restaurantSlug,
         categoryId,
         withSort.map((item, index) => ({ id: item.id, sort_order: index })),
       );
@@ -510,7 +514,7 @@ export default function AdminMenuPage() {
       });
 
       try {
-        const created = await createMenuItem(targetCategoryId, updatedData);
+        const created = await createMenuItem(restaurantSlug, targetCategoryId, updatedData);
         setMenuPayload((prev) => {
           if (!prev) {
             return prev;
@@ -572,7 +576,7 @@ export default function AdminMenuPage() {
     });
 
     try {
-      await updateMenuItem(itemId, updatedData);
+      await updateMenuItem(restaurantSlug, itemId, updatedData);
       handleCloseDrawer();
     } catch (error) {
       setMenuPayload(previousPayload);
@@ -625,7 +629,7 @@ export default function AdminMenuPage() {
       },
     });
 
-    void deleteMenuItem(item.id).catch((error) => {
+    void deleteMenuItem(restaurantSlug, item.id).catch((error) => {
       setMenuPayload(previousPayload);
       void alert({
         title: getUiMessage("dialogErrorTitle", locale),
@@ -666,7 +670,7 @@ export default function AdminMenuPage() {
       };
     });
 
-    void updateItemAvailability(item.id, newStatus).catch((error) => {
+    void updateItemAvailability(restaurantSlug, item.id, newStatus).catch((error) => {
       setMenuPayload(previousPayload);
       void alert({
         title: getUiMessage("dialogErrorTitle", locale),
@@ -917,6 +921,7 @@ export default function AdminMenuPage() {
       />
 
       <EditItemDrawer
+        restaurantSlug={restaurantSlug}
         item={editingItem}
         categoryId={addingToCategory}
         restaurantDefaultLocale={menuPayload?.restaurant.default_locale ?? "en"}
@@ -927,5 +932,20 @@ export default function AdminMenuPage() {
         onSave={handleSaveItem}
       />
     </div>
+  );
+}
+
+export default function LegacyAdminRoutePage() {
+  return (
+    <main className="flex min-h-[100dvh] items-center justify-center bg-zinc-50 px-6">
+      <div className="w-full max-w-lg rounded-2xl border border-zinc-200 bg-white p-6 text-center shadow-sm">
+        <h1 className="text-lg font-bold text-zinc-900">Tenant Admin Route Required</h1>
+        <p className="mt-2 text-sm text-zinc-600">
+          Use
+          <span className="mx-1 rounded bg-zinc-100 px-1.5 py-0.5 font-mono">/{`{restaurant_slug}`}/admin</span>
+          to open a restaurant admin panel.
+        </p>
+      </div>
+    </main>
   );
 }

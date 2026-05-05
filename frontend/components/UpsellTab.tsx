@@ -7,6 +7,7 @@ import { createUpsellRule, deleteUpsellRule, updateUpsellRule } from "../lib/men
 import { getLocalizedText, getUiMessage } from "../utils/i18n";
 
 export type UpsellTabProps = {
+  restaurantSlug: string;
   triggerItemId: string;
   upsellRules: UpsellRule[];
   allMenuItems: MenuItem[];
@@ -16,6 +17,7 @@ export type UpsellTabProps = {
 };
 
 export default function UpsellTab({
+  restaurantSlug,
   triggerItemId,
   upsellRules,
   allMenuItems,
@@ -60,7 +62,7 @@ export default function UpsellTab({
 
     setIsAdding(true);
     try {
-      await createUpsellRule(triggerItemId, {
+      await createUpsellRule(restaurantSlug, triggerItemId, {
         offer_item_id: offerItemId,
         discount_price: price,
         custom_message: newMessage.trim() || undefined,
@@ -103,7 +105,7 @@ export default function UpsellTab({
 
     setIsSavingEdit(true);
     try {
-      await updateUpsellRule(editingRuleId, locale, {
+      await updateUpsellRule(restaurantSlug, editingRuleId, locale, {
         message: editMessageDraft,
       });
       cancelEdit();
@@ -140,7 +142,7 @@ export default function UpsellTab({
     }
 
     try {
-      await deleteUpsellRule(rule.id);
+      await deleteUpsellRule(restaurantSlug, rule.id);
       if (editingRuleId === rule.id) {
         cancelEdit();
       }

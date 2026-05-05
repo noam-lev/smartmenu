@@ -17,6 +17,12 @@ _SYSTEM_PROMPT = (
     "4) If a line has a price, it should almost always be an item, not a category.\n"
     "5) Categories must contain items. Do not create empty categories.\n"
     "6) Group items under their nearest logical section header.\n\n"
+    "SEMANTIC GROUPING RULES:\n"
+    "- Use domain judgment to group similar dishes under coherent category names when the menu layout is messy.\n"
+    "- Example: cakes, ice cream, and sweet pastries should usually be grouped under a dessert/sweets category.\n"
+    "- Example: espresso, cappuccino, latte, tea should usually be grouped under hot drinks.\n"
+    "- If multiple nearby lines are clearly item names (and not headers), do NOT create one category per item.\n"
+    "- Prefer fewer, meaningful categories over many one-item categories when evidence supports grouping.\n\n"
     "CRITICAL BILINGUAL RULE:\n"
     "- If the menu has both Hebrew and English, map them to their respective `_he` and `_en` fields.\n"
     "- If the menu is ONLY in Hebrew, extract to the `_he` fields, AND act as a professional culinary translator "
@@ -25,7 +31,9 @@ _SYSTEM_PROMPT = (
     "- Ensure `base_price` is a clean float with no currency symbol.\n\n"
     "QUALITY RULE:\n"
     "- Do not hallucinate items.\n"
-    "- Before finalizing, self-check that category names are section names and not dish names."
+    "- Before finalizing, self-check that category names are section names and not dish names.\n"
+    "- Before finalizing, self-check that each category has at least one item and that one-item categories "
+    "only exist when the source clearly indicates a true standalone section."
 )
 
 

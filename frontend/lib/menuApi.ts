@@ -14,13 +14,15 @@ export async function fetchMenuBySlug(slug: string): Promise<MenuPayload> {
 }
 
 export async function updateItemAvailability(
+  restaurantSlug: string,
   itemId: string,
   isAvailable: boolean,
 ): Promise<void> {
-  await updateMenuItem(itemId, { is_available: isAvailable });
+  await updateMenuItem(restaurantSlug, itemId, { is_available: isAvailable });
 }
 
 export async function updateMenuItem(
+  restaurantSlug: string,
   itemId: string,
   data: Partial<
     Pick<MenuItem, "name" | "description" | "base_price" | "translations" | "is_available">
@@ -44,13 +46,16 @@ export async function updateMenuItem(
     body.is_available = data.is_available;
   }
 
-  const response = await fetch(`${API_BASE_URL}/api/owner/items/${itemId}`, {
+  const response = await fetch(
+    `${API_BASE_URL}/api/owner/${encodeURIComponent(restaurantSlug)}/items/${encodeURIComponent(itemId)}`,
+    {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
-  });
+    },
+  );
 
   if (!response.ok) {
     throw new Error(`Failed to update item (${response.status})`);
@@ -58,6 +63,7 @@ export async function updateMenuItem(
 }
 
 export async function createMenuItem(
+  restaurantSlug: string,
   categoryId: string,
   data: Partial<MenuItem>,
 ): Promise<MenuItem> {
@@ -83,7 +89,7 @@ export async function createMenuItem(
   }
 
   const response = await fetch(
-    `${API_BASE_URL}/api/owner/categories/${encodeURIComponent(categoryId)}/items`,
+    `${API_BASE_URL}/api/owner/${encodeURIComponent(restaurantSlug)}/categories/${encodeURIComponent(categoryId)}/items`,
     {
       method: "POST",
       headers: {
@@ -105,10 +111,16 @@ export async function createMenuItem(
   return payload.item;
 }
 
-export async function deleteMenuItem(itemId: string): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/owner/items/${itemId}`, {
+export async function deleteMenuItem(
+  restaurantSlug: string,
+  itemId: string,
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/owner/${encodeURIComponent(restaurantSlug)}/items/${encodeURIComponent(itemId)}`,
+    {
     method: "DELETE",
-  });
+    },
+  );
 
   if (!response.ok) {
     throw new Error(`Failed to delete item (${response.status})`);
@@ -117,12 +129,13 @@ export async function deleteMenuItem(itemId: string): Promise<void> {
 
 /** Updates `translations[locale].custom_message` (and base `custom_message` when locale is the restaurant default). */
 export async function updateUpsellRule(
+  restaurantSlug: string,
   ruleId: string,
   locale: Locale,
   data: { message: string },
 ): Promise<void> {
   const response = await fetch(
-    `${API_BASE_URL}/api/owner/upsells/${encodeURIComponent(ruleId)}`,
+    `${API_BASE_URL}/api/owner/${encodeURIComponent(restaurantSlug)}/upsells/${encodeURIComponent(ruleId)}`,
     {
       method: "PATCH",
       headers: {
@@ -141,6 +154,7 @@ export async function updateUpsellRule(
 }
 
 export async function createUpsellRule(
+  restaurantSlug: string,
   triggerItemId: string,
   data: { offer_item_id: string; discount_price: number; custom_message?: string },
 ): Promise<void> {
@@ -153,7 +167,7 @@ export async function createUpsellRule(
   }
 
   const response = await fetch(
-    `${API_BASE_URL}/api/owner/items/${encodeURIComponent(triggerItemId)}/upsells`,
+    `${API_BASE_URL}/api/owner/${encodeURIComponent(restaurantSlug)}/items/${encodeURIComponent(triggerItemId)}/upsells`,
     {
       method: "POST",
       headers: {
@@ -168,9 +182,12 @@ export async function createUpsellRule(
   }
 }
 
-export async function deleteUpsellRule(ruleId: string): Promise<void> {
+export async function deleteUpsellRule(
+  restaurantSlug: string,
+  ruleId: string,
+): Promise<void> {
   const response = await fetch(
-    `${API_BASE_URL}/api/owner/upsells/${encodeURIComponent(ruleId)}`,
+    `${API_BASE_URL}/api/owner/${encodeURIComponent(restaurantSlug)}/upsells/${encodeURIComponent(ruleId)}`,
     {
       method: "DELETE",
     },
@@ -182,10 +199,13 @@ export async function deleteUpsellRule(ruleId: string): Promise<void> {
 }
 
 export async function createCategory(data: {
+  restaurantSlug: string;
   name: string;
   locale: Locale;
 }): Promise<MenuCategory> {
-  const response = await fetch(`${API_BASE_URL}/api/owner/categories`, {
+  const response = await fetch(
+    `${API_BASE_URL}/api/owner/${encodeURIComponent(data.restaurantSlug)}/categories`,
+    {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -194,7 +214,8 @@ export async function createCategory(data: {
       name: data.name.trim(),
       locale: data.locale,
     }),
-  });
+    },
+  );
 
   if (!response.ok) {
     throw new Error(`Failed to create category (${response.status})`);
@@ -217,12 +238,13 @@ export async function createCategory(data: {
 }
 
 export async function updateCategory(
+  restaurantSlug: string,
   categoryId: string,
   locale: Locale,
   data: { name: string },
 ): Promise<Pick<MenuCategory, "id" | "name" | "sort_order" | "translations">> {
   const response = await fetch(
-    `${API_BASE_URL}/api/owner/categories/${encodeURIComponent(categoryId)}`,
+    `${API_BASE_URL}/api/owner/${encodeURIComponent(restaurantSlug)}/categories/${encodeURIComponent(categoryId)}`,
     {
       method: "PATCH",
       headers: {
@@ -249,9 +271,12 @@ export async function updateCategory(
   return payload.category;
 }
 
-export async function deleteCategory(categoryId: string): Promise<void> {
+export async function deleteCategory(
+  restaurantSlug: string,
+  categoryId: string,
+): Promise<void> {
   const response = await fetch(
-    `${API_BASE_URL}/api/owner/categories/${encodeURIComponent(categoryId)}`,
+    `${API_BASE_URL}/api/owner/${encodeURIComponent(restaurantSlug)}/categories/${encodeURIComponent(categoryId)}`,
     {
       method: "DELETE",
     },
@@ -263,11 +288,12 @@ export async function deleteCategory(categoryId: string): Promise<void> {
 }
 
 export async function reorderCategoryItems(
+  restaurantSlug: string,
   categoryId: string,
   items: { id: string; sort_order: number }[],
 ): Promise<void> {
   const response = await fetch(
-    `${API_BASE_URL}/api/owner/categories/${encodeURIComponent(categoryId)}/items/reorder`,
+    `${API_BASE_URL}/api/owner/${encodeURIComponent(restaurantSlug)}/categories/${encodeURIComponent(categoryId)}/items/reorder`,
     {
       method: "PATCH",
       headers: {

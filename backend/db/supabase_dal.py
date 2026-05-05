@@ -785,7 +785,7 @@ class SupabaseDAL(MenuRepository):
         existing = (
             self._client.table("restaurants")
             .select("id")
-            .or_(f"id.eq.{restaurant_slug},slug.eq.{restaurant_slug}")
+            .eq("slug", restaurant_slug)
             .limit(1)
             .execute()
         )
@@ -793,13 +793,13 @@ class SupabaseDAL(MenuRepository):
             raise RuntimeError(f"Restaurant slug already exists: {restaurant_slug}")
 
         try:
-            self._insert_import_restaurant_row(restaurant_name, restaurant_slug)
+            restaurant_id = self._insert_import_restaurant_row(restaurant_name, restaurant_slug)
 
             menu_insert = (
                 self._client.table("menus")
                 .insert(
                     {
-                        "restaurant_id": restaurant_slug,
+                        "restaurant_id": restaurant_id,
                         "name": "Main Menu",
                         "is_active": True,
                         "translations": {},
@@ -875,7 +875,7 @@ class SupabaseDAL(MenuRepository):
                         self._client.table("menu_items")
                         .insert(
                             {
-                                "restaurant_id": restaurant_slug,
+                                "restaurant_id": restaurant_id,
                                 "menu_id": menu_id,
                                 "category_id": category_id,
                                 "name": item_name_he,
@@ -908,9 +908,8 @@ class SupabaseDAL(MenuRepository):
         except Exception as exc:
             raise RuntimeError(f"Restaurant import failed: {exc}") from exc
 
-    def _insert_import_restaurant_row(self, restaurant_name: str, restaurant_slug: str) -> None:
+    def _insert_import_restaurant_row(self, restaurant_name: str, restaurant_slug: str) -> str:
         base_row = {
-            "id": restaurant_slug,
             "name": restaurant_name,
             "slug": restaurant_slug,
             "is_active": True,
@@ -921,7 +920,7 @@ class SupabaseDAL(MenuRepository):
             },
         }
         try:
-            self._client.table("restaurants").insert(
+            response = self._client.table("restaurants").insert(
                 {
                     **base_row,
                     "default_locale": "he",
@@ -929,7 +928,15 @@ class SupabaseDAL(MenuRepository):
             ).execute()
         except Exception:
             # Some schemas store default_locale inside settings only.
-            self._client.table("restaurants").insert(base_row).execute()
+            response = self._client.table("restaurants").insert(base_row).execute()
+
+        inserted = _first(response.data or [])
+        if inserted is None:
+            raise RuntimeError("Failed to create restaurant.")
+        restaurant_id = str(inserted.get("id") or "")
+        if not restaurant_id:
+            raise RuntimeError("Created restaurant has no id.")
+        return restaurant_id
 
 
 def _build_menu_payload(

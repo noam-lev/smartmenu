@@ -27,6 +27,7 @@ export default function SuperadminOnboardingPage() {
   const [preview, setPreview] = useState<ParsedMenu | null>(null);
   const [restaurantName, setRestaurantName] = useState("");
   const [restaurantSlug, setRestaurantSlug] = useState("");
+  const [isSlugManuallyEdited, setIsSlugManuallyEdited] = useState(false);
 
   const totalItems = useMemo(() => {
     if (!preview) {
@@ -115,6 +116,7 @@ export default function SuperadminOnboardingPage() {
       setPreview(null);
       setRestaurantName("");
       setRestaurantSlug("");
+      setIsSlugManuallyEdited(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to import restaurant.");
     } finally {
@@ -140,7 +142,9 @@ export default function SuperadminOnboardingPage() {
               onChange={(event) => {
                 const next = event.target.value;
                 setRestaurantName(next);
-                setRestaurantSlug((prev) => (prev ? prev : toSlug(next)));
+                if (!isSlugManuallyEdited) {
+                  setRestaurantSlug(toSlug(next));
+                }
                 setSuccessMessage(null);
               }}
               placeholder="Hummus Yossi"
@@ -153,6 +157,7 @@ export default function SuperadminOnboardingPage() {
               type="text"
               value={restaurantSlug}
               onChange={(event) => {
+                setIsSlugManuallyEdited(true);
                 setRestaurantSlug(toSlug(event.target.value));
                 setSuccessMessage(null);
               }}
@@ -219,7 +224,7 @@ export default function SuperadminOnboardingPage() {
 
           {preview.categories.map((category, idx) => (
             <article
-              key={`${category.name_en}-${category.name_he}-${idx}`}
+              key={`category-${idx}`}
               className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm"
             >
               <header className="border-b border-zinc-200 bg-zinc-50 px-4 py-3 sm:px-5">
@@ -251,7 +256,7 @@ export default function SuperadminOnboardingPage() {
 
               <div className="divide-y divide-zinc-100">
                 {category.items.map((item, itemIdx) => (
-                  <div key={`${item.name_en}-${item.name_he}-${itemIdx}`} className="px-4 py-3 sm:px-5">
+                  <div key={`category-${idx}-item-${itemIdx}`} className="px-4 py-3 sm:px-5">
                     <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-start">
                       <div>
                         <input

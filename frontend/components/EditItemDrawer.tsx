@@ -37,6 +37,7 @@ function shouldCopyBaseFieldToOtherLocale(
 }
 
 export type EditItemDrawerProps = {
+  restaurantSlug: string;
   item: MenuItem | null;
   categoryId?: string | null;
   /** Canonical locale stored in DB `name` / `description`; other locales live under `translations`. */
@@ -136,6 +137,7 @@ function placeholderMenuItem(tempId: string, patch: Partial<MenuItem>): MenuItem
 export { placeholderMenuItem };
 
 export default function EditItemDrawer({
+  restaurantSlug,
   item,
   categoryId = null,
   restaurantDefaultLocale = "en",
@@ -377,6 +379,7 @@ export default function EditItemDrawer({
                 </p>
               ) : onRefreshMenu ? (
                 <UpsellTab
+                  restaurantSlug={restaurantSlug}
                   triggerItemId={item.id}
                   upsellRules={item.upsell_rules}
                   allMenuItems={allMenuItems}
