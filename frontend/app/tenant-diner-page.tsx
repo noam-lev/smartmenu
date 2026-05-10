@@ -26,6 +26,15 @@ export function TenantDinerPage({ restaurantSlug = "yossis-hummus" }: DinerPageP
         : [],
     [menuPayload],
   );
+  const itemAvailabilityById = useMemo(() => {
+    const map = new Map<string, boolean>();
+    for (const category of categories) {
+      for (const item of category.items) {
+        map.set(item.id, item.is_available);
+      }
+    }
+    return map;
+  }, [categories]);
 
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
@@ -204,7 +213,9 @@ export function TenantDinerPage({ restaurantSlug = "yossis-hummus" }: DinerPageP
 
     const { hasItemInCart } = useCartStore.getState();
     const nextRule = rules.find(
-      (rule) => !hasItemInCart(restaurantSlug, rule.offer_item_snapshot.id),
+      (rule) =>
+        itemAvailabilityById.get(rule.offer_item_snapshot.id) === true &&
+        !hasItemInCart(restaurantSlug, rule.offer_item_snapshot.id),
     );
 
     if (nextRule) {
@@ -218,15 +229,18 @@ export function TenantDinerPage({ restaurantSlug = "yossis-hummus" }: DinerPageP
 
   const handleUpsellDecision = (accept: boolean) => {
     if (accept && activeUpsellRule) {
-      addSelection({
-        restaurantSlug,
-        itemId: activeUpsellRule.offer_item_snapshot.id,
-        quantity: 1,
-        name: activeUpsellRule.offer_item_snapshot.name,
-        translations: activeUpsellRule.offer_item_snapshot.translations,
-        displayUnitPrice:
-          activeUpsellRule.discount_price ?? activeUpsellRule.offer_item_snapshot.price,
-      });
+      const offerItemId = activeUpsellRule.offer_item_snapshot.id;
+      if (itemAvailabilityById.get(offerItemId) === true) {
+        addSelection({
+          restaurantSlug,
+          itemId: offerItemId,
+          quantity: 1,
+          name: activeUpsellRule.offer_item_snapshot.name,
+          translations: activeUpsellRule.offer_item_snapshot.translations,
+          displayUnitPrice:
+            activeUpsellRule.discount_price ?? activeUpsellRule.offer_item_snapshot.price,
+        });
+      }
     }
 
     closeSheet();
