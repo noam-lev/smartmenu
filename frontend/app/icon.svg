@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none" role="img" aria-label="Tafrito">
+  <rect width="32" height="32" rx="7" fill="#F5F2EB"/>
+  <rect x="0.75" y="0.75" width="30.5" height="30.5" rx="6.25" stroke="#D7CCC8" stroke-width="1.5"/>
+  <path
+    d="M11.25 24.25V12.5M8.75 12.5h5M9.5 12.5V9.25M11.25 12.5V9.25M13 12.5V9.25"
+    stroke="#3E2723"
+    stroke-width="1.55"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <path
+    d="M20.25 8.25L13.75 23.75"
+    stroke="#3E2723"
+    stroke-width="1.65"
+    stroke-linecap="round"
+  />
+  <path
+    d="M20.25 8.25L22.25 10.75"
+    stroke="#3E2723"
+    stroke-width="1.55"
+    stroke-linecap="round"
+  />
+  <circle cx="16" cy="16.25" r="1.35" fill="#C62828"/>
+</svg>

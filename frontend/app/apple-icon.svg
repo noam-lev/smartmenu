@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" fill="none" role="img" aria-label="Tafrito">
+  <rect width="180" height="180" rx="36" fill="#F5F2EB"/>
+  <rect x="4" y="4" width="172" height="172" rx="32" stroke="#D7CCC8" stroke-width="4"/>
+  <path
+    d="M63.25 136.5V70.5M49.5 70.5h27.5M52.5 70.5V52.5M63.25 70.5V52.5M74 70.5V52.5"
+    stroke="#3E2723"
+    stroke-width="8.5"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <path
+    d="M114 46.5L77.5 133.5"
+    stroke="#3E2723"
+    stroke-width="9"
+    stroke-linecap="round"
+  />
+  <path
+    d="M114 46.5L125.5 60.5"
+    stroke="#3E2723"
+    stroke-width="8.5"
+    stroke-linecap="round"
+  />
+  <circle cx="90" cy="91.5" r="7.5" fill="#C62828"/>
+</svg>

@@ -28,6 +28,10 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Tafrito",
   description: "Digital menus built for restaurateurs.",
+  icons: {
+    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
+    apple: [{ url: "/apple-icon.svg", type: "image/svg+xml" }],
+  },
 };
 
 export default function RootLayout({
