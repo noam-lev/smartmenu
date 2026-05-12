@@ -3,25 +3,48 @@
       "name": "Yossi's Hummus",
       "slug": "yossis-hummus",
       "theme_color": "#FF5733",
-      "currency": "ILS"
+      "currency": "ILS",
+      "banner_image_url": "/yossis-hummus-banner.png",
+      "default_locale": "he",
+      "translations": {
+        "he": {
+          "name": "החומוס של יוסי"
+        }
+      }
     },
     "menu": {
       "id": "uuid-menu-123",
-      "name": "Lunch Menu",
-      "last_updated": "2026-04-16T12:00:00Z",
+      "name": "Full Menu",
+      "last_updated": "2026-04-19T08:00:00Z",
+      "translations": {
+        "he": {
+          "name": "תפריט מלא"
+        }
+      },
       "categories": [
         {
           "id": "uuid-cat-1",
           "name": "Starters",
           "sort_order": 1,
+          "translations": {
+            "he": {
+              "name": "מנות פתיחה"
+            }
+          },
           "items": [
             {
               "id": "uuid-item-1",
               "name": "Classic Chickpea Hummus",
-              "description": "House hummus with warm chickpeas, parsley, and premium olive oil",
+              "description": "Our signature house hummus, slow-cooked overnight using premium organic chickpeas sourced from local farms in the Galilee region. Served warm and silky-smooth, generously topped with whole tender chickpeas, freshly chopped parsley, a drizzle of high-quality cold-pressed extra-virgin olive oil, and a dash of smoky paprika. Pairs beautifully with our freshly baked pita bread or crispy laffa. A beloved classic that has been on our menu since day one — the dish that started it all.",
               "base_price": 32.00,
               "is_available": true,
               "image_url": "https://images.unsplash.com/photo-1577906096429-f73c2c312435?auto=format&fit=crop&q=80&w=200",
+              "translations": {
+                "he": {
+                  "name": "חומוס גרגרים קלאסי",
+                  "description": "החומוס הקלאסי שלנו, שמתבשל לאט לאורך הלילה מגרגרי חומוס איכותיים שנבחרים בקפידה מחוות מקומיות בגליל. מוגש חם, במרקם חלק ועשיר, עם תוספת נדיבה של גרגרים רכים, פטרוזיליה טרייה קצוצה, זילוף של שמן זית כתית מעולה איכותי ונגיעה עדינה של פפריקה מעושנת. משתלב נהדר עם פיתה טרייה שנאפית במקום או לאפה פריכה. זו המנה האהובה שמלווה אותנו מהיום הראשון - המנה שהתחילה את הכל."
+                }
+              },
               "tags": ["VEGAN", "GLUTEN_FREE"],
               "variants": [
                 {
@@ -33,19 +56,292 @@
               "upsell_rules": [
                 {
                   "offer_item_snapshot": {
-                    "id": "uuid-item-2",
+                    "id": "uuid-item-10",
                     "name": "Small Fries",
                     "image_url": "https://images.unsplash.com/photo-1630384060421-cb20d0e0649d?auto=format&fit=crop&q=80&w=200",
-                    "price": 15.00
+                    "price": 15.00,
+                    "translations": {
+                      "he": {
+                        "name": "צ'יפס קטן"
+                      }
+                    }
                   },
                   "custom_message": "Fancy adding small fries on the side for 12₪?",
-                  "discount_price": 12.00
+                  "discount_price": 12.00,
+                  "translations": {
+                    "he": {
+                      "custom_message": "בא לך להוסיף צ'יפס קטן בצד ב-12₪?"
+                    }
+                  }
                 }
               ]
+            },
+            {
+              "id": "uuid-item-2",
+              "name": "Falafel Plate",
+              "description": "6 pieces of our famous green falafel served with a side of tahini.",
+              "base_price": 24.00,
+              "is_available": true,
+              "image_url": "https://images.unsplash.com/photo-1619096252214-ef06c45683e3?auto=format&fit=crop&q=80&w=200",
+              "translations": {
+                "he": {
+                  "name": "מנת פלאפל",
+                  "description": "6 כדורי פלאפל ירוק מפורסם שלנו, מוגשים עם טחינה בצד."
+                }
+              },
+              "tags": ["VEGAN", "GLUTEN_FREE"],
+              "variants": [
+                {
+                  "id": "uuid-var-2",
+                  "name": "Regular",
+                  "price": 24.00
+                }
+              ],
+              "upsell_rules": []
+            },
+            {
+              "id": "uuid-item-3",
+              "name": "Stuffed Grape Leaves",
+              "description": "Hand-rolled grape leaves stuffed with rice, dill, and pine nuts, served cold with a lemon wedge.",
+              "base_price": 28.00,
+              "is_available": true,
+              "image_url": "https://images.unsplash.com/photo-1621852004158-f3bc188ace2d?auto=format&fit=crop&q=80&w=200",
+              "translations": {
+                "he": {
+                  "name": "עלי גפן ממולאים",
+                  "description": "עלי גפן מגולגלים ביד, ממולאים באורז, שמיר וצנוברים, מוגשים קרים עם לימון."
+                }
+              },
+              "tags": ["VEGAN"],
+              "variants": [
+                {
+                  "id": "uuid-var-3",
+                  "name": "Regular",
+                  "price": 28.00
+                }
+              ],
+              "upsell_rules": []
+            }
+          ]
+        },
+        {
+          "id": "uuid-cat-2",
+          "name": "Mains",
+          "sort_order": 2,
+          "translations": {
+            "he": {
+              "name": "עיקריות"
+            }
+          },
+          "items": [
+            {
+              "id": "uuid-item-4",
+              "name": "Hummus Shawarma",
+              "description": "A massive plate of our classic hummus topped with a generous portion of slow-roasted chicken and lamb shawarma, caramelized onions, toasted pine nuts, amba sauce, and fresh herbs. Served with 2 hot pitas.",
+              "base_price": 58.00,
+              "is_available": true,
+              "image_url": "https://images.unsplash.com/photo-1604908176997-125f25cc6f3d?auto=format&fit=crop&q=80&w=200",
+              "translations": {
+                "he": {
+                  "name": "חומוס שווארמה",
+                  "description": "צלחת נדיבה של חומוס קלאסי עם שווארמת עוף ובקר בצלייה איטית, בצל מקורמל, צנוברים, עמבה ועשבי תיבול. מוגש עם 2 פיתות חמות."
+                }
+              },
+              "tags": [],
+              "variants": [
+                {
+                  "id": "uuid-var-4",
+                  "name": "Regular",
+                  "price": 58.00
+                }
+              ],
+              "upsell_rules": [
+                {
+                  "offer_item_snapshot": {
+                    "id": "uuid-item-11",
+                    "name": "Lemonana",
+                    "image_url": "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?auto=format&fit=crop&q=80&w=200",
+                    "price": 14.00,
+                    "translations": {
+                      "he": {
+                        "name": "לימונענע"
+                      }
+                    }
+                  },
+                  "custom_message": "Wash it down with a refreshing Mint Lemonade for just 10₪!",
+                  "discount_price": 10.00,
+                  "translations": {
+                    "he": {
+                      "custom_message": "רוצה לרענן עם לימונענע רק ב-10₪?"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "id": "uuid-item-5",
+              "name": "Spicy Beef Kebab",
+              "description": "3 skewers of grilled ground beef mixed with hot green peppers and onions. Served on a grilled tomato.",
+              "base_price": 65.00,
+              "is_available": true,
+              "image_url": "https://images.unsplash.com/photo-1529193591184-b1d58069ecdd?auto=format&fit=crop&q=80&w=200",
+              "translations": {
+                "he": {
+                  "name": "קבב בקר חריף",
+                  "description": "3 שיפודי קבב בקר על הגריל עם פלפלים חריפים ובצל. מוגש על עגבנייה צלויה."
+                }
+              },
+              "tags": ["SPICY", "GLUTEN_FREE"],
+              "variants": [
+                {
+                  "id": "uuid-var-5",
+                  "name": "Regular",
+                  "price": 65.00
+                }
+              ],
+              "upsell_rules": []
+            }
+          ]
+        },
+        {
+          "id": "uuid-cat-3",
+          "name": "Salads",
+          "sort_order": 3,
+          "translations": {
+            "he": {
+              "name": "סלטים"
+            }
+          },
+          "items": [
+            {
+              "id": "uuid-item-6",
+              "name": "Fatoush Salad",
+              "description": "Fresh tomatoes, cucumbers, radishes, and mint, topped with crispy pita chips and sumac dressing.",
+              "base_price": 42.00,
+              "is_available": true,
+              "image_url": "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&q=80&w=200",
+              "translations": {
+                "he": {
+                  "name": "סלט פטוש",
+                  "description": "עגבניות, מלפפונים, צנוניות ונענע טרייה עם שבבי פיתה קריספיים ורוטב סומאק."
+                }
+              },
+              "tags": ["VEGAN"],
+              "variants": [
+                {
+                  "id": "uuid-var-6",
+                  "name": "Regular",
+                  "price": 42.00
+                }
+              ],
+              "upsell_rules": []
+            },
+            {
+              "id": "uuid-item-7",
+              "name": "Tabbouleh Salad",
+              "description": "Fresh parsley, tomato, bulgur, mint, and lemon-olive oil dressing.",
+              "base_price": 39.00,
+              "is_available": true,
+              "image_url": "",
+              "translations": {
+                "he": {
+                  "name": "סלט טאבולה",
+                  "description": "פטרוזיליה טרייה, עגבנייה, בורגול, נענע ורוטב לימון-שמן זית."
+                }
+              },
+              "tags": ["VEGAN"],
+              "variants": [
+                {
+                  "id": "uuid-var-7",
+                  "name": "Regular",
+                  "price": 39.00
+                }
+              ],
+              "upsell_rules": []
+            }
+          ]
+        },
+        {
+          "id": "uuid-cat-4",
+          "name": "Drinks",
+          "sort_order": 4,
+          "translations": {
+            "he": {
+              "name": "שתייה"
+            }
+          },
+          "items": [
+            {
+              "id": "uuid-item-10",
+              "name": "Coca Cola",
+              "description": "330ml Glass Bottle",
+              "base_price": 12.00,
+              "is_available": true,
+              "image_url": "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?auto=format&fit=crop&q=80&w=200",
+              "translations": {
+                "he": {
+                  "name": "קוקה קולה",
+                  "description": "בקבוק זכוכית 330 מ״ל"
+                }
+              },
+              "tags": [],
+              "variants": [
+                {
+                  "id": "uuid-var-10",
+                  "name": "Regular",
+                  "price": 12.00
+                }
+              ],
+              "upsell_rules": []
+            },
+            {
+              "id": "uuid-item-11",
+              "name": "Coke Zero",
+              "description": "330ml Glass Bottle",
+              "base_price": 12.00,
+              "is_available": false,
+              "image_url": "https://images.unsplash.com/photo-1624928197100-d2faec36b1ba?auto=format&fit=crop&q=80&w=200",
+              "translations": {
+                "he": {
+                  "name": "קוקה קולה זירו",
+                  "description": "בקבוק זכוכית 330 מ״ל"
+                }
+              },
+              "tags": [],
+              "variants": [
+                {
+                  "id": "uuid-var-11",
+                  "name": "Regular",
+                  "price": 12.00
+                }
+              ],
+              "upsell_rules": []
+            },
+            {
+              "id": "uuid-item-12",
+              "name": "Lemonana",
+              "description": "Freshly squeezed lemonade with crushed mint leaves.",
+              "base_price": 14.00,
+              "is_available": true,
+              "image_url": "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?auto=format&fit=crop&q=80&w=200",
+              "translations": {
+                "he": {
+                  "name": "לימונענע",
+                  "description": "לימונדה סחוטה טרייה עם עלי נענע כתושים."
+                }
+              },
+              "tags": ["VEGAN"],
+              "variants": [
+                {
+                  "id": "uuid-var-12",
+                  "name": "Regular",
+                  "price": 14.00
+                }
+              ],
+              "upsell_rules": []
             }
           ]
         }
       ]
     }
   }
-  
