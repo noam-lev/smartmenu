@@ -7,19 +7,29 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-class Settings:
-    def __init__(self) -> None:
-        self.app_name = os.getenv("APP_NAME", "SmartMenu API")
-        self.environment = os.getenv("ENVIRONMENT", "development")
-        self.supabase_url = os.getenv("SUPABASE_URL", "")
-        self.supabase_service_key = os.getenv("SUPABASE_SERVICE_KEY", "")
-        self.cors_origins = [
+_DEFAULT_CORS_ORIGINS = [
     "http://localhost:3000",
     "http://10.100.102.11:3000",
     "http://10.100.102.2:3000",
     "http://10.100.102.3:3000",
     "http://10.100.102.13:3000",
 ]
+
+
+def _parse_cors_origins() -> list[str]:
+    configured = os.getenv("CORS_ORIGINS", "")
+    if configured.strip():
+        return [origin.strip() for origin in configured.split(",") if origin.strip()]
+    return list(_DEFAULT_CORS_ORIGINS)
+
+
+class Settings:
+    def __init__(self) -> None:
+        self.app_name = os.getenv("APP_NAME", "SmartMenu API")
+        self.environment = os.getenv("ENVIRONMENT", "development")
+        self.supabase_url = os.getenv("SUPABASE_URL", "")
+        self.supabase_service_key = os.getenv("SUPABASE_SERVICE_KEY", "")
+        self.cors_origins = _parse_cors_origins()
 
     @property
     def is_supabase_configured(self) -> bool:
