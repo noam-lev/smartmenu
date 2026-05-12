@@ -30,6 +30,16 @@ class Settings:
         self.supabase_url = os.getenv("SUPABASE_URL", "")
         self.supabase_service_key = os.getenv("SUPABASE_SERVICE_KEY", "")
         self.cors_origins = _parse_cors_origins()
+        self.resend_api_key = os.getenv("RESEND_API_KEY", "")
+        self.lead_notification_email = os.getenv(
+            "LEAD_NOTIFICATION_EMAIL",
+            "noam@tafrito.com",
+        )
+        self.lead_from_email = os.getenv(
+            "LEAD_FROM_EMAIL",
+            "Tafrito Leads <onboarding@resend.dev>",
+        )
+        self.lead_reply_to_email = os.getenv("LEAD_REPLY_TO_EMAIL", "")
 
     @property
     def is_supabase_configured(self) -> bool:
