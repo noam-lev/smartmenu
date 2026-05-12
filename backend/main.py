@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from api.routes import diner, owner, superadmin
+from api.routes import diner, marketing, owner, superadmin
 from core.config import get_settings
 from core.exceptions import CustomHTTPException
 
@@ -82,6 +82,7 @@ async def health_check() -> dict[str, str]:
 
 
 app.include_router(diner.router, prefix="/api/diner")
+app.include_router(marketing.router, prefix="/api/marketing")
 app.include_router(owner.router, prefix="/api/owner")
 app.include_router(superadmin.router, prefix="/api/superadmin")
 

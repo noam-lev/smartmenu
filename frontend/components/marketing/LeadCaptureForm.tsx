@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { LandingLocale } from "./landingDictionary";
 import { landingCopy } from "./landingDictionary";
+import { submitLead } from "@/lib/marketingApi";
 
 type LeadCaptureFormProps = {
   locale: LandingLocale;
@@ -14,10 +15,35 @@ export function LeadCaptureForm({ locale }: LeadCaptureFormProps) {
   const [restaurant, setRestaurant] = useState("");
   const [phone, setPhone] = useState("");
   const [done, setDone] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setDone(true);
+    if (submitting) {
+      return;
+    }
+
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      await submitLead({
+        name: name.trim(),
+        restaurant: restaurant.trim(),
+        phone: phone.trim(),
+        locale,
+      });
+      setDone(true);
+    } catch (submitError) {
+      const message =
+        submitError instanceof Error && submitError.message
+          ? submitError.message
+          : t.leadError;
+      setError(message);
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   if (done) {
@@ -38,7 +64,8 @@ export function LeadCaptureForm({ locale }: LeadCaptureFormProps) {
           autoComplete="name"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="rounded-sm border border-ticket-rule bg-kraft py-2.5 ps-3 pe-3 text-sm text-espresso outline-none focus:border-terracotta/50"
+          disabled={submitting}
+          className="rounded-sm border border-ticket-rule bg-kraft py-2.5 ps-3 pe-3 text-sm text-espresso outline-none focus:border-espresso/40 disabled:opacity-60"
         />
       </label>
       <label className="flex flex-col gap-1.5 text-start">
@@ -49,7 +76,8 @@ export function LeadCaptureForm({ locale }: LeadCaptureFormProps) {
           autoComplete="organization"
           value={restaurant}
           onChange={(e) => setRestaurant(e.target.value)}
-          className="rounded-sm border border-ticket-rule bg-kraft py-2.5 ps-3 pe-3 text-sm text-espresso outline-none focus:border-terracotta/50"
+          disabled={submitting}
+          className="rounded-sm border border-ticket-rule bg-kraft py-2.5 ps-3 pe-3 text-sm text-espresso outline-none focus:border-espresso/40 disabled:opacity-60"
         />
       </label>
       <label className="flex flex-col gap-1.5 text-start">
@@ -62,14 +90,21 @@ export function LeadCaptureForm({ locale }: LeadCaptureFormProps) {
           inputMode="tel"
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
-          className="rounded-sm border border-ticket-rule bg-kraft py-2.5 ps-3 pe-3 text-sm text-espresso outline-none focus:border-terracotta/50"
+          disabled={submitting}
+          className="rounded-sm border border-ticket-rule bg-kraft py-2.5 ps-3 pe-3 text-sm text-espresso outline-none focus:border-espresso/40 disabled:opacity-60"
         />
       </label>
+      {error ? (
+        <p className="text-sm leading-snug text-terracotta" role="alert">
+          {error}
+        </p>
+      ) : null}
       <button
         type="submit"
-        className="mt-1 w-full border-b-4 border-[#8E1B1B] bg-terracotta py-3 font-sans text-sm font-semibold text-kraft transition active:translate-y-1"
+        disabled={submitting}
+        className="mt-1 w-full bg-fresh-green py-3 text-sm font-semibold tracking-tight text-kraft transition hover:bg-fresh-green/90 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-70"
       >
-        {t.leadSubmit}
+        {submitting ? t.leadSubmitting : t.leadSubmit}
       </button>
     </form>
   );
