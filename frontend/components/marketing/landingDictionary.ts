@@ -10,9 +10,15 @@ export const landingCopy = {
     heroSubtitle:
       "הפכו את מה שכבר יש לכם לחוויית הזמנה ניידת, קריאה ומכבדת — עם מכירה נוספת שמרגישה טבעית, לא אגרסיבית.",
     heroCta: "בואו נתחיל לעבוד",
-    uploadPrompt: "גררו את התפריט לכאן",
-    uploadHint: "או לחצו לבחירת קובץ",
-    loadingTitle: "מכינים את התפריט שלכם...",
+    navCta: "התחל עכשיו",
+    demoStartPrompt: "לדמו — לחצו כאן",
+    demoStartHint: "",
+    demoLoadingSteps: [
+      "מצלמים את התפריט שלכם...",
+      "מכינים את התפריט שלכם...",
+      "מזהים מנות ומחירים...",
+      "מסדרים קטגוריות...",
+    ],
     featuresTitle: "למה Tafrito?",
     feature1Title: "מכירה נוספת בלי ללחוץ",
     feature1Body:
@@ -86,9 +92,15 @@ export const landingCopy = {
     heroSubtitle:
       "Turn what you already have into a respectful mobile ordering experience — with upsells that feel natural, not pushy.",
     heroCta: "Start working",
-    uploadPrompt: "Drag your menu here",
-    uploadHint: "Or tap to choose a file",
-    loadingTitle: "Brewing your menu...",
+    navCta: "Start now",
+    demoStartPrompt: "For demo, tap here",
+    demoStartHint: "No real file upload",
+    demoLoadingSteps: [
+      "Taking a picture of your menu...",
+      "Brewing your menu...",
+      "Reading dishes and prices...",
+      "Organizing categories...",
+    ],
     featuresTitle: "Why Tafrito?",
     feature1Title: "Upsells without hovering",
     feature1Body:

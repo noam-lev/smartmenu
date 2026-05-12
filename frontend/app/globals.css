@@ -12,6 +12,20 @@ body {
   color: var(--foreground);
 }
 
+@keyframes hero-phone-float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(var(--hero-phone-tilt, -8deg));
+  }
+  50% {
+    transform: translateY(var(--hero-phone-float-y, -14px)) rotate(var(--hero-phone-tilt, -8deg));
+  }
+}
+
+.hero-phone-float {
+  animation: hero-phone-float var(--hero-phone-float-duration, 5.5s) ease-in-out infinite;
+}
+
 @keyframes landing-dot-bounce {
   0%,
   80%,

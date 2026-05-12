@@ -38,7 +38,7 @@ export function LeadCaptureForm({ locale }: LeadCaptureFormProps) {
           autoComplete="name"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="rounded-sm border border-ticket-rule bg-kraft py-2.5 ps-3 pe-3 text-sm text-espresso outline-none focus:border-terracotta/50"
+          className="rounded-sm border border-ticket-rule bg-kraft py-2.5 ps-3 pe-3 text-sm text-espresso outline-none focus:border-espresso/40"
         />
       </label>
       <label className="flex flex-col gap-1.5 text-start">
@@ -49,7 +49,7 @@ export function LeadCaptureForm({ locale }: LeadCaptureFormProps) {
           autoComplete="organization"
           value={restaurant}
           onChange={(e) => setRestaurant(e.target.value)}
-          className="rounded-sm border border-ticket-rule bg-kraft py-2.5 ps-3 pe-3 text-sm text-espresso outline-none focus:border-terracotta/50"
+          className="rounded-sm border border-ticket-rule bg-kraft py-2.5 ps-3 pe-3 text-sm text-espresso outline-none focus:border-espresso/40"
         />
       </label>
       <label className="flex flex-col gap-1.5 text-start">
@@ -62,12 +62,12 @@ export function LeadCaptureForm({ locale }: LeadCaptureFormProps) {
           inputMode="tel"
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
-          className="rounded-sm border border-ticket-rule bg-kraft py-2.5 ps-3 pe-3 text-sm text-espresso outline-none focus:border-terracotta/50"
+          className="rounded-sm border border-ticket-rule bg-kraft py-2.5 ps-3 pe-3 text-sm text-espresso outline-none focus:border-espresso/40"
         />
       </label>
       <button
         type="submit"
-        className="mt-1 w-full border-b-4 border-[#8E1B1B] bg-terracotta py-3 font-sans text-sm font-semibold text-kraft transition active:translate-y-1"
+        className="mt-1 w-full bg-fresh-green py-3 text-sm font-semibold tracking-tight text-kraft transition hover:bg-fresh-green/90 active:translate-y-px"
       >
         {t.leadSubmit}
       </button>

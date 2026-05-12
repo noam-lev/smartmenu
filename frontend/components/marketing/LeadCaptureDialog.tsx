@@ -13,7 +13,6 @@ type LeadCaptureDialogProps = {
 
 export function LeadCaptureDialog({ open, onClose, locale }: LeadCaptureDialogProps) {
   const t = landingCopy[locale];
-  const serif = locale === "he" ? "font-serifHe" : "font-serif";
 
   return (
     <Modal
@@ -23,10 +22,10 @@ export function LeadCaptureDialog({ open, onClose, locale }: LeadCaptureDialogPr
       labelledBy="lead-modal-title"
     >
       <div className="text-start">
-        <h2 id="lead-modal-title" className={`${serif} text-xl font-black text-espresso`}>
+        <h2 id="lead-modal-title" className="text-xl font-bold tracking-tight text-espresso">
           {t.leadModalTitle}
         </h2>
-        <p className="mt-2 text-sm text-warm-brown">{t.leadModalSub}</p>
+        <p className="mt-2 text-sm leading-snug text-warm-brown">{t.leadModalSub}</p>
       </div>
       <div className="mt-5">
         <LeadCaptureForm locale={locale} />
