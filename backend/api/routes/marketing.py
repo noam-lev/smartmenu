@@ -7,7 +7,7 @@ import time
 from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Request, status
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from core.config import get_settings
 from services.lead_notification import send_lead_notification
@@ -49,7 +49,8 @@ class LeadSubmissionBody(BaseModel):
 
     name: str = Field(min_length=1, max_length=120)
     restaurant: str = Field(min_length=1, max_length=120)
-    phone: str = Field(min_length=5, max_length=40)
+    email: EmailStr
+    phone: str = Field(default="", max_length=40)
     locale: Literal["he", "en"] = "he"
 
 
@@ -71,6 +72,7 @@ async def submit_lead(request: Request, body: LeadSubmissionBody) -> dict[str, A
             settings,
             name=body.name,
             restaurant=body.restaurant,
+            email=str(body.email),
             phone=body.phone,
             locale=body.locale,
         )

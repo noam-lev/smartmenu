@@ -6,7 +6,8 @@ const API_BASE_URL =
 export type LeadSubmissionPayload = {
   name: string;
   restaurant: string;
-  phone: string;
+  email: string;
+  phone?: string;
   locale: LandingLocale;
 };
 

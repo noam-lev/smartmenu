@@ -17,16 +17,21 @@ def _format_lead_email(
     *,
     name: str,
     restaurant: str,
+    email: str,
     phone: str,
     locale: str,
 ) -> tuple[str, str, str]:
+    phone_line_he = f"טלפון: {phone}\n" if phone.strip() else ""
+    phone_line_en = f"Phone: {phone}\n" if phone.strip() else ""
+
     if locale == "he":
         subject = f"פנייה חדשה מ-{name} ({restaurant})"
         text = (
             "פנייה חדשה מהדף הנחיתה של Tafrito\n\n"
             f"שם: {name}\n"
             f"מסעדה: {restaurant}\n"
-            f"טלפון: {phone}\n"
+            f"אימייל: {email}\n"
+            f"{phone_line_he}"
             f"שפה: {locale}\n"
         )
     else:
@@ -35,13 +40,15 @@ def _format_lead_email(
             "New landing-page lead for Tafrito\n\n"
             f"Name: {name}\n"
             f"Restaurant: {restaurant}\n"
-            f"Phone: {phone}\n"
+            f"Email: {email}\n"
+            f"{phone_line_en}"
             f"Locale: {locale}\n"
         )
 
+    phone_html = f"<br/>Phone: {phone}" if phone.strip() else ""
     html = (
         "<p><strong>New landing-page lead for Tafrito</strong></p>"
-        f"<p>Name: {name}<br/>Restaurant: {restaurant}<br/>Phone: {phone}<br/>Locale: {locale}</p>"
+        f"<p>Name: {name}<br/>Restaurant: {restaurant}<br/>Email: {email}{phone_html}<br/>Locale: {locale}</p>"
     )
     return subject, text, html
 
@@ -51,6 +58,7 @@ def send_lead_notification(
     *,
     name: str,
     restaurant: str,
+    email: str,
     phone: str,
     locale: str,
 ) -> None:
@@ -60,16 +68,19 @@ def send_lead_notification(
     subject, text, html = _format_lead_email(
         name=name,
         restaurant=restaurant,
+        email=email,
         phone=phone,
         locale=locale,
     )
+    reply_to = (settings.lead_reply_to_email or "").strip() or email
+
     payload: dict[str, Any] = {
         "from": settings.lead_from_email,
         "to": [settings.lead_notification_email],
         "subject": subject,
         "text": text,
         "html": html,
-        "reply_to": settings.lead_reply_to_email or None,
+        "reply_to": reply_to,
     }
     payload = {key: value for key, value in payload.items() if value is not None}
 
@@ -79,6 +90,8 @@ def send_lead_notification(
         headers={
             "Authorization": f"Bearer {settings.resend_api_key}",
             "Content-Type": "application/json",
+            # Resend rejects requests without User-Agent (403, error code 1010).
+            "User-Agent": "SmartMenu-Backend/1.0 (lead-notification)",
         },
         method="POST",
     )
