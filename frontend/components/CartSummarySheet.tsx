@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect } from "react";
 import type { CartItem } from "../store/cartStore";
 import type { Locale } from "../types/menu";
 import { useDraggableSheet } from "../hooks/useDraggableSheet";
+import { useLockBodyScroll } from "../hooks/useLockBodyScroll";
 import { formatILSCurrency } from "../utils/currency";
 import { getLocalizedText } from "../utils/i18n";
 
@@ -40,19 +40,7 @@ export default function CartSummarySheet({
   const { sheetOffsetY, sheetDragging, dragHandlers } = useDraggableSheet({
     onDismiss: onClose,
   });
-
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [isOpen]);
+  useLockBodyScroll(isOpen);
 
   if (!isOpen) {
     return null;

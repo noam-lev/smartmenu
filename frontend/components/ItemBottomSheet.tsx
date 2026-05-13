@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { Locale, MenuItem, UpsellRule } from "../types/menu";
 import { useDraggableSheet } from "../hooks/useDraggableSheet";
+import { useLockBodyScroll } from "../hooks/useLockBodyScroll";
 import { formatILSCurrency } from "../utils/currency";
 import { getLocalizedText } from "../utils/i18n";
 import { hasRenderableImage } from "../utils/media";
@@ -42,6 +43,7 @@ export default function ItemBottomSheet({
   const { sheetOffsetY, sheetDragging, dragHandlers } = useDraggableSheet({
     onDismiss: onClose,
   });
+  useLockBodyScroll(Boolean(selectedItem));
 
   if (!selectedItem) {
     return null;

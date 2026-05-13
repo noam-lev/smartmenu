@@ -13,6 +13,7 @@ export function LeadCaptureForm({ locale }: LeadCaptureFormProps) {
   const t = landingCopy[locale];
   const [name, setName] = useState("");
   const [restaurant, setRestaurant] = useState("");
+  const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [done, setDone] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -31,7 +32,8 @@ export function LeadCaptureForm({ locale }: LeadCaptureFormProps) {
       await submitLead({
         name: name.trim(),
         restaurant: restaurant.trim(),
-        phone: phone.trim(),
+        email: email.trim(),
+        phone: phone.trim() || undefined,
         locale,
       });
       setDone(true);
@@ -81,9 +83,22 @@ export function LeadCaptureForm({ locale }: LeadCaptureFormProps) {
         />
       </label>
       <label className="flex flex-col gap-1.5 text-start">
-        <span className="text-xs font-medium text-warm-brown">{t.leadPhone}</span>
+        <span className="text-xs font-medium text-warm-brown">{t.leadEmail}</span>
         <input
           required
+          name="email"
+          type="email"
+          autoComplete="email"
+          inputMode="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          disabled={submitting}
+          className="rounded-sm border border-ticket-rule bg-kraft py-2.5 ps-3 pe-3 text-sm text-espresso outline-none focus:border-espresso/40 disabled:opacity-60"
+        />
+      </label>
+      <label className="flex flex-col gap-1.5 text-start">
+        <span className="text-xs font-medium text-warm-brown">{t.leadPhone}</span>
+        <input
           name="phone"
           type="tel"
           autoComplete="tel"
