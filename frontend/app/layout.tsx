@@ -20,6 +20,7 @@ export const metadata: Metadata = {
     icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
     apple: [{ url: "/apple-icon.svg", type: "image/svg+xml" }],
   },
+  robots: { index: false, follow: false },
 };
 
 export default function RootLayout({
