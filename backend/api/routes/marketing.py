@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from core.config import get_settings
-from services.lead_notification import send_lead_notification
+from services.lead_notification import send_lead_notification, send_welcome_email_safe
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +82,13 @@ async def submit_lead(request: Request, body: LeadSubmissionBody) -> dict[str, A
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="We could not send your request right now. Please try again.",
         ) from exc
+
+    send_welcome_email_safe(
+        settings,
+        to_email=str(body.email),
+        name=body.name,
+        locale=body.locale,
+    )
 
     _record_lead_submission(client_ip)
     return {"ok": True}

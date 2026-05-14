@@ -40,6 +40,7 @@ class Settings:
             "Tafrito Leads <onboarding@resend.dev>",
         )
         self.lead_reply_to_email = os.getenv("LEAD_REPLY_TO_EMAIL", "")
+        self.lead_site_url = os.getenv("LEAD_SITE_URL", "https://tafrito.com")
 
     @property
     def is_supabase_configured(self) -> bool:
