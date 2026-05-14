@@ -164,6 +164,7 @@ These updates are in the repo so future work can assume this behavior without re
 **Operational updates**
 
 - **Backend log timestamps:** Uvicorn log format now includes timestamps for error/access logs in app startup config and in `backend/uvicorn_log_config.json` for CLI launches (`uvicorn ... --log-config ...`).
+- **Search indexing (soft launch):** The Next.js root `app/layout.tsx` sets `metadata.robots` to `noindex, nofollow` (no separate `robots.txt`). In the future we will want to allow the site to be indexed by search engines; before changing that, **ask the user** whether we are ready to enable indexing (and coordinate domain / Search Console if needed).
 
 ## 8. Visual & UX Architecture (The "Wolt-Style" Experience)
 To ensure all frontend components align with the overall user experience, here is the mental model for the diner's UI:
