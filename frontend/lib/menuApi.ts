@@ -1,7 +1,32 @@
 import type { Locale, MenuCategory, MenuItem, MenuPayload } from "../types/menu";
+import { createClient as createSupabaseBrowserClient } from "../utils/supabase/client";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+let supabaseClient: ReturnType<typeof createSupabaseBrowserClient> | null = null;
+
+function getSupabaseClient() {
+  if (!supabaseClient) {
+    supabaseClient = createSupabaseBrowserClient();
+  }
+  return supabaseClient;
+}
+
+async function getOwnerAuthHeaders(includeJsonContentType = true): Promise<HeadersInit> {
+  const supabase = getSupabaseClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const accessToken = session?.access_token;
+  if (!accessToken) {
+    throw new Error("Authentication required. Please log in.");
+  }
+
+  return {
+    ...(includeJsonContentType ? { "Content-Type": "application/json" } : {}),
+    Authorization: `Bearer ${accessToken}`,
+  };
+}
 
 export async function fetchMenuBySlug(slug: string): Promise<MenuPayload> {
   const response = await fetch(`${API_BASE_URL}/api/diner/menus/${slug}`);
@@ -56,9 +81,7 @@ export async function updateMenuItem(
     `${API_BASE_URL}/api/owner/${encodeURIComponent(restaurantSlug)}/items/${encodeURIComponent(itemId)}`,
     {
     method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: await getOwnerAuthHeaders(true),
     body: JSON.stringify(body),
     },
   );
@@ -79,6 +102,7 @@ export async function uploadOwnerImage(
     `${API_BASE_URL}/api/owner/${encodeURIComponent(restaurantSlug)}/upload-image`,
     {
       method: "POST",
+      headers: await getOwnerAuthHeaders(false),
       body: form,
     },
   );
@@ -103,9 +127,7 @@ export async function deleteOwnerImage(
     `${API_BASE_URL}/api/owner/${encodeURIComponent(restaurantSlug)}/delete-image`,
     {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: await getOwnerAuthHeaders(true),
       body: JSON.stringify({ file_url: fileUrl }),
     },
   );
@@ -123,9 +145,7 @@ export async function updateRestaurantBannerUrl(
     `${API_BASE_URL}/api/owner/${encodeURIComponent(restaurantSlug)}/restaurant`,
     {
       method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: await getOwnerAuthHeaders(true),
       body: JSON.stringify({ banner_url: bannerUrl }),
     },
   );
@@ -170,9 +190,7 @@ export async function createMenuItem(
     `${API_BASE_URL}/api/owner/${encodeURIComponent(restaurantSlug)}/categories/${encodeURIComponent(categoryId)}/items`,
     {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: await getOwnerAuthHeaders(true),
       body: JSON.stringify(body),
     },
   );
@@ -197,6 +215,7 @@ export async function deleteMenuItem(
     `${API_BASE_URL}/api/owner/${encodeURIComponent(restaurantSlug)}/items/${encodeURIComponent(itemId)}`,
     {
     method: "DELETE",
+    headers: await getOwnerAuthHeaders(false),
     },
   );
 
@@ -216,9 +235,7 @@ export async function updateUpsellRule(
     `${API_BASE_URL}/api/owner/${encodeURIComponent(restaurantSlug)}/upsells/${encodeURIComponent(ruleId)}`,
     {
       method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: await getOwnerAuthHeaders(true),
       body: JSON.stringify({
         message: data.message,
         locale,
@@ -248,9 +265,7 @@ export async function createUpsellRule(
     `${API_BASE_URL}/api/owner/${encodeURIComponent(restaurantSlug)}/items/${encodeURIComponent(triggerItemId)}/upsells`,
     {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: await getOwnerAuthHeaders(true),
       body: JSON.stringify(body),
     },
   );
@@ -268,6 +283,7 @@ export async function deleteUpsellRule(
     `${API_BASE_URL}/api/owner/${encodeURIComponent(restaurantSlug)}/upsells/${encodeURIComponent(ruleId)}`,
     {
       method: "DELETE",
+      headers: await getOwnerAuthHeaders(false),
     },
   );
 
@@ -285,9 +301,7 @@ export async function createCategory(data: {
     `${API_BASE_URL}/api/owner/${encodeURIComponent(data.restaurantSlug)}/categories`,
     {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: await getOwnerAuthHeaders(true),
     body: JSON.stringify({
       name: data.name.trim(),
       locale: data.locale,
@@ -325,9 +339,7 @@ export async function updateCategory(
     `${API_BASE_URL}/api/owner/${encodeURIComponent(restaurantSlug)}/categories/${encodeURIComponent(categoryId)}`,
     {
       method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: await getOwnerAuthHeaders(true),
       body: JSON.stringify({
         name: data.name.trim(),
         locale,
@@ -357,6 +369,7 @@ export async function deleteCategory(
     `${API_BASE_URL}/api/owner/${encodeURIComponent(restaurantSlug)}/categories/${encodeURIComponent(categoryId)}`,
     {
       method: "DELETE",
+      headers: await getOwnerAuthHeaders(false),
     },
   );
 
@@ -374,9 +387,7 @@ export async function reorderCategoryItems(
     `${API_BASE_URL}/api/owner/${encodeURIComponent(restaurantSlug)}/categories/${encodeURIComponent(categoryId)}/items/reorder`,
     {
       method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: await getOwnerAuthHeaders(true),
       body: JSON.stringify({
         items: items.map((row) => ({
           item_id: row.id,
@@ -399,9 +410,7 @@ export async function reorderCategories(
     `${API_BASE_URL}/api/owner/${encodeURIComponent(restaurantSlug)}/categories/reorder`,
     {
       method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: await getOwnerAuthHeaders(true),
       body: JSON.stringify({ category_ids: categoryIds }),
     },
   );

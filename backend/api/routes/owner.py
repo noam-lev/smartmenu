@@ -6,7 +6,13 @@ import uuid
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
-from api.dependencies import get_db, get_supabase_client
+from api.dependencies import (
+    RestaurantAccessContext,
+    get_current_user,
+    get_db,
+    get_supabase_client,
+    verify_restaurant_access,
+)
 from db.repository import MenuRepository
 from supabase import Client
 from models.schemas import (
@@ -121,19 +127,6 @@ class CategoryReorderPayload(BaseModel):
         return normalized
 
 
-async def _resolve_restaurant_uuid(
-    restaurant_slug: str,
-    db: MenuRepository,
-) -> str:
-    tenant_restaurant_uuid = await db.get_restaurant_id_by_slug(restaurant_slug)
-    if tenant_restaurant_uuid is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Restaurant not found.",
-        )
-    return tenant_restaurant_uuid
-
-
 def _extract_storage_path_from_public_url(file_url: str) -> str:
     parsed = urlparse(file_url)
     path = unquote(parsed.path or "")
@@ -148,7 +141,7 @@ def _extract_storage_path_from_public_url(file_url: str) -> str:
 
 
 @router.get("/ping")
-async def ping_owner() -> dict[str, str]:
+async def ping_owner(_user_id: str = Depends(get_current_user)) -> dict[str, str]:
     return {"status": "ok", "scope": "owner"}
 
 
@@ -157,12 +150,11 @@ async def ping_owner() -> dict[str, str]:
 async def create_category(
     restaurant_slug: str,
     payload: CategoryCreateRequest,
+    access: RestaurantAccessContext = Depends(verify_restaurant_access),
     db: MenuRepository = Depends(get_db),
 ) -> dict[str, object]:
-    tenant_restaurant_uuid = await _resolve_restaurant_uuid(restaurant_slug, db)
-
     created = await db.create_category(
-        tenant_restaurant_uuid,
+        access["restaurant_id"],
         payload.model_dump(),
     )
     if created is None:
@@ -180,13 +172,12 @@ async def patch_category(
     restaurant_slug: str,
     category_id: str,
     payload: CategoryUpdateRequest,
+    access: RestaurantAccessContext = Depends(verify_restaurant_access),
     db: MenuRepository = Depends(get_db),
 ) -> dict[str, object]:
-    tenant_restaurant_uuid = await _resolve_restaurant_uuid(restaurant_slug, db)
-
     updated = await db.update_category(
         category_id,
-        tenant_restaurant_uuid,
+        access["restaurant_id"],
         payload.locale,
         payload.name,
     )
@@ -204,11 +195,11 @@ async def patch_category(
 async def reorder_categories(
     restaurant_slug: str,
     payload: CategoryReorderPayload,
+    access: RestaurantAccessContext = Depends(verify_restaurant_access),
     db: MenuRepository = Depends(get_db),
 ) -> dict[str, object]:
-    tenant_restaurant_uuid = await _resolve_restaurant_uuid(restaurant_slug, db)
     ok = await db.update_categories_order(
-        tenant_restaurant_uuid,
+        access["restaurant_id"],
         payload.category_ids,
     )
     if not ok:
@@ -224,11 +215,10 @@ async def reorder_categories(
 async def delete_category_route(
     restaurant_slug: str,
     category_id: str,
+    access: RestaurantAccessContext = Depends(verify_restaurant_access),
     db: MenuRepository = Depends(get_db),
 ) -> dict[str, object]:
-    tenant_restaurant_uuid = await _resolve_restaurant_uuid(restaurant_slug, db)
-
-    deleted = await db.delete_category(category_id, tenant_restaurant_uuid)
+    deleted = await db.delete_category(category_id, access["restaurant_id"])
     if not deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -244,12 +234,11 @@ async def reorder_category_items(
     restaurant_slug: str,
     category_id: str,
     payload: ItemReorderRequest,
+    access: RestaurantAccessContext = Depends(verify_restaurant_access),
     db: MenuRepository = Depends(get_db),
 ) -> dict[str, object]:
-    tenant_restaurant_uuid = await _resolve_restaurant_uuid(restaurant_slug, db)
-
     body = [row.model_dump() for row in payload.items]
-    ok = await db.bulk_update_item_orders(category_id, tenant_restaurant_uuid, body)
+    ok = await db.bulk_update_item_orders(category_id, access["restaurant_id"], body)
     if not ok:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -265,9 +254,9 @@ async def create_menu_item(
     restaurant_slug: str,
     category_id: str,
     payload: MenuItemCreateRequest,
+    _access: RestaurantAccessContext = Depends(verify_restaurant_access),
     db: MenuRepository = Depends(get_db),
 ) -> dict[str, object]:
-    _ = await _resolve_restaurant_uuid(restaurant_slug, db)
     created = await db.create_menu_item(
         category_id,
         payload.model_dump(exclude_none=True),
@@ -288,6 +277,7 @@ async def patch_menu_item(
     restaurant_slug: str,
     item_id: str,
     payload: MenuItemPatchPayload,
+    access: RestaurantAccessContext = Depends(verify_restaurant_access),
     db: MenuRepository = Depends(get_db),
 ) -> dict[str, object]:
     patch = payload.model_dump(exclude_none=True)
@@ -297,8 +287,7 @@ async def patch_menu_item(
             detail="No fields to update.",
         )
 
-    tenant_restaurant_uuid = await _resolve_restaurant_uuid(restaurant_slug, db)
-    updated_item = await db.update_menu_item(item_id, patch, tenant_restaurant_uuid)
+    updated_item = await db.update_menu_item(item_id, patch, access["restaurant_id"])
 
     if updated_item is None:
         raise HTTPException(
@@ -313,11 +302,11 @@ async def patch_menu_item(
 async def patch_restaurant(
     restaurant_slug: str,
     payload: RestaurantPatchPayload,
+    access: RestaurantAccessContext = Depends(verify_restaurant_access),
     db: MenuRepository = Depends(get_db),
 ) -> dict[str, object]:
-    tenant_restaurant_uuid = await _resolve_restaurant_uuid(restaurant_slug, db)
     updated = await db.update_restaurant_banner_url(
-        tenant_restaurant_uuid,
+        access["restaurant_id"],
         payload.banner_url,
     )
     if updated is None:
@@ -333,11 +322,9 @@ async def patch_restaurant(
 async def upload_image(
     restaurant_slug: str,
     file: UploadFile = File(...),
-    db: MenuRepository = Depends(get_db),
+    _access: RestaurantAccessContext = Depends(verify_restaurant_access),
     supabase_client: Client = Depends(get_supabase_client),
 ) -> dict[str, str]:
-    _ = await _resolve_restaurant_uuid(restaurant_slug, db)
-
     content_type = (file.content_type or "").lower()
     if not content_type.startswith("image/"):
         raise HTTPException(
@@ -369,11 +356,9 @@ async def upload_image(
 async def delete_image(
     restaurant_slug: str,
     payload: DeleteImagePayload,
-    db: MenuRepository = Depends(get_db),
+    _access: RestaurantAccessContext = Depends(verify_restaurant_access),
     supabase_client: Client = Depends(get_supabase_client),
 ) -> dict[str, object]:
-    _ = await _resolve_restaurant_uuid(restaurant_slug, db)
-
     try:
         object_path = _extract_storage_path_from_public_url(payload.file_url)
     except ValueError as exc:
@@ -397,10 +382,10 @@ async def delete_image(
 async def delete_menu_item(
     restaurant_slug: str,
     item_id: str,
+    access: RestaurantAccessContext = Depends(verify_restaurant_access),
     db: MenuRepository = Depends(get_db),
 ) -> dict[str, object]:
-    tenant_restaurant_uuid = await _resolve_restaurant_uuid(restaurant_slug, db)
-    deleted = await db.delete_menu_item(item_id, tenant_restaurant_uuid)
+    deleted = await db.delete_menu_item(item_id, access["restaurant_id"])
 
     if not deleted:
         raise HTTPException(
@@ -417,13 +402,12 @@ async def patch_upsell_rule(
     restaurant_slug: str,
     rule_id: str,
     payload: UpsellRulePatchPayload,
+    access: RestaurantAccessContext = Depends(verify_restaurant_access),
     db: MenuRepository = Depends(get_db),
 ) -> dict[str, object]:
-    tenant_restaurant_uuid = await _resolve_restaurant_uuid(restaurant_slug, db)
-
     updated = await db.patch_upsell_rule_message(
         rule_id,
-        tenant_restaurant_uuid,
+        access["restaurant_id"],
         payload.locale,
         payload.message,
     )
@@ -442,12 +426,11 @@ async def create_item_upsell_rule(
     restaurant_slug: str,
     item_id: str,
     payload: UpsellRuleCreatePayload,
+    access: RestaurantAccessContext = Depends(verify_restaurant_access),
     db: MenuRepository = Depends(get_db),
 ) -> dict[str, object]:
-    tenant_restaurant_uuid = await _resolve_restaurant_uuid(restaurant_slug, db)
-
     body = payload.model_dump(exclude_none=True)
-    new_id = await db.create_upsell_rule(item_id, tenant_restaurant_uuid, body)
+    new_id = await db.create_upsell_rule(item_id, access["restaurant_id"], body)
     if new_id is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -462,11 +445,10 @@ async def create_item_upsell_rule(
 async def delete_upsell_rule_route(
     restaurant_slug: str,
     rule_id: str,
+    access: RestaurantAccessContext = Depends(verify_restaurant_access),
     db: MenuRepository = Depends(get_db),
 ) -> dict[str, object]:
-    tenant_restaurant_uuid = await _resolve_restaurant_uuid(restaurant_slug, db)
-
-    deleted = await db.delete_upsell_rule(rule_id, tenant_restaurant_uuid)
+    deleted = await db.delete_upsell_rule(rule_id, access["restaurant_id"])
     if not deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
