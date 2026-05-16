@@ -100,6 +100,24 @@ export const landingCopy = {
     testimonial3Quote: "האורחים מזמינים יותר בלי שאצטרך לדחוף",
     testimonial3Customer: "אורי שפירא",
     testimonial3Restaurant: "קפה נורדאו",
+    faqTitle: "שאלות ותשובות",
+    faq1Question: "מה זה בעצם תפריט דיגיטלי של Tafrito?",
+    faq1Answer:
+      "זה הרבה יותר מ-PDF. זהו תפריט דיגיטלי חכם שמותאם אישית לסמארטפון. הלקוחות סורקים קוד QR בשולחן (או פשוט נוגעים עם הטלפון בצ'יפ NFC שאנחנו מספקים לכם) ומגיעים לממשק מהיר ויוקרתי שבו הם רואים תמונות, תיאורים ואפילו המלצות אוטומטיות למנות נוספות.",
+    faq2Question: "איך יוצרים את התפריט? אני צריך להקליד הכל מחדש?",
+    faq2Answer:
+      "ממש לא. אתם רק שולחים לנו צילום של התפריט הקיים או קובץ PDF, והצוות שלנו מקים עבורכם את התפריט הדיגיטלי הראשון. משם, אתם יכולים לעדכן מחירים ומנות ב-3 לחיצות דרך פאנל הניהול הפשוט שלנו.",
+    faq3Question: "הלקוחות צריכים להוריד אפליקציה?",
+    faq3Answer:
+      "בשום אופן לא. אחד היתרונות של תפריט QR הוא הנגישות. הלקוח סורק את הקוד עם המצלמה של הטלפון והתפריט נפתח מיד בדפדפן. בלי הרשמה ובלי המתנה.",
+    faq4Question: "איך המערכת מגדילה את המכירה בשולחן (Upsell)?",
+    faq4Answer:
+      'המערכת שלנו יודעת להציע "תוספות חכמות". ברגע שלקוח בוחר מנה, המערכת מציעה לו תוספת שתייה או מנה ראשונה שמתאימה בדיוק למה שהוא הזמין. זה קורה בצורה אלגנטית ומגדיל את המכירה הממוצעת במינימום מאמץ של המלצר.',
+    faq5Question: "האם התפריט תומך גם באנגלית?",
+    faq5Answer:
+      "כן. אנחנו מציעים תפריט דיגיטלי דו-לשוני מלא. תיירים ולקוחות דוברי אנגלית יכולים להחליף שפה בלחיצת כפתור וליהנות מחוויית הזמנה ברורה ופשוטה.",
+    faq6Question: "כמה זמן לוקח להקים תפריט כזה?",
+    faq6Answer: "אנחנו מתחייבים להקמה תוך 24 שעות מרגע קבלת התפריט שלכם.",
   },
   en: {
     brand: "Tafrito",
@@ -200,5 +218,23 @@ export const landingCopy = {
     testimonial3Quote: "Guests order more without us having to push",
     testimonial3Customer: "Uri Shapira",
     testimonial3Restaurant: "Cafe Nordau",
+    faqTitle: "Questions & answers",
+    faq1Question: "What is Tafrito's digital menu, really?",
+    faq1Answer:
+      "It's much more than a PDF. It's a smart digital menu built for smartphones. Guests scan a QR code at the table (or tap their phone on the NFC chip we provide) and land on a fast, premium interface with photos, descriptions, and automatic suggestions for add-ons.",
+    faq2Question: "How do you build the menu? Do I have to type everything again?",
+    faq2Answer:
+      "Not at all. Send us a photo of your existing menu or a PDF, and our team sets up your first digital menu. From there, update prices and dishes in three taps through our simple admin panel.",
+    faq3Question: "Do guests need to download an app?",
+    faq3Answer:
+      "No. A QR menu is accessible by design. Guests scan with their phone camera and the menu opens instantly in the browser — no sign-up, no waiting.",
+    faq4Question: "How does the system increase table sales (upsell)?",
+    faq4Answer:
+      'Our system offers smart add-ons. When a guest picks a dish, we suggest a drink or starter that pairs with their order — elegantly, with minimal effort from your servers.',
+    faq5Question: "Does the menu support English too?",
+    faq5Answer:
+      "Yes. We offer a full bilingual digital menu. Tourists and English-speaking guests can switch language in one tap for a clear, simple ordering experience.",
+    faq6Question: "How long does setup take?",
+    faq6Answer: "We commit to going live within 24 hours of receiving your menu.",
   },
 } as const;

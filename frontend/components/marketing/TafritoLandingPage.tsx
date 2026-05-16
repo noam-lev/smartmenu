@@ -6,6 +6,7 @@ import type { LandingLocale } from "./landingDictionary";
 import { landingCopy } from "./landingDictionary";
 import { HeroMagicDemo } from "./HeroMagicDemo";
 import { LeadCaptureDialog } from "./LeadCaptureDialog";
+import { LandingFaq } from "./LandingFaq";
 
 /** Hero phone scene — edit these first when tuning the mockup. */
 const HERO_PHONE_SCENE = {
@@ -717,8 +718,21 @@ export function TafritoLandingPage() {
           </div>
         </section>
 
-        <section className="border-b border-espresso/10 bg-kraft py-24">
-          <div className="mx-auto max-w-[1200px] ps-8 pe-8 text-center">
+        <LandingFaq locale={locale} />
+
+        <div
+          className="flex items-center gap-6 bg-kraft px-8 py-10"
+          aria-hidden
+        >
+          <div className="h-px flex-1 border-t border-dashed border-espresso/20" />
+          <span className="shrink-0 font-mono text-[10px] font-bold tracking-[0.35em] text-warm-brown/45">
+            ···
+          </span>
+          <div className="h-px flex-1 border-t border-dashed border-espresso/20" />
+        </div>
+
+        <section className="pricing-tear-section pt-8">
+          <div className="pricing-tear-section__content mx-auto max-w-[1200px] ps-8 pe-8 text-center">
             <h2 className="mb-6 text-4xl font-black leading-tight text-espresso md:text-5xl">
               {t.pricingTitle}
             </h2>
