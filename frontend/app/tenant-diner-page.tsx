@@ -5,6 +5,7 @@ import CartSummarySheet from "../components/CartSummarySheet";
 import ItemBottomSheet from "../components/ItemBottomSheet";
 import MenuItemCard from "../components/MenuItemCard";
 import { fetchMenuBySlug } from "../lib/menuApi";
+import { getMenuLoadErrorMessage } from "../lib/menuFetchError";
 import { useCartStore } from "../store/cartStore";
 import { useUiStore } from "../store/uiStore";
 import type { MenuCategory, MenuItem, MenuPayload, UpsellRule } from "../types/menu";
@@ -98,9 +99,7 @@ export function TenantDinerPage({ restaurantSlug = "yossis-hummus" }: DinerPageP
         }
 
         const uiLocale = useUiStore.getState().locale;
-        setMenuError(
-          error instanceof Error ? error.message : getUiMessage("failedToLoadMenu", uiLocale),
-        );
+        setMenuError(getMenuLoadErrorMessage(error, uiLocale));
       } finally {
         if (isMounted) {
           setIsMenuLoading(false);

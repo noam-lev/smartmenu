@@ -59,9 +59,13 @@ async def custom_http_exception_handler(
     _request: Request,
     exc: CustomHTTPException,
 ) -> JSONResponse:
+    content: dict[str, str] = {"detail": exc.message}
+    code = getattr(exc, "code", None)
+    if isinstance(code, str) and code:
+        content["code"] = code
     return JSONResponse(
         status_code=exc.status_code,
-        content={"detail": exc.message},
+        content=content,
     )
 
 

@@ -16,6 +16,11 @@ class MenuRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    async def diagnose_menu_not_found_reason(self, slug: str) -> str:
+        """Return a machine-readable reason when get_fat_menu_by_slug would return None."""
+        raise NotImplementedError
+
+    @abstractmethod
     async def update_menu_item(
         self,
         item_id: str,
