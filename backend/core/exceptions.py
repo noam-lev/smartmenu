@@ -13,7 +13,13 @@ class CustomHTTPException(Exception):
 
 
 class MenuNotFoundError(CustomHTTPException):
-    def __init__(self, message: str = "Menu not found") -> None:
+    def __init__(
+        self,
+        message: str = "Menu not found",
+        *,
+        code: str = "menu_not_found",
+    ) -> None:
+        self.code = code
         super().__init__(
             message=message,
             status_code=HTTPStatus.NOT_FOUND,

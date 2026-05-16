@@ -1,4 +1,9 @@
 import type { Locale, MenuCategory, MenuItem, MenuPayload } from "../types/menu";
+import {
+  logMenuFetchFailure,
+  MenuFetchError,
+  parseApiErrorBody,
+} from "./menuFetchError";
 import { createClient as createSupabaseBrowserClient } from "../utils/supabase/client";
 
 const API_BASE_URL =
@@ -29,10 +34,51 @@ async function getOwnerAuthHeaders(includeJsonContentType = true): Promise<Heade
 }
 
 export async function fetchMenuBySlug(slug: string): Promise<MenuPayload> {
-  const response = await fetch(`${API_BASE_URL}/api/diner/menus/${slug}`);
+  const url = `${API_BASE_URL}/api/diner/menus/${encodeURIComponent(slug)}`;
+
+  let response: Response;
+  try {
+    response = await fetch(url);
+  } catch (cause) {
+    const error = new MenuFetchError({
+      kind: "network",
+      slug,
+      url,
+      message: cause instanceof Error ? cause.message : "Network request failed",
+      cause,
+    });
+    logMenuFetchFailure(error);
+    throw error;
+  }
 
   if (!response.ok) {
-    throw new Error(`Failed to load menu (${response.status})`);
+    const body = await parseApiErrorBody(response);
+
+    if (response.status === 404) {
+      const error = new MenuFetchError({
+        kind: "not_found",
+        slug,
+        url,
+        status: response.status,
+        code: body.code,
+        detail: body.detail,
+        message: body.detail ?? "Menu not found",
+      });
+      logMenuFetchFailure(error);
+      throw error;
+    }
+
+    const error = new MenuFetchError({
+      kind: "server",
+      slug,
+      url,
+      status: response.status,
+      code: body.code,
+      detail: body.detail,
+      message: body.detail ?? `Failed to load menu (${response.status})`,
+    });
+    logMenuFetchFailure(error);
+    throw error;
   }
 
   return response.json() as Promise<MenuPayload>;

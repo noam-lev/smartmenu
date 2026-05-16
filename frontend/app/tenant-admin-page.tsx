@@ -37,16 +37,17 @@ import {
   createMenuItem,
   deleteCategory,
   deleteMenuItem,
-  reorderCategories,
-  fetchMenuBySlug,
-  reorderCategoryItems,
   deleteOwnerImage,
-  updateRestaurantBannerUrl,
-  uploadOwnerImage,
+  fetchMenuBySlug,
+  reorderCategories,
+  reorderCategoryItems,
   updateCategory,
   updateItemAvailability,
   updateMenuItem,
+  updateRestaurantBannerUrl,
+  uploadOwnerImage,
 } from "../lib/menuApi";
+import { getMenuLoadErrorMessage } from "../lib/menuFetchError";
 import { useDialogs } from "../context/DialogProvider";
 import { useUiStore } from "../store/uiStore";
 import type { Locale, MenuCategory, MenuItem, MenuPayload } from "../types/menu";
@@ -176,9 +177,7 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
         }
 
         const uiLocale = useUiStore.getState().locale;
-        setMenuError(
-          error instanceof Error ? error.message : getUiMessage("failedToLoadMenu", uiLocale),
-        );
+        setMenuError(getMenuLoadErrorMessage(error, uiLocale));
       } finally {
         if (isMounted) {
           setIsMenuLoading(false);

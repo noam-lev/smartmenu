@@ -3,6 +3,12 @@ from typing import Any
 
 from supabase import Client
 
+from core.menu_lookup import (
+    MENU_NOT_PUBLISHABLE,
+    NO_ACTIVE_MENU,
+    RESTAURANT_INACTIVE,
+    RESTAURANT_NOT_FOUND,
+)
 from db.repository import MenuRepository
 from models.schemas import (
     CategoryResponse,
@@ -32,6 +38,9 @@ class SupabaseDAL(MenuRepository):
             return None
 
         return _build_menu_payload(restaurant=restaurant, menu=active_menu)
+
+    async def diagnose_menu_not_found_reason(self, slug: str) -> str:
+        return await asyncio.to_thread(self._diagnose_menu_not_found_reason_sync, slug)
 
     async def get_restaurant_id_by_slug(self, slug: str) -> str | None:
         return await asyncio.to_thread(self._fetch_restaurant_id_by_slug, slug)
@@ -213,6 +222,39 @@ class SupabaseDAL(MenuRepository):
             restaurant_id,
             banner_url,
         )
+
+    def _diagnose_menu_not_found_reason_sync(self, slug: str) -> str:
+        normalized = slug.lower()
+        response = (
+            self._client.table("restaurants")
+            .select("id,is_active")
+            .eq("slug", normalized)
+            .limit(1)
+            .execute()
+        )
+        restaurant = _first(response.data or [])
+        if restaurant is None:
+            return RESTAURANT_NOT_FOUND
+
+        if not bool(restaurant.get("is_active")):
+            return RESTAURANT_INACTIVE
+
+        restaurant_id = str(restaurant.get("id") or "")
+        if not restaurant_id:
+            return RESTAURANT_NOT_FOUND
+
+        menu_response = (
+            self._client.table("menus")
+            .select("id")
+            .eq("restaurant_id", restaurant_id)
+            .eq("is_active", True)
+            .limit(1)
+            .execute()
+        )
+        if _first(menu_response.data or []) is None:
+            return NO_ACTIVE_MENU
+
+        return MENU_NOT_PUBLISHABLE
 
     def _fetch_restaurant_id_by_slug(self, slug: str) -> str | None:
         response = (
