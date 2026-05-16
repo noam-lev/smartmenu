@@ -718,21 +718,11 @@ export function TafritoLandingPage() {
           </div>
         </section>
 
-        <LandingFaq locale={locale} />
+        <div className="landing-faq-pricing-stack">
+          <LandingFaq locale={locale} />
 
-        <div
-          className="flex items-center gap-6 bg-kraft px-8 py-10"
-          aria-hidden
-        >
-          <div className="h-px flex-1 border-t border-dashed border-espresso/20" />
-          <span className="shrink-0 font-mono text-[10px] font-bold tracking-[0.35em] text-warm-brown/45">
-            ···
-          </span>
-          <div className="h-px flex-1 border-t border-dashed border-espresso/20" />
-        </div>
-
-        <section className="pricing-tear-section pt-8">
-          <div className="pricing-tear-section__content mx-auto max-w-[1200px] ps-8 pe-8 text-center">
+          <section className="pricing-below-faq border-b border-espresso/10 pb-24">
+            <div className="mx-auto max-w-[1200px] ps-8 pe-8 text-center">
             <h2 className="mb-6 text-4xl font-black leading-tight text-espresso md:text-5xl">
               {t.pricingTitle}
             </h2>
@@ -775,7 +765,8 @@ export function TafritoLandingPage() {
               ))}
             </div>
           </div>
-        </section>
+          </section>
+        </div>
       </main>
 
       <footer className="bg-espresso py-12 text-center text-kraft/60">

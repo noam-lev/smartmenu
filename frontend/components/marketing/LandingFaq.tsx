@@ -25,10 +25,10 @@ export function LandingFaq({ locale }: LandingFaqProps) {
 
   return (
     <section
-      className="bg-parchment py-24"
+      className="faq-tear-section pt-24"
       aria-labelledby={`${sectionId}-title`}
     >
-      <div className="mx-auto max-w-[800px] ps-8 pe-8">
+      <div className="faq-tear-section__content mx-auto max-w-[800px] ps-8 pe-8">
         <h2
           id={`${sectionId}-title`}
           className="mb-10 text-center text-4xl font-black leading-tight tracking-tight text-espresso md:text-5xl"
