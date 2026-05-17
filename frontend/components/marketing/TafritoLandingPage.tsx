@@ -4,6 +4,7 @@ import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { Menu, Play, Star } from "lucide-react";
 import type { LandingLocale } from "./landingDictionary";
 import { landingCopy } from "./landingDictionary";
+import { getUiMessage, localeFlagSrc, otherLocale } from "../../utils/i18n";
 import { HeroMagicDemo } from "./HeroMagicDemo";
 import { LeadCaptureDialog } from "./LeadCaptureDialog";
 import { LandingFaq } from "./LandingFaq";
@@ -246,6 +247,22 @@ export function TafritoLandingPage() {
   const [leadOpen, setLeadOpen] = useState(false);
   const [headerBlend, setHeaderBlend] = useState(0);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [langMenuOpen, setLangMenuOpen] = useState(false);
+  const langMenuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!langMenuOpen) {
+      return;
+    }
+    const onDown = (event: MouseEvent) => {
+      if (!langMenuRef.current?.contains(event.target as Node)) {
+        setLangMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [langMenuOpen]);
+
   const heroPhoneAnchorRef = useRef<HTMLDivElement>(null);
   const howItWorksRef = useRef<HTMLElement>(null);
   const featuresCenterRef = useRef<HTMLDivElement>(null);
@@ -450,21 +467,51 @@ export function TafritoLandingPage() {
             >
               {t.navCta}
             </button>
-            <div className="hidden items-center gap-5 text-xs font-semibold uppercase tracking-tight md:flex">
+            <div className="relative hidden md:block" ref={langMenuRef}>
               <button
                 type="button"
-                onClick={() => setLocale("he")}
-                className={locale === "he" ? "text-espresso" : "text-warm-brown/60"}
+                onClick={() => setLangMenuOpen((open) => !open)}
+                aria-haspopup="menu"
+                aria-expanded={langMenuOpen}
+                aria-label={getUiMessage("selectLanguage", locale)}
+                className="inline-flex items-center gap-1 rounded-sm border border-espresso/15 bg-kraft/80 px-2 py-1.5"
               >
-                {t.langHe}
+                <img
+                  src={localeFlagSrc[locale]}
+                  alt=""
+                  className="h-4 w-[1.375rem] rounded-[2px] object-cover"
+                  aria-hidden
+                />
+                <span className="text-[10px] text-warm-brown/70" aria-hidden>
+                  ▾
+                </span>
               </button>
-              <button
-                type="button"
-                onClick={() => setLocale("en")}
-                className={locale === "en" ? "text-espresso" : "text-warm-brown/60"}
-              >
-                {t.langEn}
-              </button>
+              {langMenuOpen ? (
+                <div
+                  role="menu"
+                  className="absolute end-0 z-30 mt-2 rounded-sm border border-espresso/15 bg-kraft p-1 shadow-lg"
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    aria-label={getUiMessage(
+                      otherLocale(locale) === "he" ? "languageHebrew" : "languageEnglish",
+                      locale,
+                    )}
+                    onClick={() => {
+                      setLocale(otherLocale(locale));
+                      setLangMenuOpen(false);
+                    }}
+                    className="flex justify-center rounded-sm px-3 py-2 hover:bg-espresso/5"
+                  >
+                    <img
+                      src={localeFlagSrc[otherLocale(locale)]}
+                      alt=""
+                      className="h-4 w-[1.375rem] rounded-[2px] object-cover"
+                    />
+                  </button>
+                </div>
+              ) : null}
             </div>
             <button
               type="button"
@@ -484,28 +531,24 @@ export function TafritoLandingPage() {
               backgroundColor: `rgba(245, 242, 235, ${Math.max(headerBlend, 0.9)})`,
             }}
           >
-            <div className="flex items-center gap-6 text-sm font-semibold tracking-tight">
-              <button
-                type="button"
-                onClick={() => {
-                  setLocale("he");
-                  setMobileOpen(false);
-                }}
-                className={locale === "he" ? "text-espresso" : "text-warm-brown/60"}
-              >
-                {t.langHe}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setLocale("en");
-                  setMobileOpen(false);
-                }}
-                className={locale === "en" ? "text-espresso" : "text-warm-brown/60"}
-              >
-                {t.langEn}
-              </button>
-            </div>
+            <button
+              type="button"
+              aria-label={getUiMessage(
+                otherLocale(locale) === "he" ? "languageHebrew" : "languageEnglish",
+                locale,
+              )}
+              onClick={() => {
+                setLocale(otherLocale(locale));
+                setMobileOpen(false);
+              }}
+              className="inline-flex rounded-sm border border-espresso/15 p-1.5"
+            >
+              <img
+                src={localeFlagSrc[otherLocale(locale)]}
+                alt=""
+                className="h-4 w-[1.375rem] rounded-[2px] object-cover"
+              />
+            </button>
           </div>
         )}
       </header>
