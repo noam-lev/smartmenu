@@ -1,49 +1,70 @@
 # Frontend CR Notes (Self Review)
 
+## Implementation Status (May 2026)
+
+| Area | Status |
+|------|--------|
+| Live menu API (not mock) | ✅ `tenant-diner-page.tsx` → `fetchMenuBySlug` (`lib/menuApi.ts`) |
+| Smart upsell (skip in-cart offers) | ✅ `activeUpsellRule` + `hasItemInCart(restaurantSlug, itemId)` |
+| Cart totals precomputed | ✅ Per-restaurant buckets in `cartStore` |
+| Body scroll lock hook | ✅ `useLockBodyScroll` on item + cart sheets |
+| `100dvh` viewport | ✅ Root layout + diner page |
+| Sheet `overscroll-contain` | ✅ Item + cart sheets |
+| `image_url` nullable in types | ✅ `string \| null` + `hasRenderableImage()` |
+| Menu load errors | ✅ `MenuFetchError` + `getMenuLoadErrorMessage` |
+| Dialog a11y on admin modals/drawers | ✅ `Modal`, `EditItemDrawer`, `EditCategoryDrawer` (`role="dialog"`, Escape on modals) |
+| Diner bottom sheets a11y | ❌ Still open — see below |
+| `useMenuData` hook / split diner page | ❌ Still open |
+| `theme_color` in UI | ❌ Still hardcoded zinc palette |
+| Shared image-error state | ❌ Duplicated in `MenuItemCard` + `ItemBottomSheet` |
+| Zustand shallow selector | ❌ Multiple subscriptions in diner page |
+
+**File rename:** Diner UI moved from `app/page.tsx` → `app/tenant-diner-page.tsx` (root `/` is marketing). Admin: `tenant-admin-page.tsx`.
+
+---
+
 ## Repetitive Code
-- Image-failure state handling is duplicated in `MenuItemCard` and `ItemBottomSheet` (`failedImageUrls`, `onError` patterns).
-- Bottom sheet container/overlay styling and animation logic are duplicated between `ItemBottomSheet` and `CartSummarySheet` (even after drag hook extraction).
-- Label wiring in `page.tsx` repeats many `getUiMessage(...)` calls inline; easy to miss keys when adding new UI sections.
+- Image-failure state still duplicated in `MenuItemCard` and `ItemBottomSheet` (`failedImageUrls`, `onError`).
+- Bottom sheet overlay/panel/drag patterns shared between `ItemBottomSheet` and `CartSummarySheet` (partially unified via `useDraggableSheet` + `useLockBodyScroll`).
 
 ## Coupled Code / Change-Fragility
-- `page.tsx` is strongly coupled to menu shape + interaction orchestration + i18n + cart mutations + scroll observer + language menu UI in one file.
-- Theme behavior is hardcoded (`zinc-*`, fixed button colors); `restaurant.theme_color` is not used in component styling, making per-restaurant theming harder later.
-- Upsell logic currently assumes first rule (`selectedItem?.upsell_rules?.[0]`), coupling behavior to a single-rule model.
+- `tenant-diner-page.tsx` still orchestrates menu fetch, scroll spy, i18n, cart, sheets, and language menu in one file (~500 lines).
+- Theme: `restaurant.theme_color` in payload but styling uses fixed `zinc-*` / brand defaults.
+- ~~Upsell assumes first rule only~~ — **fixed** (first *applicable* rule not already in cart).
 
 ## Future Feature Risk
-- If restaurants need optional features (e.g., no upsell, no hero, custom section order), current page-level branching will grow quickly and become hard to maintain.
-- Static mock import in `page.tsx` (`mockMenu.json`) means data-source swap later affects core UI file rather than isolated data layer.
+- Per-restaurant feature flags (no upsell, custom sections) will add branching unless config-driven layout exists.
+- ~~Static `mockMenu.json` in diner page~~ — **fixed** for runtime; mock remains for `backend/seed.py` only.
 
-## React Performance / Zustand Anti-patterns
-- [Done] `totalItems` and `totalPrice` were moved to literal store state and are now recomputed on cart mutations (`addSelection`, `setItemQuantity`, `removeItem`) with persist migration support.
-- [Pending] Multiple independent store subscriptions in `page.tsx` can still increase re-render churn; one selector object + shallow equality would be cleaner.
-- [Pending] `cartItems` is still derived from `itemsByItemId` in `page.tsx`; acceptable now, but may become expensive with larger carts and additional derived views.
+## React Performance / Zustand
+- [Done] `totalItems` / `totalPrice` precomputed per `restaurantSlug` on mutations.
+- [Pending] Multiple `useCartStore` selectors in diner page; consider one shallow selector object.
+- [Pending] `cartItems` derived via `useMemo` from `itemsByItemId` — fine for MVP cart sizes.
 
 ## Accessibility (a11y)
-- `ItemBottomSheet` and `CartSummarySheet` are missing proper dialog semantics (`role="dialog"` + `aria-modal="true"` on the sheet panel).
-- No focus trap in dialogs; keyboard users can tab to background content while sheet is open.
-- No keyboard close support (`Escape`), and no focus return to trigger after closing.
-- Quantity/remove controls rely on symbols/text only (`+`, `-`, remove) without explicit `aria-label`s for robust SR behavior.
-- Language popover uses menu roles but lacks expected keyboard menu interactions (arrow keys/home/end/escape).
+- [Done] Admin: `Modal` / edit drawers — `role="dialog"`, `aria-modal`, Escape (modals).
+- [Pending] **Diner** `ItemBottomSheet` / `CartSummarySheet`: no `role="dialog"` / `aria-modal` on panel; no focus trap; no Escape; no focus return to trigger.
+- [Pending] Quantity +/- and remove in sheets lack dedicated `aria-label`s (labels passed for some copy only).
+- [Pending] Diner language popover — limited keyboard menu behavior.
 
 ## Mobile Safari / Web Edge Cases
-- [Done] Root viewport sizing was updated to `min-h-[100dvh]` in both `layout.tsx` and `page.tsx` to reduce iOS dynamic address bar jumps.
-- Body scroll locking with `document.body.style.overflow = "hidden"` can still allow rubber-band/overscroll artifacts on iOS.
-- [Done] Sheet panel containers now include `overscroll-contain`, and the cart sheet scrollable list also includes `overscroll-contain` to reduce scroll-chain/rubber-band edge behavior.
+- [Done] `min-h-[100dvh]`; `useLockBodyScroll`; `overscroll-contain` on sheets.
+- [Pending] Residual iOS rubber-band while sheets open (lock hook may need `position: fixed` body pattern).
 
-## TypeScript Strictness / Data Safety
-- `mockMenuRaw as MenuPayload` bypasses runtime validation; malformed backend payload later would fail at runtime.
-- `banner_image_url` is optional in type but used directly as `<img src=...>` without fallback guard.
-- `image_url` typed as required `string`, but real data already allows empty strings; type should better reflect nullable/optional reality.
-- Multiple fields are assumed present (`variants`, `upsell_rules`) based on mock contract rather than defensive parsing.
+## TypeScript / Data Safety
+- [Done] `image_url: string | null` on `MenuItem`.
+- [Done] Banner guarded with conditional render (`banner_url` truthy check).
+- [Pending] No runtime schema validation of API JSON (trust contract; `MenuFetchError` on HTTP failures only).
+- [Pending] Assumes `variants` / `upsell_rules` arrays always present from API.
 
 ## Backend Readiness / Separation of Concerns
-- High-value refactor candidate: extract data access + normalization into a `useMenuData` hook/service.
-- High-value refactor candidate: split `page.tsx` into smaller units (header/language, category nav, menu sections, cart CTA controller).
-- High-value refactor candidate: centralize UI copy mapping per screen to reduce repeated key lookups in render tree.
+- [Partial] Data access in `fetchMenuBySlug` + inline `useEffect` load — not a dedicated `useMenuData` hook.
+- [Pending] Split diner page (header, category nav, sections, cart CTA).
+- [Pending] Screen-level UI copy maps to reduce inline `getUiMessage` repetition.
 
-## Recommended First Changes (High Value, Low Risk)
-1. Add proper dialog a11y primitives (role/aria-modal/focus trap/escape/focus return).
-2. Introduce a menu data layer (`useMenuData`) so swapping mock JSON to API is trivial.
-3. Add theme token strategy based on `restaurant.theme_color` for future multi-restaurant branding.
-4. Improve Zustand selectors (single shallow selector + memoized/derived selector strategy). (Precomputed totals already completed.)
+## Recommended Next Changes (priority)
+1. Diner sheet a11y: `role="dialog"`, `aria-modal`, Escape, focus trap + return focus.
+2. Extract `useMenuData(slug)` (loading/error/payload) from `tenant-diner-page.tsx`.
+3. Shared `useImageLoadFailure()` for card + sheet images.
+4. CSS variables from `restaurant.theme_color` for primary actions.
+5. Single shallow Zustand selector for cart slice on diner page.

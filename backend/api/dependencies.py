@@ -6,6 +6,11 @@ from fastapi import Depends, Header, HTTPException, status
 from supabase import Client, create_client
 
 from core.config import get_settings
+from core.features import (
+    DEFAULT_PLAN_TIER,
+    DEFAULT_SUBSCRIPTION_STATUS,
+    plan_meets_feature,
+)
 from db.repository import MenuRepository
 from db.supabase_dal import SupabaseDAL
 
@@ -17,6 +22,8 @@ class RestaurantAccessContext(TypedDict):
     restaurant_slug: str
     user_id: str
     role: str | None
+    plan_tier: str
+    subscription_status: str
 
 
 @lru_cache
@@ -33,6 +40,47 @@ def get_supabase_client() -> Client:
 
 def get_db() -> MenuRepository:
     return SupabaseDAL(client=get_supabase_client())
+
+
+def _fetch_active_subscription(
+    supabase_client: Client,
+    restaurant_id: str,
+) -> tuple[str, str]:
+    """Return (plan_tier, subscription_status) for the restaurant's active subscription."""
+    response = (
+        supabase_client.table("subscriptions")
+        .select("plan_tier, status")
+        .eq("restaurant_id", restaurant_id)
+        .eq("status", "active")
+        .limit(1)
+        .execute()
+    )
+    row = (response.data or [None])[0]
+    if not row:
+        return DEFAULT_PLAN_TIER, DEFAULT_SUBSCRIPTION_STATUS
+
+    plan_tier = str(row.get("plan_tier") or DEFAULT_PLAN_TIER).strip().lower()
+    subscription_status = str(row.get("status") or DEFAULT_SUBSCRIPTION_STATUS).strip().lower()
+    return plan_tier, subscription_status
+
+
+def _build_access_context(
+    *,
+    restaurant_id: str,
+    restaurant_slug: str,
+    user_id: str,
+    role: str | None,
+    plan_tier: str,
+    subscription_status: str,
+) -> RestaurantAccessContext:
+    return RestaurantAccessContext(
+        restaurant_id=restaurant_id,
+        restaurant_slug=restaurant_slug,
+        user_id=user_id,
+        role=role,
+        plan_tier=plan_tier,
+        subscription_status=subscription_status,
+    )
 
 
 async def get_current_user(
@@ -101,6 +149,11 @@ async def verify_restaurant_access(
             detail="Restaurant not found.",
         )
 
+    plan_tier, subscription_status = _fetch_active_subscription(
+        supabase_client,
+        restaurant_id,
+    )
+
     profile_resp = (
         supabase_client.table("profiles")
         .select("role")
@@ -111,11 +164,13 @@ async def verify_restaurant_access(
     profile_row = (profile_resp.data or [None])[0]
     user_role = str((profile_row or {}).get("role") or "").strip().lower()
     if user_role == "superadmin":
-        return RestaurantAccessContext(
+        return _build_access_context(
             restaurant_id=restaurant_id,
             restaurant_slug=restaurant_slug,
             user_id=user_id,
             role="superadmin",
+            plan_tier=plan_tier,
+            subscription_status=subscription_status,
         )
 
     membership_resp = (
@@ -139,9 +194,48 @@ async def verify_restaurant_access(
             detail="You do not have access to this restaurant.",
         )
 
-    return RestaurantAccessContext(
+    return _build_access_context(
         restaurant_id=restaurant_id,
         restaurant_slug=restaurant_slug,
         user_id=user_id,
         role=membership.get("role"),
+        plan_tier=plan_tier,
+        subscription_status=subscription_status,
     )
+
+
+class FeatureAccessChecker:
+    """FastAPI dependency: Depends(verify_feature_access(\"feature_name\"))."""
+
+    def __init__(self, feature_name: str) -> None:
+        self.feature_name = feature_name
+
+    async def __call__(
+        self,
+        access: RestaurantAccessContext = Depends(verify_restaurant_access),
+    ) -> RestaurantAccessContext:
+        role = str(access.get("role") or "").strip().lower()
+        if role == "superadmin":
+            return access
+
+        plan_tier = str(access.get("plan_tier") or DEFAULT_PLAN_TIER)
+        try:
+            allowed = plan_meets_feature(plan_tier, self.feature_name)
+        except KeyError:
+            logger.error("Misconfigured feature flag: %s", self.feature_name)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Feature configuration error.",
+            ) from None
+
+        if not allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Upgrade your plan to access: {self.feature_name}",
+            )
+
+        return access
+
+
+def verify_feature_access(feature_name: str) -> FeatureAccessChecker:
+    return FeatureAccessChecker(feature_name)
