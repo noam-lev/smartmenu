@@ -1,9 +1,11 @@
 "use client";
 
+import { useRef } from "react";
 import type { CartItem } from "../store/cartStore";
 import type { Locale } from "../types/menu";
 import { useDraggableSheet } from "../hooks/useDraggableSheet";
 import { useLockBodyScroll } from "../hooks/useLockBodyScroll";
+import { useSheetDialogA11y } from "../hooks/useSheetDialogA11y";
 import { formatILSCurrency } from "../utils/currency";
 import { getLocalizedText } from "../utils/i18n";
 
@@ -37,10 +39,12 @@ export default function CartSummarySheet({
   onDecrease,
   onRemove,
 }: CartSummarySheetProps) {
+  const panelRef = useRef<HTMLDivElement>(null);
   const { sheetOffsetY, sheetDragging, dragHandlers } = useDraggableSheet({
     onDismiss: onClose,
   });
   useLockBodyScroll(isOpen);
+  useSheetDialogA11y({ isOpen, onClose, panelRef });
 
   if (!isOpen) {
     return null;
@@ -53,7 +57,12 @@ export default function CartSummarySheet({
       role="presentation"
     >
       <div
-        className="absolute inset-x-0 bottom-0 mx-auto flex h-[min(74vh,42rem)] w-full max-w-md overscroll-contain flex-col rounded-t-3xl bg-white p-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-2xl will-change-transform"
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="cart-summary-sheet-title"
+        tabIndex={-1}
+        className="absolute inset-x-0 bottom-0 mx-auto flex h-[min(74vh,42rem)] w-full max-w-md overscroll-contain flex-col rounded-t-3xl bg-white p-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-2xl will-change-transform outline-none"
         style={{
           transform: `translateY(${sheetOffsetY}px)`,
           transition: sheetDragging
@@ -70,7 +79,12 @@ export default function CartSummarySheet({
           <div className="h-1.5 w-12 rounded-full bg-zinc-200" />
         </div>
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-lg font-bold text-zinc-900">{labels.yourOrder}</h3>
+          <h3
+            id="cart-summary-sheet-title"
+            className="text-lg font-bold text-zinc-900"
+          >
+            {labels.yourOrder}
+          </h3>
           <button
             type="button"
             onClick={onClose}

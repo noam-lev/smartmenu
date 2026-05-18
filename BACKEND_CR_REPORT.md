@@ -5,7 +5,8 @@
 | # | Item | Status |
 |---|------|--------|
 | 1 | Cross-tenant upsell `offer_item` embed | ✅ **Done** — DAL drops rules when `offer_item.restaurant_id` ≠ current tenant (`supabase_dal.py` ~1185). |
-| 3 | Owner/admin auth boundary | ✅ **Done (revised)** — Per-route `Depends(verify_restaurant_access)` + `get_current_user` (Supabase JWT + `restaurant_members` / superadmin `profiles.role`). **Not** `require_admin_context()` (still unused stub in `core/security.py`). |
+| 3 | Owner/admin auth boundary | ✅ **Done** — Per-route `Depends(verify_restaurant_access)` + `get_current_user` (Supabase JWT + `restaurant_members` / superadmin `profiles.role`). |
+| 3b | Stale auth TODOs / dead `require_admin_context` | ✅ **Done (Sprint A)** — Removed all `# TODO: ADD AUTH` from `owner.py`; deleted unused `core/security.py`. |
 | 6 | `image_url` nullability | ✅ **Mostly done** — `_as_optional_string` / nullable DTOs; rare empty-string fallback remains in upsell snapshot edge path. |
 | 7 | Seed idempotency | ✅ **Done** — `python seed.py --reset` runs scoped cleanup before insert. |
 | 5 | Error taxonomy | 🔶 **Partial** — `CustomHTTPException` + `MenuNotFoundError` + global handler; most Supabase failures still → generic 500. |
@@ -34,9 +35,9 @@
 - **Proposed:** Split query / mapper / policy helpers.
 
 ### 3) Admin/Auth Boundary Exists but Is Not Used
-- **Original issue:** `require_admin_context()` unused.
-- **Current state:** ✅ Owner mutations use `verify_restaurant_access` on each route; `GET /api/owner/ping` uses `get_current_user` only.
-- **Follow-up:** Remove or repurpose dead `require_admin_context()`; consider `APIRouter(dependencies=[...])` to avoid per-route drift. Stale `# TODO: ADD AUTH` comments on owner routes should be deleted.
+- **Original issue:** `require_admin_context()` unused; stale `# TODO: ADD AUTH` on owner routes.
+- **Current state:** ✅ Owner mutations use `verify_restaurant_access` on each route; `GET /api/owner/ping` uses `get_current_user` only. Dead code removed in Sprint A.
+- **Optional follow-up:** `APIRouter(dependencies=[Depends(verify_restaurant_access)])` on a slug-scoped sub-router to reduce per-route boilerplate (behavior-neutral refactor).
 
 ## BUSINESS/SCALABILITY BLOCKERS
 

@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useShallow } from "zustand/react/shallow";
 import CartSummarySheet from "../components/CartSummarySheet";
 import ItemBottomSheet from "../components/ItemBottomSheet";
 import MenuItemCard from "../components/MenuItemCard";
-import { fetchMenuBySlug } from "../lib/menuApi";
-import { getMenuLoadErrorMessage } from "../lib/menuFetchError";
+import { useMenuData } from "../hooks/useMenuData";
 import { useCartStore } from "../store/cartStore";
 import { useUiStore } from "../store/uiStore";
 import type { MenuCategory, MenuItem, MenuPayload, UpsellRule } from "../types/menu";
@@ -23,9 +23,16 @@ type DinerPageProps = {
 };
 
 export function TenantDinerPage({ restaurantSlug = "yossis-hummus" }: DinerPageProps) {
-  const [menuPayload, setMenuPayload] = useState<MenuPayload | null>(null);
-  const [isMenuLoading, setIsMenuLoading] = useState(true);
-  const [menuError, setMenuError] = useState<string | null>(null);
+  const [activeCategoryId, setActiveCategoryId] = useState("");
+  const handleMenuLoaded = useCallback((data: MenuPayload) => {
+    const sortedCategories = [...data.menu.categories].sort(
+      (a, b) => a.sort_order - b.sort_order,
+    );
+    setActiveCategoryId(sortedCategories[0]?.id ?? "");
+  }, []);
+  const { menuPayload, isMenuLoading, menuError } = useMenuData(restaurantSlug, {
+    onMenuLoaded: handleMenuLoaded,
+  });
   const categories = useMemo(
     () =>
       menuPayload
@@ -51,7 +58,6 @@ export function TenantDinerPage({ restaurantSlug = "yossis-hummus" }: DinerPageP
   const [isCartSheetOpen, setIsCartSheetOpen] = useState(false);
   const [cartSheetSession, setCartSheetSession] = useState(0);
   const [isLanguageMenuOpen, setIsLanguageMenuOpen] = useState(false);
-  const [activeCategoryId, setActiveCategoryId] = useState("");
   const languageMenuRef = useRef<HTMLDivElement | null>(null);
   const hasMounted = useSyncExternalStore(
     () => () => {},
@@ -59,10 +65,14 @@ export function TenantDinerPage({ restaurantSlug = "yossis-hummus" }: DinerPageP
     () => false,
   );
 
-  const addSelection = useCartStore((state) => state.addSelection);
-  const cartBucket = useCartStore((state) => state.cartsByRestaurant[restaurantSlug]);
-  const setItemQuantity = useCartStore((state) => state.setItemQuantity);
-  const removeItem = useCartStore((state) => state.removeItem);
+  const { addSelection, cartBucket, setItemQuantity, removeItem } = useCartStore(
+    useShallow((state) => ({
+      addSelection: state.addSelection,
+      cartBucket: state.cartsByRestaurant[restaurantSlug],
+      setItemQuantity: state.setItemQuantity,
+      removeItem: state.removeItem,
+    })),
+  );
   const itemsByItemId = cartBucket?.itemsByItemId ?? {};
   const totalItems = cartBucket?.totalItems ?? 0;
   const totalPrice = cartBucket?.totalPrice ?? 0;
@@ -78,49 +88,6 @@ export function TenantDinerPage({ restaurantSlug = "yossis-hummus" }: DinerPageP
   const menuName = menuPayload
     ? getLocalizedText(menuPayload.menu, "name", locale)
     : "";
-
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadMenu() {
-      try {
-        setIsMenuLoading(true);
-        setMenuError(null);
-
-        const data = await fetchMenuBySlug(restaurantSlug);
-
-        if (!isMounted) {
-          return;
-        }
-
-        const sortedCategories = [...data.menu.categories].sort(
-          (a, b) => a.sort_order - b.sort_order,
-        );
-        setMenuPayload(data);
-        setLocale(data.restaurant.default_locale ?? "en");
-        setActiveCategoryId(sortedCategories[0]?.id ?? "");
-      } catch (error) {
-        if (!isMounted) {
-          return;
-        }
-
-        const uiLocale = useUiStore.getState().locale;
-        setMenuError(getMenuLoadErrorMessage(error, uiLocale));
-      } finally {
-        if (isMounted) {
-          setIsMenuLoading(false);
-        }
-      }
-    }
-
-    void loadMenu();
-
-    return () => {
-      isMounted = false;
-    };
-    // setLocale from Zustand is stable for this one-time bootstrap load.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [restaurantSlug]);
 
   const closeSheet = () => {
     setSelectedItem(null);
