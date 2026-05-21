@@ -3,9 +3,6 @@ export type LandingLocale = "he" | "en";
 export const landingCopy = {
   he: {
     brand: "Tafrito",
-    langHe: "עב",
-    langEn: "En",
-    badge: "נבנה לבעלי מסעדות",
     heroTitle: "המסעדה שלך יכולה למכור יותר.",
     heroSubtitle:
       "בתוך פחות מחמש דקות אנחנו הופכים את התפריט שלכם לדיגיטלי. ואז - אנחנו הולכים לגרום לכם להרוויח יותר. איך? תמשיכו לגלול.",
@@ -31,15 +28,6 @@ export const landingCopy = {
     feature4Short: "תפריט ממותג",
     feature5Short: "תרגום דו־לשוני",
     feature6Short: "הלקוחות מזמינים מהר יותר",
-    feature1Title: "אנליטיקות מלאות - להבין את המסעדה שלך",
-    feature1Body:
-      "הצעות הקשר שמגדילות את הסל בזמן שהאורח עדיין בטעימה הראשונה — לא באמצע PDF.",
-    feature2Title: "ממשק מהיר, בלי אפליקציה",
-    feature2Body:
-      "קטגוריות דביקות, תמונות גדולות, והזמנה בשלוש הקשות. הכל בדפדפן.",
-    feature3Title: "ניהול שמרגיש כמו מטבח, לא כמו משרד",
-    feature3Body:
-      "עדכונים, תרגומים וזמינות במקום אחד — בלי לייצא קובץ חדש בכל שינוי.",
     leadModalTitle: "נשמח להכיר",
     leadModalSub: "השאירו פרטים ונחזור אליכם להמשך.",
     leadName: "שם מלא",
@@ -62,7 +50,7 @@ export const landingCopy = {
     pricingTitle: "מחירים",
     pricingSub: "בלי עלות הקמה או שום בולשיט אחר — בוחרים מה שמתאים לכם.",
     planStarterName: "בסיסי",
-    planStarterPrice: "₪149",
+    planStarterPrice: "₪99",
     planStarterPeriod: "/חודש",
     planStarterNote: "מסעדה אחת, תפריט אחד",
     planStarterFeatures: [
@@ -73,7 +61,7 @@ export const landingCopy = {
       "תמיכה בוואטסאפ",
     ],
     planProName: "קלאסי",
-    planProPrice: "₪249",
+    planProPrice: "₪199",
     planProPeriod: "/חודש",
     planProNote: "הכי נפוץ בקרב הלקוחות שלנו",
     planProFeatures: [
@@ -125,9 +113,6 @@ export const landingCopy = {
   },
   en: {
     brand: "Tafrito",
-    langHe: "HE",
-    langEn: "En",
-    badge: "Built for restaurateurs",
     heroTitle: "Your menu can sell more.",
     heroSubtitle:
       "Turn what you already have into a respectful mobile ordering experience — with upsells that feel natural, not pushy.",
@@ -153,15 +138,6 @@ export const landingCopy = {
     feature4Short: "Branded menu",
     feature5Short: "Two languages",
     feature6Short: "Quick updates",
-    feature1Title: "Upsells without hovering",
-    feature1Body:
-      "Contextual add-ons that grow the check while the guest is still on the first bite — not inside a PDF.",
-    feature2Title: "Fast UI, no app",
-    feature2Body:
-      "Sticky categories, generous imagery, and ordering in three taps. All in the browser.",
-    feature3Title: "Management that feels like the kitchen",
-    feature3Body:
-      "Updates, translations, and availability in one place — no re-export every time the menu shifts.",
     leadModalTitle: "We’d love to meet you",
     leadModalSub: "Leave your details and we’ll follow up.",
     leadName: "Full name",
