@@ -638,10 +638,18 @@ export function TafritoLandingPage() {
               <p className="mt-6 max-w-xl text-lg font-medium leading-snug tracking-tight text-warm-brown">
                 {t.howItWorksBody}
               </p>
+              <a
+                href="https://tafrito.com/yossis-hummus"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-8 inline-flex max-w-full items-center justify-center self-start rounded-sm border border-espresso/20 bg-transparent px-6 py-3 text-center text-sm font-bold tracking-tight text-espresso transition hover:bg-espresso/5 active:translate-y-px sm:justify-start"
+              >
+                {t.howItWorksSampleMenu}
+              </a>
               <button
                 type="button"
                 onClick={() => setLeadOpen(true)}
-                className="mt-10 rounded-sm border-b-4 border-fresh-green/80 bg-fresh-green py-4 ps-10 pe-10 text-sm font-bold uppercase tracking-tight text-kraft transition hover:bg-fresh-green/90 active:translate-y-1"
+                className="mt-6 rounded-sm border-b-4 border-fresh-green/80 bg-fresh-green py-4 ps-10 pe-10 text-sm font-bold uppercase tracking-tight text-kraft transition hover:bg-fresh-green/90 active:translate-y-1"
               >
                 {t.howItWorksCta}
               </button>
@@ -766,14 +774,26 @@ export function TafritoLandingPage() {
         <div className="landing-faq-pricing-stack">
           <LandingFaq locale={locale} />
 
-          <section className="pricing-below-faq border-b border-espresso/10 pb-24">
+          <section className="pricing-below-faq relative overflow-x-clip border-b border-espresso/10 pb-24">
             <div className="mx-auto max-w-[1200px] ps-8 pe-8 text-center">
-            <h2 className="mb-6 text-4xl font-black leading-tight text-espresso md:text-5xl">
-              {t.pricingTitle}
-            </h2>
-            <p className="mx-auto mb-16 max-w-2xl text-lg leading-snug text-warm-brown">{t.pricingSub}</p>
+              <h2 className="mb-6 text-4xl font-black leading-tight text-espresso md:text-5xl">
+                {t.pricingTitle}
+              </h2>
+              <p className="mx-auto mb-16 max-w-2xl text-lg leading-snug text-warm-brown">{t.pricingSub}</p>
 
-            <div className="grid gap-0 overflow-hidden rounded-sm border border-espresso/15 shadow-sm md:grid-cols-3">
+              <div className="relative pt-10 sm:pt-12 md:pt-8">
+                <div
+                  className="pointer-events-none absolute z-20 flex w-[min(100%,18.5rem)] -translate-x-1/2 -rotate-[4deg] flex-col items-center justify-center rounded-md border border-white/10 bg-[#6B1D1D] px-5 py-3 text-center text-[#FFFDF8] shadow-xl sm:px-6 -top-10 left-1/2 md:-top-6 md:left-1/2 md:w-auto md:max-w-none"
+                  aria-hidden
+                >
+                  <span className="text-xs tracking-wider opacity-90">{t.pricingStickerEyebrow}</span>
+                  <span className="my-1 text-xl font-bold leading-tight md:text-2xl">
+                    {t.pricingStickerHeadline}
+                  </span>
+                  <span className="text-sm leading-snug opacity-90">{t.pricingStickerSub}</span>
+                </div>
+
+                <div className="grid gap-0 overflow-hidden rounded-sm border border-espresso/15 shadow-sm md:grid-cols-3">
               {PLANS.map((plan) => (
                 <div
                   key={plan.key}
@@ -808,8 +828,9 @@ export function TafritoLandingPage() {
                   </button>
                 </div>
               ))}
+                </div>
+              </div>
             </div>
-          </div>
           </section>
         </div>
       </main>
