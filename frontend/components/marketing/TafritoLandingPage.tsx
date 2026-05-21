@@ -7,6 +7,7 @@ import { landingCopy } from "./landingDictionary";
 import { getUiMessage, localeFlagSrc, otherLocale } from "../../utils/i18n";
 import { HeroMagicDemo } from "./HeroMagicDemo";
 import { LeadCaptureDialog } from "./LeadCaptureDialog";
+import { WhatsAppFloatingButton } from "./WhatsAppFloatingButton";
 import { LandingFaq } from "./LandingFaq";
 
 /** Hero phone scene — edit these first when tuning the mockup. */
@@ -446,6 +447,7 @@ export function TafritoLandingPage() {
   return (
     <div dir={dir} lang={locale} className="min-h-screen bg-kraft font-sans tracking-tight leading-snug text-warm-brown selection:bg-fresh-green/10">
       <LeadCaptureDialog open={leadOpen} onClose={() => setLeadOpen(false)} locale={locale} />
+      <WhatsAppFloatingButton locale={locale} />
 
       <header
         className="fixed inset-x-0 top-0 z-50 border-b border-transparent transition-[background-color,border-color,box-shadow,backdrop-filter] duration-700 ease-out"

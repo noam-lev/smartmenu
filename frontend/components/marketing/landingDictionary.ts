@@ -109,7 +109,7 @@ export const landingCopy = {
     faq5Answer:
       "כן. אנחנו מציעים תפריט דיגיטלי דו-לשוני מלא. תיירים ולקוחות דוברי אנגלית יכולים להחליף שפה בלחיצת כפתור וליהנות מחוויית הזמנה ברורה ופשוטה.",
     faq6Question: "כמה זמן לוקח להקים תפריט כזה?",
-    faq6Answer: "אנחנו מתחייבים להקמה תוך 24 שעות מרגע קבלת התפריט שלכם.",
+    faq6Answer: "חמש דקות. נסו אותנו.",
   },
   en: {
     brand: "Tafrito",
@@ -215,6 +215,6 @@ export const landingCopy = {
     faq5Answer:
       "Yes. We offer a full bilingual digital menu. Tourists and English-speaking guests can switch language in one tap for a clear, simple ordering experience.",
     faq6Question: "How long does setup take?",
-    faq6Answer: "We commit to going live within 24 hours of receiving your menu.",
+    faq6Answer: "5 minutes. Try it out.",
   },
 } as const;
