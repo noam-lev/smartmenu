@@ -4,8 +4,10 @@ import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { Menu, Play, Star } from "lucide-react";
 import type { LandingLocale } from "./landingDictionary";
 import { landingCopy } from "./landingDictionary";
+import { getUiMessage, localeFlagSrc, otherLocale } from "../../utils/i18n";
 import { HeroMagicDemo } from "./HeroMagicDemo";
 import { LeadCaptureDialog } from "./LeadCaptureDialog";
+import { WhatsAppFloatingButton } from "./WhatsAppFloatingButton";
 import { LandingFaq } from "./LandingFaq";
 
 /** Hero phone scene — edit these first when tuning the mockup. */
@@ -246,6 +248,22 @@ export function TafritoLandingPage() {
   const [leadOpen, setLeadOpen] = useState(false);
   const [headerBlend, setHeaderBlend] = useState(0);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [langMenuOpen, setLangMenuOpen] = useState(false);
+  const langMenuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!langMenuOpen) {
+      return;
+    }
+    const onDown = (event: MouseEvent) => {
+      if (!langMenuRef.current?.contains(event.target as Node)) {
+        setLangMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [langMenuOpen]);
+
   const heroPhoneAnchorRef = useRef<HTMLDivElement>(null);
   const howItWorksRef = useRef<HTMLElement>(null);
   const featuresCenterRef = useRef<HTMLDivElement>(null);
@@ -429,6 +447,7 @@ export function TafritoLandingPage() {
   return (
     <div dir={dir} lang={locale} className="min-h-screen bg-kraft font-sans tracking-tight leading-snug text-warm-brown selection:bg-fresh-green/10">
       <LeadCaptureDialog open={leadOpen} onClose={() => setLeadOpen(false)} locale={locale} />
+      <WhatsAppFloatingButton locale={locale} />
 
       <header
         className="fixed inset-x-0 top-0 z-50 border-b border-transparent transition-[background-color,border-color,box-shadow,backdrop-filter] duration-700 ease-out"
@@ -450,21 +469,51 @@ export function TafritoLandingPage() {
             >
               {t.navCta}
             </button>
-            <div className="hidden items-center gap-5 text-xs font-semibold uppercase tracking-tight md:flex">
+            <div className="relative hidden md:block" ref={langMenuRef}>
               <button
                 type="button"
-                onClick={() => setLocale("he")}
-                className={locale === "he" ? "text-espresso" : "text-warm-brown/60"}
+                onClick={() => setLangMenuOpen((open) => !open)}
+                aria-haspopup="menu"
+                aria-expanded={langMenuOpen}
+                aria-label={getUiMessage("selectLanguage", locale)}
+                className="inline-flex items-center gap-1 rounded-sm border border-espresso/15 bg-kraft/80 px-2 py-1.5"
               >
-                {t.langHe}
+                <img
+                  src={localeFlagSrc[locale]}
+                  alt=""
+                  className="h-4 w-[1.375rem] rounded-[2px] object-cover"
+                  aria-hidden
+                />
+                <span className="text-[10px] text-warm-brown/70" aria-hidden>
+                  ▾
+                </span>
               </button>
-              <button
-                type="button"
-                onClick={() => setLocale("en")}
-                className={locale === "en" ? "text-espresso" : "text-warm-brown/60"}
-              >
-                {t.langEn}
-              </button>
+              {langMenuOpen ? (
+                <div
+                  role="menu"
+                  className="absolute end-0 z-30 mt-2 rounded-sm border border-espresso/15 bg-kraft p-1 shadow-lg"
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    aria-label={getUiMessage(
+                      otherLocale(locale) === "he" ? "languageHebrew" : "languageEnglish",
+                      locale,
+                    )}
+                    onClick={() => {
+                      setLocale(otherLocale(locale));
+                      setLangMenuOpen(false);
+                    }}
+                    className="flex justify-center rounded-sm px-3 py-2 hover:bg-espresso/5"
+                  >
+                    <img
+                      src={localeFlagSrc[otherLocale(locale)]}
+                      alt=""
+                      className="h-4 w-[1.375rem] rounded-[2px] object-cover"
+                    />
+                  </button>
+                </div>
+              ) : null}
             </div>
             <button
               type="button"
@@ -484,28 +533,24 @@ export function TafritoLandingPage() {
               backgroundColor: `rgba(245, 242, 235, ${Math.max(headerBlend, 0.9)})`,
             }}
           >
-            <div className="flex items-center gap-6 text-sm font-semibold tracking-tight">
-              <button
-                type="button"
-                onClick={() => {
-                  setLocale("he");
-                  setMobileOpen(false);
-                }}
-                className={locale === "he" ? "text-espresso" : "text-warm-brown/60"}
-              >
-                {t.langHe}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setLocale("en");
-                  setMobileOpen(false);
-                }}
-                className={locale === "en" ? "text-espresso" : "text-warm-brown/60"}
-              >
-                {t.langEn}
-              </button>
-            </div>
+            <button
+              type="button"
+              aria-label={getUiMessage(
+                otherLocale(locale) === "he" ? "languageHebrew" : "languageEnglish",
+                locale,
+              )}
+              onClick={() => {
+                setLocale(otherLocale(locale));
+                setMobileOpen(false);
+              }}
+              className="inline-flex rounded-sm border border-espresso/15 p-1.5"
+            >
+              <img
+                src={localeFlagSrc[otherLocale(locale)]}
+                alt=""
+                className="h-4 w-[1.375rem] rounded-[2px] object-cover"
+              />
+            </button>
           </div>
         )}
       </header>
@@ -593,10 +638,18 @@ export function TafritoLandingPage() {
               <p className="mt-6 max-w-xl text-lg font-medium leading-snug tracking-tight text-warm-brown">
                 {t.howItWorksBody}
               </p>
+              <a
+                href="https://tafrito.com/yossis-hummus"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-8 inline-flex max-w-full items-center justify-center self-start rounded-sm border border-espresso/20 bg-transparent px-6 py-3 text-center text-sm font-bold tracking-tight text-espresso transition hover:bg-espresso/5 active:translate-y-px sm:justify-start"
+              >
+                {t.howItWorksSampleMenu}
+              </a>
               <button
                 type="button"
                 onClick={() => setLeadOpen(true)}
-                className="mt-10 rounded-sm border-b-4 border-fresh-green/80 bg-fresh-green py-4 ps-10 pe-10 text-sm font-bold uppercase tracking-tight text-kraft transition hover:bg-fresh-green/90 active:translate-y-1"
+                className="mt-6 rounded-sm border-b-4 border-fresh-green/80 bg-fresh-green py-4 ps-10 pe-10 text-sm font-bold uppercase tracking-tight text-kraft transition hover:bg-fresh-green/90 active:translate-y-1"
               >
                 {t.howItWorksCta}
               </button>
@@ -721,14 +774,26 @@ export function TafritoLandingPage() {
         <div className="landing-faq-pricing-stack">
           <LandingFaq locale={locale} />
 
-          <section className="pricing-below-faq border-b border-espresso/10 pb-24">
+          <section className="pricing-below-faq relative overflow-x-clip border-b border-espresso/10 pb-24">
             <div className="mx-auto max-w-[1200px] ps-8 pe-8 text-center">
-            <h2 className="mb-6 text-4xl font-black leading-tight text-espresso md:text-5xl">
-              {t.pricingTitle}
-            </h2>
-            <p className="mx-auto mb-16 max-w-2xl text-lg leading-snug text-warm-brown">{t.pricingSub}</p>
+              <h2 className="mb-6 text-4xl font-black leading-tight text-espresso md:text-5xl">
+                {t.pricingTitle}
+              </h2>
+              <p className="mx-auto mb-16 max-w-2xl text-lg leading-snug text-warm-brown">{t.pricingSub}</p>
 
-            <div className="grid gap-0 overflow-hidden rounded-sm border border-espresso/15 shadow-sm md:grid-cols-3">
+              <div className="relative pt-10 sm:pt-12 md:pt-8">
+                <div
+                  className="pointer-events-none absolute z-20 flex w-[min(100%,18.5rem)] -translate-x-1/2 -rotate-[4deg] flex-col items-center justify-center rounded-md border border-white/10 bg-[#6B1D1D] px-5 py-3 text-center text-[#FFFDF8] shadow-xl sm:px-6 -top-10 left-1/2 md:-top-6 md:left-1/2 md:w-auto md:max-w-none"
+                  aria-hidden
+                >
+                  <span className="text-xs tracking-wider opacity-90">{t.pricingStickerEyebrow}</span>
+                  <span className="my-1 text-xl font-bold leading-tight md:text-2xl">
+                    {t.pricingStickerHeadline}
+                  </span>
+                  <span className="text-sm leading-snug opacity-90">{t.pricingStickerSub}</span>
+                </div>
+
+                <div className="grid gap-0 overflow-hidden rounded-sm border border-espresso/15 shadow-sm md:grid-cols-3">
               {PLANS.map((plan) => (
                 <div
                   key={plan.key}
@@ -763,8 +828,9 @@ export function TafritoLandingPage() {
                   </button>
                 </div>
               ))}
+                </div>
+              </div>
             </div>
-          </div>
           </section>
         </div>
       </main>

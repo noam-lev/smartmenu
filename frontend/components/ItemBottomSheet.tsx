@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useRef } from "react";
 import type { Locale, MenuItem, UpsellRule } from "../types/menu";
 import { useDraggableSheet } from "../hooks/useDraggableSheet";
+import { useImageLoadFailure } from "../hooks/useImageLoadFailure";
 import { useLockBodyScroll } from "../hooks/useLockBodyScroll";
+import { useSheetDialogA11y } from "../hooks/useSheetDialogA11y";
 import { formatILSCurrency } from "../utils/currency";
 import { getLocalizedText } from "../utils/i18n";
 import { hasRenderableImage } from "../utils/media";
@@ -39,11 +41,14 @@ export default function ItemBottomSheet({
   onPrimaryAdd,
   onUpsellDecision,
 }: ItemBottomSheetProps) {
-  const [failedImageUrls, setFailedImageUrls] = useState<Record<string, true>>({});
+  const panelRef = useRef<HTMLDivElement>(null);
+  const isOpen = Boolean(selectedItem);
+  const { hasLoadableImage, createImgErrorHandler } = useImageLoadFailure();
   const { sheetOffsetY, sheetDragging, dragHandlers } = useDraggableSheet({
     onDismiss: onClose,
   });
-  useLockBodyScroll(Boolean(selectedItem));
+  useLockBodyScroll(isOpen);
+  useSheetDialogA11y({ isOpen, onClose, panelRef });
 
   if (!selectedItem) {
     return null;
@@ -65,8 +70,8 @@ export default function ItemBottomSheet({
   const upsellPrice = upsellRule
     ? upsellRule.discount_price ?? upsellRule.offer_item_snapshot.price
     : 0;
-  const hasMainImage = mainImageUrl ? !failedImageUrls[mainImageUrl] : false;
-  const hasUpsellImage = upsellImageKey ? !failedImageUrls[upsellImageKey] : false;
+  const hasMainImage = hasLoadableImage(mainImageUrl);
+  const hasUpsellImage = hasLoadableImage(upsellImageKey);
 
   return (
     <div
@@ -75,7 +80,12 @@ export default function ItemBottomSheet({
       role="presentation"
     >
       <div
-        className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-md overscroll-contain rounded-t-3xl bg-white p-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-2xl will-change-transform"
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="item-bottom-sheet-title"
+        tabIndex={-1}
+        className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-md overscroll-contain rounded-t-3xl bg-white p-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-2xl will-change-transform outline-none"
         style={{
           transform: `translateY(${sheetOffsetY}px)`,
           transition: sheetDragging
@@ -99,17 +109,13 @@ export default function ItemBottomSheet({
                 src={mainImageUrl}
                 alt={itemName}
                 className="h-44 w-full rounded-2xl object-cover"
-                onError={(event) => {
-                  const failedUrl =
-                    event.currentTarget.currentSrc || mainImageUrl;
-                  if (!failedUrl) {
-                    return;
-                  }
-                  setFailedImageUrls((prev) => ({ ...prev, [failedUrl]: true }));
-                }}
+                onError={createImgErrorHandler(mainImageUrl)}
               />
             ) : null}
-            <h3 className="mt-4 text-xl font-bold text-zinc-900">
+            <h3
+              id="item-bottom-sheet-title"
+              className="mt-4 text-xl font-bold text-zinc-900"
+            >
               {itemName}
             </h3>
             <p className="mt-1 text-sm leading-6 text-zinc-600">
@@ -153,7 +159,10 @@ export default function ItemBottomSheet({
             <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
               {labels.suggestedAddon}
             </p>
-            <h3 className="mt-1 text-xl font-bold text-zinc-900">
+            <h3
+              id="item-bottom-sheet-title"
+              className="mt-1 text-xl font-bold text-zinc-900"
+            >
               {upsellItemName}
             </h3>
             <p className="mt-2 text-sm leading-6 text-zinc-600">
@@ -166,14 +175,7 @@ export default function ItemBottomSheet({
                   src={upsellImageKey}
                   alt={upsellItemName}
                   className="h-16 w-16 rounded-xl object-cover"
-                  onError={(event) => {
-                    const failedUrl =
-                      event.currentTarget.currentSrc || upsellImageKey;
-                    if (!failedUrl) {
-                      return;
-                    }
-                    setFailedImageUrls((prev) => ({ ...prev, [failedUrl]: true }));
-                  }}
+                  onError={createImgErrorHandler(upsellImageKey)}
                 />
               ) : null}
               <div>

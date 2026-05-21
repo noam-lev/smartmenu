@@ -1,8 +1,10 @@
 ***
 
-# 🧠 SmartMenu AI - Master Project Context (V2.0)
+# 🧠 SmartMenu AI — Master Project Context (V2.1)
 
-**To the AI Assistant:** Read this document carefully. It contains the complete business, architectural, and technical context of the "SmartMenu AI" project. We have already made definitive architectural decisions. Do not suggest altering the core stack, the database schema, or the strategic decisions listed below. Your goal is to help me continue developing from the "Current Status" point.
+**To the AI Assistant:** Read this document carefully. It contains the complete business, architectural, and technical context of the project. We have already made definitive architectural decisions. Do not suggest altering the core stack, the database schema, or the strategic decisions listed below. Your goal is to help me continue developing from the **Current Status** point.
+
+**Branding:** The public product is **Tafrito** ([tafrito.com](https://tafrito.com)) — Hebrew/English marketing, OG metadata, and lead emails use that name. The repo and internal docs still use the codename **SmartMenu AI**.
 
 ## 1. Product Vision & Roadmap
 **Goal:** Transform static restaurant menus into an active, profitability-focused sales tool for small restaurants, with minimal friction for the restaurant owner.
@@ -30,9 +32,12 @@
 
 ## 2. Tech Stack & Infrastructure
 * **Architecture Pattern:** Monorepo (managed via Cursor + Git).
-* **Client Side (UI):** Next.js (App Router), TypeScript, Tailwind CSS, Zustand (for local cart state).
-* **Server Side (API):** Python, FastAPI, Pydantic (managed via `uv` and `pyproject.toml`).
-* **Database & Security:** PostgreSQL managed via Supabase.
+    * `frontend/` — Next.js 16 (App Router), TypeScript, Tailwind CSS 4, Zustand (`cartStore`, `uiStore`).
+    * `backend/` — Python, FastAPI, Pydantic (`uv`, `pyproject.toml`).
+* **Database & Auth:** PostgreSQL + Supabase Auth (Google OAuth for owners). Backend uses **service-role** client; owner writes validate JWT + `restaurant_members` (or `profiles.role = superadmin`).
+* **Storage:** Supabase bucket `menu-images` for item/banner uploads (owner API).
+* **Email (marketing):** Resend via `backend/services/lead_notification.py` (`RESEND_API_KEY`, etc. in `backend/core/config.py`).
+* **Deploy signals:** Vercel Analytics + Speed Insights on root layout; `metadata.robots` still `noindex` (see §7).
 
 ## 3. Security, Data & Performance Rules
 * **Security (RLS):** Row Level Security (RLS) must be enforced on all tables in Supabase. All queries must be strictly scoped by `restaurant_id`. No cross-tenant data access is allowed.
@@ -52,16 +57,36 @@
 4.  **Translations:** Managed strictly server-side. The DB stores a `translations` (JSONB) column in the items table, and the server injects the correct strings based on the client's locale to minimize payload weight.
 
 ## 5. Database Schema (Deployed in Supabase)
-* `restaurants`: id, owner_id, name, slug (lowercase unique index), settings (JSONB), is_active, created_at, updated_at.
-* `menus`: id, restaurant_id, name, is_active, created_at, updated_at.
-* `categories`: id, menu_id, name, sort_order, is_visible, created_at.
-* `menu_items`: id, restaurant_id, menu_id, category_id, name, description, base_price (NOT NULL, for display), is_available, is_visible, sort_order, image_url, raw_ocr_data (JSONB), metadata (JSONB), translations (JSONB), created_at.
-* `item_variants`: id, menu_item_id, name (default 'Regular'), price, created_at. (UNIQUE constraint on menu_item_id + name).
-* `upsell_rules`: id, restaurant_id, trigger_item_id, offer_item_id, custom_message, discount_price, created_at. (CHECK constraint preventing trigger == offer).
-* `events`: id, restaurant_id, event_type, item_id, created_at. (Composite index for performance queries).
 
-## 6. The API Contract (Mock JSON Payload)
-The data is fetched as a single nested JSON. This is the structure (currently located in `frontend/data/mockMenu.json`):
+**Core menu (unchanged intent):**
+* `restaurants`: id (UUID), owner_id, name, slug (unique, lowercase), `settings` JSONB (`theme_color`, `currency`, `banner_image_url`, `default_locale`, …), is_active, timestamps.
+* `menus`: id, restaurant_id, name, is_active, timestamps. API exposes `menus.updated_at` as `menu.last_updated`.
+* `categories`: id, menu_id, name, sort_order, is_visible, `translations` JSONB, created_at.
+* `menu_items`: id, restaurant_id, menu_id, category_id, name, description, base_price, is_available, is_visible, sort_order, image_url, raw_ocr_data, metadata, translations (JSONB), created_at.
+* `item_variants`: id, menu_item_id, name (default `Regular`), price. UNIQUE (menu_item_id, name).
+* `upsell_rules`: id, restaurant_id, trigger_item_id, offer_item_id, custom_message, `translations` JSONB (per-locale messages), discount_price, created_at. CHECK trigger ≠ offer.
+* `events`: id, restaurant_id, event_type, item_id, created_at — **schema exists; no write API yet** (Phase 2).
+
+**Auth, tenancy & SaaS (in use):**
+* `profiles`: id (= auth user id), `role` (`superadmin` bypasses membership checks).
+* `restaurant_members`: restaurant_id, user_id, role — required for owner API access.
+* `subscriptions`: restaurant_id, plan_tier, status — drives `backend/core/features.py` gates (`free` / `starter` / `pro` / `enterprise`).
+
+## 6. API Surface & Menu JSON Contract
+
+**HTTP routers** (`backend/main.py`):
+| Prefix | Purpose |
+|--------|---------|
+| `GET /api/diner/menus/{slug}` | Public fat menu (no auth) |
+| `GET /api/owner/ping` | Auth smoke test (Bearer JWT) |
+| `POST/PATCH/DELETE /api/owner/{slug}/…` | Owner menu CRUD, images, upsells, reorder |
+| `POST /api/marketing/leads` | Landing lead capture (+ IP rate limit) |
+| `POST /api/superadmin/login`, `magic-parse`, `restaurants/import`, … | In-memory superadmin session (`X-Superadmin-Token`) |
+| `GET /health` | Health check |
+
+**Reference payload:** `frontend/data/mockMenu.json` — still used by `backend/seed.py` for local seeding; **runtime diner UI reads live API**, not this file.
+
+Nested menu shape (abbreviated):
 
 ```json
 {
@@ -117,17 +142,46 @@ The data is fetched as a single nested JSON. This is the structure (currently lo
 ```
 
 ## 7. Current Status & Immediate Next Task
-We are now in a **frontend + backend integration phase**.
-* **Definition of Done (MVP):** A restaurant owner can set up a menu. A diner can scan a QR code and view the menu smoothly. A diner can add an item to a local cart. Upsell prompts trigger only for **applicable** rules (offered item not already in cart; see **Recent engineering changes** under section 7). Everything is served directly from Supabase.
-* **Frontend Progress (Apr 2026):** Core diner flow is implemented (Wolt-style UI, sticky categories, item/upsell bottom sheet, floating cart, bilingual support). The UI now fetches live menu data from backend (`/api/diner/menus/{slug}`) instead of reading `mockMenu.json` directly.
-* **Backend Progress (Apr 2026):** FastAPI skeleton is in place (`core/`, `api/`, `db/`, `models/`) with Supabase service-role client, repository pattern, and a public fat endpoint for diner menu retrieval. Seed script (`backend/seed.py`) imports frontend mock JSON into Supabase and is idempotent for repeated local runs.
-* **Security Hardening Completed:** DAL now includes defense-in-depth tenant validation for embedded upsell offer items; owner/admin routers are protected by default dependency boundaries.
-* **Immediate Next Task:** Add Phase-2-ready backend write endpoints (starting with soft-order/event POST flows) and align lightweight analytics/event ingestion with current menu read contract.
 
-### Owner dashboard & menu item lifecycle (current build)
-* **Admin UI (`/admin`):** Owner-facing menu editor: browse categories, toggle item availability (optimistic PATCH), **create** items (POST + optimistic temp row), **edit** items in a side drawer (`EditItemDrawer`) with tabs (General live; Translations/Upsells placeholders), **delete** items (see below). Edit payloads merge **per-locale** `translations` and respect `restaurant.default_locale` for base `name`/`description` so English and Hebrew do not overwrite each other incorrectly.
-* **Full UI translation:** Diner and admin chrome use a shared **`useUiStore` locale** plus `getUiMessage` / `getUiTemplate` (`frontend/utils/i18n.ts`) for English and Hebrew strings (menus, drawer, errors, aria labels). Menu/category/item **content** still comes from API `translations` JSONB + base fields resolved with `getLocalizedText`.
-* **Menu item deletion (hard delete):** Owner `DELETE /api/owner/items/{item_id}` **physically removes** the row from `menu_items` (and dependent DB rules, e.g. FK cascades, apply as configured in Supabase). The admin UI uses **`DialogProvider` / `useDialogs()`** (`frontend/context/DialogProvider.tsx`): **`confirm()`** for destructive prompts and **`alert()`** for errors — localized via `getUiMessage`, styled modals (`frontend/components/ui/Modal.tsx`, `ConfirmModal.tsx`, `AlertModal.tsx`), **optimistic removal** with **revert + alert** on API failure. **Product note:** Hard delete is acceptable for MVP / no payments. Once we attach **real orders and payments**, we should move to **soft delete** (e.g. `deleted_at` or `is_active` on items) so historical checks, receipts, and refunds can still reference sold items.
+**Phase:** MVP diner + owner flows are largely built; **Phase 2** (events, soft-order server awareness, analytics) is not started.
+
+**MVP checklist (done unless noted):**
+* Diner: `/{slug}` → `tenant-diner-page.tsx` — live menu, Wolt-style UI, cart (Zustand + localStorage), smart upsell, bilingual UI + API translations, optional restaurant banner.
+* Owner: `/{slug}/admin` → `tenant-admin-page.tsx` — categories/items CRUD, drag-and-drop reorder (`@dnd-kit`), availability toggles, image upload, banner, upsell rules in drawer, hard delete with confirm modals.
+* Platform: `/` marketing landing (`TafritoLandingPage`), lead form → `POST /api/marketing/leads`.
+* Superadmin: `/superadmin` login + `/superadmin/onboarding` (magic parse + import). `/superadmin/restaurants` is a **placeholder**.
+* Seed: `backend/seed.py` idempotent import from `mockMenu.json`.
+
+**Auth (May 2026):**
+* **Owners:** Google OAuth via Supabase (`LoginButton`, `/login`, `/auth/callback`). `middleware.ts` redirects unauthenticated users away from `/{slug}/admin`. Owner API calls send `Authorization: Bearer <access_token>` (`menuApi.getOwnerAuthHeaders`). Backend `verify_restaurant_access` checks `restaurant_members` or superadmin `profiles.role`. Stale `# TODO: ADD AUTH` comments remain on some owner routes but **deps are wired**.
+* **Superadmin:** Separate in-memory token auth (`X-Superadmin-Token`), not Supabase.
+
+**Not done (explicit gaps):**
+* `events` ingestion / analytics APIs.
+* Server-side awareness of diner cart (“soft order” submit).
+* RLS enforcement audit in app code (service-role bypasses RLS — tenant scoping is application-layer).
+* Superadmin restaurant list/management UI.
+* Search indexing (`robots` still noindex — ask user before enabling).
+
+**Immediate next task:** Phase-2 `POST` flows for events (and optional soft-order payload), aligned with existing fat menu read contract.
+
+### Routes (frontend)
+| Path | Component / role |
+|------|------------------|
+| `/` | `TafritoLandingPage` + `LeadCaptureDialog` / `HeroMagicDemo` |
+| `/login` | Google admin login (`next` redirect) |
+| `/{slug}` | Diner menu |
+| `/{slug}/admin` | Owner editor (auth required) |
+| `/superadmin`, `/superadmin/onboarding`, `/superadmin/restaurants` | Superadmin tools |
+
+Shared modules: `frontend/lib/menuApi.ts`, `frontend/lib/marketingApi.ts`, `frontend/lib/superadminApi.ts`, `frontend/utils/supabase/{client,server}.ts`.
+
+### Owner dashboard (current build)
+* **Admin UI (`/{restaurant_slug}/admin`):** Full menu editor — categories (create/rename/delete, reorder), items (create/edit/delete, reorder within category, availability PATCH), restaurant banner, item images via owner upload endpoints.
+* **`EditItemDrawer`:** Tabs **General**, **Translations**, **Upsells** (`UpsellTab.tsx` — create/edit/delete rules, bilingual messages). Merges per-locale `translations`; respects `restaurant.default_locale` for base `name`/`description`.
+* **`EditCategoryDrawer`:** Category name + translations.
+* **UI i18n:** `useUiStore` + `getUiMessage` / `getUiTemplate` (`frontend/utils/i18n.ts`). Content i18n via API `translations` + `getLocalizedText`. Locale flags: `frontend/public/flags/{il,us}.svg`.
+* **Hard delete:** `DELETE /api/owner/{slug}/items/{item_id}` removes row + dependent variants/upsells per DB rules. `DialogProvider` confirm/alert modals. **Future:** soft delete when orders/payments exist.
 
 ### Recent engineering changes (May 2026)
 
@@ -139,7 +193,7 @@ These updates are in the repo so future work can assume this behavior without re
 - **`package.json` scripts:** Default dev is **`next dev --webpack`** so day-to-day dev avoids Turbopack Rust panics seen on Next 16.2.x when compiling heavy routes. **`yarn dev:turbo`** runs plain **`next dev`** if you want Turbopack again after the explicit root fix.
 - **Operational note:** Only one `next dev` per `frontend` folder should bind a port; a second instance exits with “Another next dev server is already running.” Mixed **yarn** + **npm** lockfiles under `frontend` can confuse tooling; prefer one package manager there.
 
-**Diner cart and smart upsell (`frontend/store/cartStore.ts`, `frontend/app/page.tsx`)**
+**Diner cart and smart upsell (`frontend/store/cartStore.ts`, `frontend/app/tenant-diner-page.tsx`)**
 
 - **`hasItemInCart(itemId)`** on the cart store: returns whether that menu item id is present in the persisted cart with quantity **greater than zero** (same ids as `addSelection` / `CartItem.itemId`).
 - **Upsell interception:** After the diner confirms “Add to order”, the main item is added first. Then the client scans **`upsell_rules` in array order** and picks the **first** rule whose offered item id (`offer_item_snapshot.id`, i.e. the payload’s offer item) is **not** already in the cart. If one exists, the bottom sheet moves to the upsell step and shows **that** rule (`activeUpsellRule` state—not always `upsell_rules[0]`). If every rule’s offer is already in the cart (or there are no rules), the sheet **closes immediately** with no upsell frame, so there is no “flash then skip” UX.
@@ -161,10 +215,16 @@ These updates are in the repo so future work can assume this behavior without re
 - **Cart isolation across tenants:** cart store now keeps `restaurantSlug`; adding an item from a different tenant auto-clears old cart then adds the new item (Secure MVP behavior to avoid cross-restaurant cart leakage/confusion).
 - **Next.js 16 dynamic params:** slug wrapper routes were updated to await async `params` to avoid runtime warnings/errors.
 
+**Marketing site (May 2026)**
+
+- **`TafritoLandingPage`:** Hebrew/English copy in `landingDictionary.ts`, FAQ (`LandingFaq`), animated hero phone demo, feature orbit, lead capture.
+- **Leads:** `POST /api/marketing/leads` — validates body, per-IP rate limit (8/hr), emails via Resend (team notification + optional welcome). Frontend: `marketingApi.ts` + `LeadCaptureForm`.
+
 **Operational updates**
 
-- **Backend log timestamps:** Uvicorn log format now includes timestamps for error/access logs in app startup config and in `backend/uvicorn_log_config.json` for CLI launches (`uvicorn ... --log-config ...`).
-- **Search indexing (soft launch):** The Next.js root `app/layout.tsx` sets `metadata.robots` to `noindex, nofollow` (no separate `robots.txt`). In the future we will want to allow the site to be indexed by search engines; before changing that, **ask the user** whether we are ready to enable indexing (and coordinate domain / Search Console if needed).
+- **Backend log timestamps:** Uvicorn log format includes timestamps (`main.py` embedded config + `backend/uvicorn_log_config.json`).
+- **Search indexing:** `app/layout.tsx` — `metadataBase` `https://tafrito.com`, OG/Twitter images, `robots: noindex`. **Ask the user** before enabling indexing.
+- **Env (typical):** `frontend/.env.local` — `NEXT_PUBLIC_API_BASE_URL`, Supabase URL/anon key. `backend/.env` — Supabase service key, OpenAI (superadmin parse), Resend, `SUPERADMIN_*` credentials.
 
 ## 8. Visual & UX Architecture (The "Wolt-Style" Experience)
 To ensure all frontend components align with the overall user experience, here is the mental model for the diner's UI:

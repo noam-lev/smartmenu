@@ -145,7 +145,6 @@ async def ping_owner(_user_id: str = Depends(get_current_user)) -> dict[str, str
     return {"status": "ok", "scope": "owner"}
 
 
-# TODO: ADD AUTH
 @router.post("/{restaurant_slug}/categories")
 async def create_category(
     restaurant_slug: str,
@@ -166,7 +165,6 @@ async def create_category(
     return {"success": True, "category": created}
 
 
-# TODO: ADD AUTH
 @router.patch("/{restaurant_slug}/categories/{category_id}")
 async def patch_category(
     restaurant_slug: str,
@@ -190,7 +188,6 @@ async def patch_category(
     return {"success": True, "category": updated}
 
 
-# TODO: ADD AUTH
 @router.put("/{restaurant_slug}/categories/reorder")
 async def reorder_categories(
     restaurant_slug: str,
@@ -210,7 +207,6 @@ async def reorder_categories(
     return {"success": True}
 
 
-# TODO: ADD AUTH
 @router.delete("/{restaurant_slug}/categories/{category_id}")
 async def delete_category_route(
     restaurant_slug: str,
@@ -228,7 +224,6 @@ async def delete_category_route(
     return {"success": True, "deleted_id": category_id}
 
 
-# TODO: ADD AUTH
 @router.patch("/{restaurant_slug}/categories/{category_id}/items/reorder")
 async def reorder_category_items(
     restaurant_slug: str,
@@ -248,7 +243,6 @@ async def reorder_category_items(
     return {"success": True}
 
 
-# TODO: ADD AUTH
 @router.post("/{restaurant_slug}/categories/{category_id}/items")
 async def create_menu_item(
     restaurant_slug: str,
@@ -271,7 +265,6 @@ async def create_menu_item(
     return {"success": True, "item": created}
 
 
-# TODO: ADD AUTH
 @router.patch("/{restaurant_slug}/items/{item_id}")
 async def patch_menu_item(
     restaurant_slug: str,
@@ -297,7 +290,6 @@ async def patch_menu_item(
     return {"success": True, "item": updated_item}
 
 
-# TODO: ADD AUTH
 @router.patch("/{restaurant_slug}/restaurant")
 async def patch_restaurant(
     restaurant_slug: str,
@@ -317,7 +309,6 @@ async def patch_restaurant(
     return {"success": True, "restaurant": updated}
 
 
-# TODO: ADD AUTH
 @router.post("/{restaurant_slug}/upload-image")
 async def upload_image(
     restaurant_slug: str,
@@ -351,7 +342,6 @@ async def upload_image(
     return {"public_url": public_url}
 
 
-# TODO: ADD AUTH
 @router.post("/{restaurant_slug}/delete-image")
 async def delete_image(
     restaurant_slug: str,
@@ -377,7 +367,6 @@ async def delete_image(
     return {"success": True, "deleted_path": object_path}
 
 
-# TODO: ADD AUTH
 @router.delete("/{restaurant_slug}/items/{item_id}")
 async def delete_menu_item(
     restaurant_slug: str,
@@ -396,7 +385,6 @@ async def delete_menu_item(
     return {"success": True, "deleted_id": item_id}
 
 
-# TODO: ADD AUTH
 @router.patch("/{restaurant_slug}/upsells/{rule_id}")
 async def patch_upsell_rule(
     restaurant_slug: str,
@@ -420,7 +408,6 @@ async def patch_upsell_rule(
     return {"success": True, "id": rule_id}
 
 
-# TODO: ADD AUTH
 @router.post("/{restaurant_slug}/items/{item_id}/upsells")
 async def create_item_upsell_rule(
     restaurant_slug: str,
@@ -440,7 +427,6 @@ async def create_item_upsell_rule(
     return {"success": True, "id": new_id}
 
 
-# TODO: ADD AUTH
 @router.delete("/{restaurant_slug}/upsells/{rule_id}")
 async def delete_upsell_rule_route(
     restaurant_slug: str,

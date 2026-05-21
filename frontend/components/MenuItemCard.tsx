@@ -1,7 +1,7 @@
 import type { DraggableAttributes, DraggableSyntheticListeners } from "@dnd-kit/core";
 import { GripVertical } from "lucide-react";
-import { useState } from "react";
 import type { MenuItem } from "../types/menu";
+import { useImageLoadFailure } from "../hooks/useImageLoadFailure";
 import { formatILSCurrency } from "../utils/currency";
 import { getLocalizedText, getUiMessage, getUiTemplate } from "../utils/i18n";
 import type { Locale } from "../types/menu";
@@ -38,13 +38,13 @@ export default function MenuItemCard({
   onDeleteClick,
   onToggleAvailability,
 }: MenuItemCardProps) {
-  const [failedImageUrls, setFailedImageUrls] = useState<Record<string, true>>({});
+  const { hasLoadableImage, createImgErrorHandler } = useImageLoadFailure();
   const isDraftItem = item.id.startsWith("temp-");
   const formattedPrice = formatILSCurrency(item.base_price);
   const itemName = getLocalizedText(item, "name", locale);
   const itemDescription = getLocalizedText(item, "description", locale);
   const imageUrl = hasRenderableImage(item.image_url) ? item.image_url : null;
-  const hasImage = imageUrl ? !failedImageUrls[imageUrl] : false;
+  const hasImage = hasLoadableImage(imageUrl);
   const cardContent = (
     <div className="flex items-start gap-3">
       <div className="min-w-0 flex-1">
@@ -194,13 +194,7 @@ export default function MenuItemCard({
             alt={itemName}
             loading="lazy"
             className="h-full w-full object-cover"
-            onError={(event) => {
-              const failedUrl = event.currentTarget.currentSrc || imageUrl;
-              if (!failedUrl) {
-                return;
-              }
-              setFailedImageUrls((prev) => ({ ...prev, [failedUrl]: true }));
-            }}
+            onError={createImgErrorHandler(imageUrl)}
           />
         </div>
       ) : null}

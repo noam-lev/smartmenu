@@ -1,5 +1,14 @@
 import type { Locale, TranslationsMap } from "../types/menu";
 
+export const localeFlagSrc: Record<Locale, string> = {
+  he: "/flags/il.svg",
+  en: "/flags/us.svg",
+};
+
+export function otherLocale(locale: Locale): Locale {
+  return locale === "he" ? "en" : "he";
+}
+
 type TranslatableEntity = {
   translations?: TranslationsMap;
 } & Record<string, unknown>;

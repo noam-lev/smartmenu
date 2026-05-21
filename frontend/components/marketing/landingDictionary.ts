@@ -3,9 +3,6 @@ export type LandingLocale = "he" | "en";
 export const landingCopy = {
   he: {
     brand: "Tafrito",
-    langHe: "עב",
-    langEn: "En",
-    badge: "נבנה לבעלי מסעדות",
     heroTitle: "המסעדה שלך יכולה למכור יותר.",
     heroSubtitle:
       "בתוך פחות מחמש דקות אנחנו הופכים את התפריט שלכם לדיגיטלי. ואז - אנחנו הולכים לגרום לכם להרוויח יותר. איך? תמשיכו לגלול.",
@@ -14,6 +11,7 @@ export const landingCopy = {
     howItWorksBody:
       "אתם מצלמים את התפריט המודפס שלכם ומעלים לאתר. בתוך פחות מחמש דקות, יש לכם תפריט דיגיטלי מלא בנוסח wolt. כל מה שנשאר הוא לשים את קוד הQR על הסטנדים המעוצבים שאנחנו מספקים, ולהתחיל לעבוד!",
     howItWorksCta: "אני רוצה לנסות בעצמי",
+    howItWorksSampleMenu: "איך זה נראה בפועל? הציצו בתפריט לדוגמה ←",
     howItWorksVideoLabel: "הפעלת סרטון הדגמה",
     navCta: "התחל עכשיו",
     demoStartPrompt: "לדמו — לחצו כאן",
@@ -31,15 +29,6 @@ export const landingCopy = {
     feature4Short: "תפריט ממותג",
     feature5Short: "תרגום דו־לשוני",
     feature6Short: "הלקוחות מזמינים מהר יותר",
-    feature1Title: "אנליטיקות מלאות - להבין את המסעדה שלך",
-    feature1Body:
-      "הצעות הקשר שמגדילות את הסל בזמן שהאורח עדיין בטעימה הראשונה — לא באמצע PDF.",
-    feature2Title: "ממשק מהיר, בלי אפליקציה",
-    feature2Body:
-      "קטגוריות דביקות, תמונות גדולות, והזמנה בשלוש הקשות. הכל בדפדפן.",
-    feature3Title: "ניהול שמרגיש כמו מטבח, לא כמו משרד",
-    feature3Body:
-      "עדכונים, תרגומים וזמינות במקום אחד — בלי לייצא קובץ חדש בכל שינוי.",
     leadModalTitle: "נשמח להכיר",
     leadModalSub: "השאירו פרטים ונחזור אליכם להמשך.",
     leadName: "שם מלא",
@@ -61,8 +50,11 @@ export const landingCopy = {
     demoAdd: "הוספה",
     pricingTitle: "מחירים",
     pricingSub: "בלי עלות הקמה או שום בולשיט אחר — בוחרים מה שמתאים לכם.",
+    pricingStickerEyebrow: "עכשיו לזמן מוגבל",
+    pricingStickerHeadline: "חודש ראשון בחינם!",
+    pricingStickerSub: "התנסות מלאה על חשבון הבית 😋",
     planStarterName: "בסיסי",
-    planStarterPrice: "₪149",
+    planStarterPrice: "₪99",
     planStarterPeriod: "/חודש",
     planStarterNote: "מסעדה אחת, תפריט אחד",
     planStarterFeatures: [
@@ -73,7 +65,7 @@ export const landingCopy = {
       "תמיכה בוואטסאפ",
     ],
     planProName: "קלאסי",
-    planProPrice: "₪249",
+    planProPrice: "₪199",
     planProPeriod: "/חודש",
     planProNote: "הכי נפוץ בקרב הלקוחות שלנו",
     planProFeatures: [
@@ -121,13 +113,10 @@ export const landingCopy = {
     faq5Answer:
       "כן. אנחנו מציעים תפריט דיגיטלי דו-לשוני מלא. תיירים ולקוחות דוברי אנגלית יכולים להחליף שפה בלחיצת כפתור וליהנות מחוויית הזמנה ברורה ופשוטה.",
     faq6Question: "כמה זמן לוקח להקים תפריט כזה?",
-    faq6Answer: "אנחנו מתחייבים להקמה תוך 24 שעות מרגע קבלת התפריט שלכם.",
+    faq6Answer: "חמש דקות. נסו אותנו.",
   },
   en: {
     brand: "Tafrito",
-    langHe: "HE",
-    langEn: "En",
-    badge: "Built for restaurateurs",
     heroTitle: "Your menu can sell more.",
     heroSubtitle:
       "Turn what you already have into a respectful mobile ordering experience — with upsells that feel natural, not pushy.",
@@ -136,6 +125,7 @@ export const landingCopy = {
     howItWorksBody:
       "Photograph your menu, get a branded mobile menu, and update dishes and prices without printing a new PDF. Everything stays simple, readable, and respectful at the table.",
     howItWorksCta: "I want to try it myself",
+    howItWorksSampleMenu: "See it live? Peek at a sample menu ➔",
     howItWorksVideoLabel: "Play demo video",
     navCta: "Start now",
     demoStartPrompt: "For demo, tap here",
@@ -153,15 +143,6 @@ export const landingCopy = {
     feature4Short: "Branded menu",
     feature5Short: "Two languages",
     feature6Short: "Quick updates",
-    feature1Title: "Upsells without hovering",
-    feature1Body:
-      "Contextual add-ons that grow the check while the guest is still on the first bite — not inside a PDF.",
-    feature2Title: "Fast UI, no app",
-    feature2Body:
-      "Sticky categories, generous imagery, and ordering in three taps. All in the browser.",
-    feature3Title: "Management that feels like the kitchen",
-    feature3Body:
-      "Updates, translations, and availability in one place — no re-export every time the menu shifts.",
     leadModalTitle: "We’d love to meet you",
     leadModalSub: "Leave your details and we’ll follow up.",
     leadName: "Full name",
@@ -183,6 +164,9 @@ export const landingCopy = {
     demoAdd: "Add",
     pricingTitle: "Pricing",
     pricingSub: "No maze of tiers — pick what fits your table.",
+    pricingStickerEyebrow: "Limited time",
+    pricingStickerHeadline: "First month free!",
+    pricingStickerSub: "Full trial on us",
     planStarterName: "Starter",
     planStarterPrice: "₪149",
     planStarterPeriod: "/month",
@@ -239,6 +223,6 @@ export const landingCopy = {
     faq5Answer:
       "Yes. We offer a full bilingual digital menu. Tourists and English-speaking guests can switch language in one tap for a clear, simple ordering experience.",
     faq6Question: "How long does setup take?",
-    faq6Answer: "We commit to going live within 24 hours of receiving your menu.",
+    faq6Answer: "5 minutes. Try it out.",
   },
 } as const;
