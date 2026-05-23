@@ -5,6 +5,8 @@ import { useShallow } from "zustand/react/shallow";
 import CartSummarySheet from "../components/CartSummarySheet";
 import ItemBottomSheet from "../components/ItemBottomSheet";
 import MenuItemCard from "../components/MenuItemCard";
+import SocialLinksFooter from "../components/SocialLinksFooter";
+import { parseSocialLinksForDisplay } from "../lib/socialLinks";
 import { useMenuData } from "../hooks/useMenuData";
 import { useCartStore } from "../store/cartStore";
 import { useUiStore } from "../store/uiStore";
@@ -80,6 +82,22 @@ export function TenantDinerPage({ restaurantSlug = "yossis-hummus" }: DinerPageP
   const setLocale = useUiStore((state) => state.setLocale);
   const cartItems = useMemo(() => Object.values(itemsByItemId), [itemsByItemId]);
   const isRtl = isRtlLocale(locale);
+  const socialLinks = useMemo(
+    () => parseSocialLinksForDisplay(menuPayload?.restaurant.settings),
+    [menuPayload?.restaurant.settings],
+  );
+  const hasSocialFooter = socialLinks.length > 0;
+  const mainBottomPaddingClass =
+    hasSocialFooter && totalItems > 0
+      ? "pb-40"
+      : hasSocialFooter
+        ? "pb-20"
+        : totalItems > 0
+          ? "pb-24"
+          : "pb-4";
+  const cartBottomClass = hasSocialFooter
+    ? "bottom-[calc(3.5rem+0.75rem+env(safe-area-inset-bottom,0px))]"
+    : "bottom-4";
 
   const upsellRule = isUpsellStep ? activeUpsellRule ?? undefined : undefined;
   const restaurantName = menuPayload
@@ -274,7 +292,7 @@ export function TenantDinerPage({ restaurantSlug = "yossis-hummus" }: DinerPageP
       lang={locale}
       dir={isRtl ? "rtl" : "ltr"}
     >
-      <main className="mx-auto max-w-md bg-white pb-24">
+      <main className={`mx-auto max-w-md bg-white ${mainBottomPaddingClass}`}>
         <header className="border-b border-zinc-200">
           <div className="h-44 w-full overflow-hidden bg-zinc-100">
             {menuPayload.restaurant.banner_url ? (
@@ -448,11 +466,13 @@ export function TenantDinerPage({ restaurantSlug = "yossis-hummus" }: DinerPageP
         onRemove={(itemId) => removeItem(restaurantSlug, itemId)}
       />
 
+      {hasSocialFooter ? <SocialLinksFooter locale={locale} links={socialLinks} /> : null}
+
       {hasMounted && totalItems > 0 ? (
         <button
           type="button"
           onClick={openCartSheet}
-          className="fixed bottom-4 left-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-2xl bg-zinc-900 px-4 py-3 text-start text-white shadow-lg active:scale-[0.995]"
+          className={`fixed left-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-2xl bg-zinc-900 px-4 py-3 text-start text-white shadow-lg active:scale-[0.995] ${cartBottomClass}`}
         >
           <p className="text-xs font-medium text-zinc-300">
             {getUiMessage("softOrdering", locale)}

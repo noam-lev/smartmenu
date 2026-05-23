@@ -201,6 +201,38 @@ export async function updateRestaurantBannerUrl(
   }
 }
 
+export async function updateRestaurantSocialLinks(
+  restaurantSlug: string,
+  socialLinks: Record<string, string | null>,
+): Promise<Record<string, unknown>> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/owner/${encodeURIComponent(restaurantSlug)}/restaurant`,
+    {
+      method: "PATCH",
+      headers: await getOwnerAuthHeaders(true),
+      body: JSON.stringify({ social_links: socialLinks }),
+    },
+  );
+
+  if (!response.ok) {
+    let detail = `Failed to update social links (${response.status})`;
+    try {
+      const body = (await response.json()) as { detail?: string };
+      if (typeof body.detail === "string" && body.detail.trim()) {
+        detail = body.detail;
+      }
+    } catch {
+      // ignore parse errors
+    }
+    throw new Error(detail);
+  }
+
+  const data = (await response.json()) as {
+    restaurant?: { settings?: Record<string, unknown> };
+  };
+  return data.restaurant?.settings ?? {};
+}
+
 export async function createMenuItem(
   restaurantSlug: string,
   categoryId: string,

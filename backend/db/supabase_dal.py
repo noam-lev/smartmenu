@@ -212,15 +212,18 @@ class SupabaseDAL(MenuRepository):
     async def import_full_restaurant(self, payload: dict[str, Any]) -> dict[str, Any]:
         return await asyncio.to_thread(self._import_full_restaurant_sync, payload)
 
-    async def update_restaurant_banner_url(
+    async def patch_restaurant_settings(
         self,
         restaurant_id: str,
-        banner_url: str | None,
+        *,
+        banner_url: str | None | object = ...,
+        social_links: dict[str, object] | None | object = ...,
     ) -> dict[str, Any] | None:
         return await asyncio.to_thread(
-            self._update_restaurant_banner_url_sync,
+            self._patch_restaurant_settings_sync,
             restaurant_id,
             banner_url,
+            social_links,
         )
 
     def _diagnose_menu_not_found_reason_sync(self, slug: str) -> str:
@@ -329,11 +332,17 @@ class SupabaseDAL(MenuRepository):
 
         return response.data or []
 
-    def _update_restaurant_banner_url_sync(
+    def _patch_restaurant_settings_sync(
         self,
         restaurant_id: str,
-        banner_url: str | None,
+        banner_url: str | None | object,
+        social_links: dict[str, object] | None | object,
     ) -> dict[str, Any] | None:
+        from core.social_links import (
+            apply_social_links_patch,
+            parse_social_links_from_settings,
+        )
+
         probe = (
             self._client.table("restaurants")
             .select("id,settings")
@@ -346,7 +355,18 @@ class SupabaseDAL(MenuRepository):
             return None
 
         settings = _as_dict(row.get("settings"))
-        settings["banner_image_url"] = banner_url
+        if banner_url is not ...:
+            settings["banner_image_url"] = banner_url
+        if social_links is not ...:
+            if social_links is None:
+                settings["social_links"] = {}
+            else:
+                current = parse_social_links_from_settings(settings)
+                settings["social_links"] = apply_social_links_patch(
+                    current,
+                    social_links,
+                )
+
         response = (
             self._client.table("restaurants")
             .update({"settings": settings})
@@ -360,6 +380,7 @@ class SupabaseDAL(MenuRepository):
         return {
             "id": str(updated_row.get("id") or ""),
             "banner_url": _as_optional_string(settings.get("banner_image_url")),
+            "settings": settings,
         }
 
     def _apply_menu_item_patch(

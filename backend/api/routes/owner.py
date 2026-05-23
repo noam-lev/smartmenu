@@ -15,6 +15,7 @@ from api.dependencies import (
 )
 from db.repository import MenuRepository
 from supabase import Client
+from core.social_links import SOCIAL_PLATFORMS, SocialLinksValidationError
 from models.schemas import (
     CategoryCreateRequest,
     CategoryUpdateRequest,
@@ -101,6 +102,7 @@ class RestaurantPatchPayload(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     banner_url: str | None = None
+    social_links: dict[str, str | None] | None = None
 
     @field_validator("banner_url", mode="before")
     @classmethod
@@ -110,6 +112,20 @@ class RestaurantPatchPayload(BaseModel):
         if isinstance(value, str):
             trimmed = value.strip()
             return trimmed or None
+        return value
+
+    @field_validator("social_links")
+    @classmethod
+    def validate_social_link_keys(
+        cls,
+        value: dict[str, str | None] | None,
+    ) -> dict[str, str | None] | None:
+        if value is None:
+            return None
+        for key in value:
+            platform = str(key or "").strip().lower()
+            if platform not in SOCIAL_PLATFORMS:
+                raise ValueError(f"Unknown social platform: {platform}")
         return value
 
 
@@ -297,10 +313,27 @@ async def patch_restaurant(
     access: RestaurantAccessContext = Depends(verify_restaurant_access),
     db: MenuRepository = Depends(get_db),
 ) -> dict[str, object]:
-    updated = await db.update_restaurant_banner_url(
-        access["restaurant_id"],
-        payload.banner_url,
-    )
+    patch_fields = payload.model_dump(exclude_unset=True)
+    if not patch_fields:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No fields to update.",
+        )
+
+    banner_url = patch_fields.get("banner_url", ...)
+    social_links = patch_fields.get("social_links", ...)
+    try:
+        updated = await db.patch_restaurant_settings(
+            access["restaurant_id"],
+            banner_url=banner_url,
+            social_links=social_links,
+        )
+    except SocialLinksValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
     if updated is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
