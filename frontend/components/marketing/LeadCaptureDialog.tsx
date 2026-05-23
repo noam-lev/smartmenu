@@ -33,7 +33,7 @@ export function LeadCaptureDialog({ open, onClose, locale }: LeadCaptureDialogPr
       <button
         type="button"
         onClick={onClose}
-        className="mt-4 w-full rounded-sm border border-ticket-rule py-2 text-sm text-warm-brown transition hover:bg-kraft"
+        className="mt-4 w-full cursor-pointer rounded-sm border border-ticket-rule py-2 text-sm text-warm-brown transition hover:bg-kraft"
       >
         {t.leadClose}
       </button>

@@ -465,7 +465,7 @@ export function TafritoLandingPage() {
             <button
               type="button"
               onClick={() => setLeadOpen(true)}
-              className="rounded-sm bg-fresh-green py-2.5 ps-5 pe-5 text-sm font-bold tracking-tight text-kraft transition hover:bg-fresh-green/90 active:translate-y-px md:py-3 md:ps-6 md:pe-6"
+              className="cursor-pointer rounded-sm bg-fresh-green py-2.5 ps-5 pe-5 text-sm font-bold tracking-tight text-kraft transition hover:bg-fresh-green/90 active:translate-y-px md:py-3 md:ps-6 md:pe-6"
             >
               {t.navCta}
             </button>
@@ -476,7 +476,7 @@ export function TafritoLandingPage() {
                 aria-haspopup="menu"
                 aria-expanded={langMenuOpen}
                 aria-label={getUiMessage("selectLanguage", locale)}
-                className="inline-flex items-center gap-1 rounded-sm border border-espresso/15 bg-kraft/80 px-2 py-1.5"
+                className="inline-flex cursor-pointer items-center gap-1 rounded-sm border border-espresso/15 bg-kraft/80 px-2 py-1.5"
               >
                 <img
                   src={localeFlagSrc[locale]}
@@ -504,7 +504,7 @@ export function TafritoLandingPage() {
                       setLocale(otherLocale(locale));
                       setLangMenuOpen(false);
                     }}
-                    className="flex justify-center rounded-sm px-3 py-2 hover:bg-espresso/5"
+                    className="flex cursor-pointer justify-center rounded-sm px-3 py-2 hover:bg-espresso/5"
                   >
                     <img
                       src={localeFlagSrc[otherLocale(locale)]}
@@ -517,7 +517,7 @@ export function TafritoLandingPage() {
             </div>
             <button
               type="button"
-              className="inline-flex items-center justify-center rounded-sm border border-espresso/15 p-2 text-espresso md:hidden"
+              className="inline-flex cursor-pointer items-center justify-center rounded-sm border border-espresso/15 p-2 text-espresso md:hidden"
               aria-label={locale === "he" ? "תפריט" : "Menu"}
               aria-expanded={mobileOpen}
               onClick={() => setMobileOpen((open) => !open)}
@@ -543,7 +543,7 @@ export function TafritoLandingPage() {
                 setLocale(otherLocale(locale));
                 setMobileOpen(false);
               }}
-              className="inline-flex rounded-sm border border-espresso/15 p-1.5"
+              className="inline-flex cursor-pointer rounded-sm border border-espresso/15 p-1.5"
             >
               <img
                 src={localeFlagSrc[otherLocale(locale)]}
@@ -568,7 +568,7 @@ export function TafritoLandingPage() {
               <button
                 type="button"
                 onClick={() => setLeadOpen(true)}
-                className="mt-12 rounded-sm bg-fresh-green py-4 ps-10 pe-10 text-sm font-bold uppercase tracking-tight text-kraft transition hover:bg-fresh-green/90 active:translate-y-px"
+                className="mt-12 cursor-pointer rounded-sm bg-fresh-green py-4 ps-10 pe-10 text-sm font-bold uppercase tracking-tight text-kraft transition hover:bg-fresh-green/90 active:translate-y-px"
               >
                 {t.heroCta}
               </button>
@@ -642,14 +642,14 @@ export function TafritoLandingPage() {
                 href="https://tafrito.com/yossis-hummus"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-8 inline-flex max-w-full items-center justify-center self-start rounded-sm border border-espresso/20 bg-transparent px-6 py-3 text-center text-sm font-bold tracking-tight text-espresso transition hover:bg-espresso/5 active:translate-y-px sm:justify-start"
+                className="mt-8 inline-flex max-w-full cursor-pointer items-center justify-center self-start rounded-sm border border-espresso/20 bg-transparent px-6 py-3 text-center text-sm font-bold tracking-tight text-espresso transition hover:bg-espresso/5 active:translate-y-px sm:justify-start"
               >
                 {t.howItWorksSampleMenu}
               </a>
               <button
                 type="button"
                 onClick={() => setLeadOpen(true)}
-                className="mt-6 rounded-sm border-b-4 border-fresh-green/80 bg-fresh-green py-4 ps-10 pe-10 text-sm font-bold uppercase tracking-tight text-kraft transition hover:bg-fresh-green/90 active:translate-y-1"
+                className="mt-6 cursor-pointer rounded-sm border-b-4 border-fresh-green/80 bg-fresh-green py-4 ps-10 pe-10 text-sm font-bold uppercase tracking-tight text-kraft transition hover:bg-fresh-green/90 active:translate-y-1"
               >
                 {t.howItWorksCta}
               </button>
@@ -663,7 +663,7 @@ export function TafritoLandingPage() {
                 />
                 <button
                   type="button"
-                  className="absolute inset-0 flex items-center justify-center"
+                  className="absolute inset-0 flex cursor-pointer items-center justify-center"
                   aria-label={t.howItWorksVideoLabel}
                 >
                   <span className="flex h-16 w-16 items-center justify-center rounded-full border border-espresso/15 bg-kraft/90 text-espresso shadow-[0_12px_30px_rgba(62,39,35,0.14)] transition hover:scale-105">
@@ -822,7 +822,7 @@ export function TafritoLandingPage() {
                   <button
                     type="button"
                     onClick={() => setLeadOpen(true)}
-                    className="w-full rounded-sm bg-fresh-green py-3 text-xs font-bold uppercase tracking-tight text-kraft transition hover:bg-fresh-green/90 active:translate-y-px"
+                    className="w-full cursor-pointer rounded-sm bg-fresh-green py-3 text-xs font-bold uppercase tracking-tight text-kraft transition hover:bg-fresh-green/90 active:translate-y-px"
                   >
                     {t.planCta}
                   </button>
