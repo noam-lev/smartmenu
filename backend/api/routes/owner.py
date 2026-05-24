@@ -4,7 +4,7 @@ from urllib.parse import unquote, urlparse
 import uuid
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 
 from api.dependencies import (
     RestaurantAccessContext,
@@ -159,6 +159,32 @@ def _extract_storage_path_from_public_url(file_url: str) -> str:
 @router.get("/ping")
 async def ping_owner(_user_id: str = Depends(get_current_user)) -> dict[str, str]:
     return {"status": "ok", "scope": "owner"}
+
+
+@router.get("/me/restaurants")
+async def list_my_restaurants(
+    current_slug: str | None = Query(default=None),
+    user_id: str = Depends(get_current_user),
+    supabase_client: Client = Depends(get_supabase_client),
+    db: MenuRepository = Depends(get_db),
+) -> dict[str, object]:
+    profile_resp = (
+        supabase_client.table("profiles")
+        .select("role")
+        .eq("id", user_id)
+        .limit(1)
+        .execute()
+    )
+    profile_row = (profile_resp.data or [None])[0]
+    user_role = str((profile_row or {}).get("role") or "").strip().lower()
+    is_superadmin = user_role == "superadmin"
+
+    restaurants = await db.list_restaurants_for_user(
+        user_id,
+        is_superadmin,
+        current_slug=current_slug,
+    )
+    return {"restaurants": restaurants}
 
 
 @router.post("/{restaurant_slug}/categories")

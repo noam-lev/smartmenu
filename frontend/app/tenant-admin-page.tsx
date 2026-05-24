@@ -54,6 +54,7 @@ import {
 import { getMenuLoadErrorMessage } from "../lib/menuFetchError";
 import { useDialogs } from "../context/DialogProvider";
 import { useUiStore } from "../store/uiStore";
+import { createClient as createSupabaseBrowserClient } from "../utils/supabase/client";
 import type { Locale, MenuCategory, MenuItem, MenuPayload } from "../types/menu";
 import {
   getLocalizedText,
@@ -978,6 +979,12 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
               </div>
               <button
                 type="button"
+                onClick={() => {
+                  const supabase = createSupabaseBrowserClient();
+                  void supabase.auth.signOut().then(() => {
+                    window.location.href = `/${encodeURIComponent(restaurantSlug)}`;
+                  });
+                }}
                 className="rounded-full border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-700 shadow-sm"
               >
                 {getUiMessage("logout", locale)}
