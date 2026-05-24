@@ -2,7 +2,7 @@ import type { DraggableAttributes, DraggableSyntheticListeners } from "@dnd-kit/
 import { GripVertical } from "lucide-react";
 import type { MenuItem } from "../types/menu";
 import { useImageLoadFailure } from "../hooks/useImageLoadFailure";
-import { formatILSCurrency } from "../utils/currency";
+import { formatCurrency } from "../utils/currency";
 import { getLocalizedText, getUiMessage, getUiTemplate } from "../utils/i18n";
 import type { Locale } from "../types/menu";
 import { hasRenderableImage } from "../utils/media";
@@ -10,6 +10,7 @@ import { hasRenderableImage } from "../utils/media";
 type MenuItemCardProps = {
   item: MenuItem;
   locale: Locale;
+  currency?: string;
   unavailableLabel: string;
   mode?: "diner" | "admin";
   /** Optimistic-create row: server save in flight */
@@ -27,6 +28,7 @@ type MenuItemCardProps = {
 export default function MenuItemCard({
   item,
   locale,
+  currency = "ILS",
   unavailableLabel,
   mode = "diner",
   isCreationPending = false,
@@ -40,7 +42,7 @@ export default function MenuItemCard({
 }: MenuItemCardProps) {
   const { hasLoadableImage, createImgErrorHandler } = useImageLoadFailure();
   const isDraftItem = item.id.startsWith("temp-");
-  const formattedPrice = formatILSCurrency(item.base_price);
+  const formattedPrice = formatCurrency(item.base_price, currency);
   const itemName = getLocalizedText(item, "name", locale);
   const itemDescription = getLocalizedText(item, "description", locale);
   const imageUrl = hasRenderableImage(item.image_url) ? item.image_url : null;

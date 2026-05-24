@@ -176,3 +176,186 @@ export async function importRestaurant(
     restaurant_slug: string;
   };
 }
+
+// ---------------------------------------------------------------------------
+// Restaurant management types
+// ---------------------------------------------------------------------------
+
+export type RestaurantListItem = {
+  id: string;
+  name: string;
+  slug: string;
+  is_active: boolean;
+  created_at: string;
+  plan_tier: string;
+  member_count: number;
+  menu_count: number;
+  active_menu_count: number;
+};
+
+export type RestaurantDetail = {
+  id: string;
+  name: string;
+  slug: string;
+  is_active: boolean;
+  created_at: string;
+  theme_color: string;
+  currency: string;
+  default_locale: string | null;
+  translations: Record<string, Record<string, string>> | null;
+  banner_image_url: string | null;
+  social_links: Record<string, string> | null;
+};
+
+export type RestaurantMember = {
+  user_id: string;
+  role: string;
+  email: string | null;
+};
+
+export type RestaurantSubscription = {
+  plan_tier: string;
+  status: string;
+};
+
+export type RestaurantMenu = {
+  id: string;
+  name: string;
+  is_active: boolean;
+  item_count: number;
+};
+
+export type RestaurantDetailResponse = {
+  restaurant: RestaurantDetail;
+  members: RestaurantMember[];
+  subscription: RestaurantSubscription;
+  menus: RestaurantMenu[];
+};
+
+// ---------------------------------------------------------------------------
+// Restaurant management API helpers
+// ---------------------------------------------------------------------------
+
+export async function fetchRestaurants(params: {
+  search?: string;
+  is_active?: boolean;
+  offset?: number;
+  limit?: number;
+}): Promise<{ restaurants: RestaurantListItem[]; total: number }> {
+  const qs = new URLSearchParams();
+  if (params.search) qs.set("search", params.search);
+  if (params.is_active !== undefined) qs.set("is_active", String(params.is_active));
+  if (params.offset !== undefined) qs.set("offset", String(params.offset));
+  if (params.limit !== undefined) qs.set("limit", String(params.limit));
+
+  const query = qs.toString();
+  const response = await superadminFetch(
+    `/api/superadmin/restaurants${query ? `?${query}` : ""}`,
+  );
+  const raw = await response.text();
+  if (!response.ok) throw new Error(readDetailFromBody(raw));
+  return JSON.parse(raw) as { restaurants: RestaurantListItem[]; total: number };
+}
+
+export async function fetchRestaurantDetail(
+  slug: string,
+): Promise<RestaurantDetailResponse> {
+  const response = await superadminFetch(`/api/superadmin/restaurants/${slug}`);
+  const raw = await response.text();
+  if (!response.ok) throw new Error(readDetailFromBody(raw));
+  return JSON.parse(raw) as RestaurantDetailResponse;
+}
+
+export async function patchRestaurant(
+  slug: string,
+  fields: {
+    name?: string;
+    slug?: string;
+    is_active?: boolean;
+    theme_color?: string;
+    currency?: string;
+    default_locale?: string;
+  },
+): Promise<{ success: boolean; slug: string }> {
+  const response = await superadminFetch(`/api/superadmin/restaurants/${slug}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(fields),
+  });
+  const raw = await response.text();
+  if (!response.ok) throw new Error(readDetailFromBody(raw));
+  return JSON.parse(raw) as { success: boolean; slug: string };
+}
+
+export async function addRestaurantMember(
+  slug: string,
+  email: string,
+  role: string,
+): Promise<{ success: boolean; member: RestaurantMember }> {
+  const response = await superadminFetch(
+    `/api/superadmin/restaurants/${slug}/members`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, role }),
+    },
+  );
+  const raw = await response.text();
+  if (!response.ok) throw new Error(readDetailFromBody(raw));
+  return JSON.parse(raw) as { success: boolean; member: RestaurantMember };
+}
+
+export async function updateMemberRole(
+  slug: string,
+  userId: string,
+  role: string,
+): Promise<{ success: boolean; role: string }> {
+  const response = await superadminFetch(
+    `/api/superadmin/restaurants/${slug}/members/${userId}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role }),
+    },
+  );
+  const raw = await response.text();
+  if (!response.ok) throw new Error(readDetailFromBody(raw));
+  return JSON.parse(raw) as { success: boolean; role: string };
+}
+
+export async function removeMember(
+  slug: string,
+  userId: string,
+): Promise<{ success: boolean }> {
+  const response = await superadminFetch(
+    `/api/superadmin/restaurants/${slug}/members/${userId}`,
+    { method: "DELETE" },
+  );
+  const raw = await response.text();
+  if (!response.ok) throw new Error(readDetailFromBody(raw));
+  return JSON.parse(raw) as { success: boolean };
+}
+
+export async function updateSubscription(
+  slug: string,
+  planTier: string,
+  subscriptionStatus: string = "active",
+): Promise<{ success: boolean; subscription: RestaurantSubscription }> {
+  const response = await superadminFetch(
+    `/api/superadmin/restaurants/${slug}/subscription`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        plan_tier: planTier,
+        subscription_status: subscriptionStatus,
+      }),
+    },
+  );
+  const raw = await response.text();
+  if (!response.ok) throw new Error(readDetailFromBody(raw));
+  return JSON.parse(raw) as {
+    success: boolean;
+    subscription: RestaurantSubscription;
+  };
+}

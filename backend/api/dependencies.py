@@ -204,6 +204,28 @@ async def verify_restaurant_access(
     )
 
 
+async def verify_superadmin(
+    user_id: str = Depends(get_current_user),
+    supabase_client: Client = Depends(get_supabase_client),
+) -> str:
+    """Verify the current user has superadmin role. Returns user_id."""
+    profile_resp = (
+        supabase_client.table("profiles")
+        .select("role")
+        .eq("id", user_id)
+        .limit(1)
+        .execute()
+    )
+    profile_row = (profile_resp.data or [None])[0]
+    user_role = str((profile_row or {}).get("role") or "").strip().lower()
+    if user_role != "superadmin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Superadmin access required.",
+        )
+    return user_id
+
+
 class FeatureAccessChecker:
     """FastAPI dependency: Depends(verify_feature_access(\"feature_name\"))."""
 

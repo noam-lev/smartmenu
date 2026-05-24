@@ -6,12 +6,13 @@ import type { Locale } from "../types/menu";
 import { useDraggableSheet } from "../hooks/useDraggableSheet";
 import { useLockBodyScroll } from "../hooks/useLockBodyScroll";
 import { useSheetDialogA11y } from "../hooks/useSheetDialogA11y";
-import { formatILSCurrency } from "../utils/currency";
+import { formatCurrency } from "../utils/currency";
 import { getLocalizedText } from "../utils/i18n";
 
 type CartSummarySheetProps = {
   isOpen: boolean;
   locale: Locale;
+  currency?: string;
   items: CartItem[];
   subtotal: number;
   labels: {
@@ -31,6 +32,7 @@ type CartSummarySheetProps = {
 export default function CartSummarySheet({
   isOpen,
   locale,
+  currency = "ILS",
   items,
   subtotal,
   labels,
@@ -114,7 +116,7 @@ export default function CartSummarySheet({
                         {getLocalizedText(item, "name", locale)}
                       </p>
                       <p className="text-xs text-zinc-500">
-                        {formatILSCurrency(item.displayUnitPrice)} {labels.each}
+                        {formatCurrency(item.displayUnitPrice, currency)} {labels.each}
                       </p>
                     </div>
                     <button
@@ -147,7 +149,7 @@ export default function CartSummarySheet({
                       </button>
                     </div>
                     <p className="text-sm font-semibold text-zinc-900">
-                      {formatILSCurrency(item.displayUnitPrice * item.quantity)}
+                      {formatCurrency(item.displayUnitPrice * item.quantity, currency)}
                     </p>
                   </div>
                 </div>
@@ -158,7 +160,7 @@ export default function CartSummarySheet({
               <div className="flex items-center justify-between">
                 <p className="text-sm text-zinc-600">{labels.subtotal}</p>
                 <p className="text-base font-bold text-zinc-900">
-                  {formatILSCurrency(subtotal)}
+                  {formatCurrency(subtotal, currency)}
                 </p>
               </div>
             </div>
