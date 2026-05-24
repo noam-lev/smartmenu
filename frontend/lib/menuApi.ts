@@ -1,3 +1,4 @@
+import type { OwnerRestaurant } from "../types/owner";
 import type { Locale, MenuCategory, MenuItem, MenuPayload } from "../types/menu";
 import {
   logMenuFetchFailure,
@@ -199,6 +200,61 @@ export async function updateRestaurantBannerUrl(
   if (!response.ok) {
     throw new Error(`Failed to update restaurant banner (${response.status})`);
   }
+}
+
+export async function updateRestaurantSocialLinks(
+  restaurantSlug: string,
+  socialLinks: Record<string, string | null>,
+): Promise<Record<string, unknown>> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/owner/${encodeURIComponent(restaurantSlug)}/restaurant`,
+    {
+      method: "PATCH",
+      headers: await getOwnerAuthHeaders(true),
+      body: JSON.stringify({ social_links: socialLinks }),
+    },
+  );
+
+  if (!response.ok) {
+    let detail = `Failed to update social links (${response.status})`;
+    try {
+      const body = (await response.json()) as { detail?: string };
+      if (typeof body.detail === "string" && body.detail.trim()) {
+        detail = body.detail;
+      }
+    } catch {
+      // ignore parse errors
+    }
+    throw new Error(detail);
+  }
+
+  const data = (await response.json()) as {
+    restaurant?: { settings?: Record<string, unknown> };
+  };
+  return data.restaurant?.settings ?? {};
+}
+
+export async function fetchOwnerRestaurants(
+  currentSlug?: string,
+): Promise<OwnerRestaurant[]> {
+  const url = new URL(`${API_BASE_URL}/api/owner/me/restaurants`);
+  if (currentSlug) {
+    url.searchParams.set("current_slug", currentSlug);
+  }
+  const response = await fetch(url.toString(), {
+    method: "GET",
+    headers: await getOwnerAuthHeaders(false),
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      return [];
+    }
+    throw new Error(`Failed to fetch owner restaurants (${response.status})`);
+  }
+
+  const data = (await response.json()) as { restaurants?: OwnerRestaurant[] };
+  return data.restaurants ?? [];
 }
 
 export async function createMenuItem(

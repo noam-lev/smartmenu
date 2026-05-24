@@ -13,8 +13,10 @@ export const landingCopy = {
     howItWorksCta: "אני רוצה לנסות בעצמי",
     howItWorksSampleMenu: "איך זה נראה בפועל? הציצו בתפריט לדוגמה ←",
     howItWorksVideoLabel: "הפעלת סרטון הדגמה",
-    navCta: "התחל עכשיו",
-    demoStartPrompt: "לדמו — לחצו כאן",
+    navCta: "התחילו עכשיו",
+    whatsappLabel: "דברו איתנו",
+    whatsappAria: "פתיחת שיחה בוואטסאפ — דברו איתנו",
+    demoStartPrompt: "לדמו - לחצו כאן",
     demoStartHint: "",
     demoLoadingSteps: [
       "מצלמים את התפריט שלכם...",
@@ -128,6 +130,8 @@ export const landingCopy = {
     howItWorksSampleMenu: "See it live? Peek at a sample menu ➔",
     howItWorksVideoLabel: "Play demo video",
     navCta: "Start now",
+    whatsappLabel: "Connect with us",
+    whatsappAria: "Open a WhatsApp chat — connect with us",
     demoStartPrompt: "For demo, tap here",
     demoStartHint: "No real file upload",
     demoLoadingSteps: [

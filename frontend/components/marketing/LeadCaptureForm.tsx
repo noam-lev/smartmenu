@@ -117,7 +117,7 @@ export function LeadCaptureForm({ locale }: LeadCaptureFormProps) {
       <button
         type="submit"
         disabled={submitting}
-        className="mt-1 w-full rounded-sm bg-fresh-green py-3 text-sm font-semibold tracking-tight text-kraft transition hover:bg-fresh-green/90 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-70"
+        className="mt-1 w-full cursor-pointer rounded-sm bg-fresh-green py-3 text-sm font-semibold tracking-tight text-kraft transition hover:bg-fresh-green/90 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-70"
       >
         {submitting ? t.leadSubmitting : t.leadSubmit}
       </button>

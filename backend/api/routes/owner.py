@@ -4,7 +4,7 @@ from urllib.parse import unquote, urlparse
 import uuid
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 
 from api.dependencies import (
     RestaurantAccessContext,
@@ -15,6 +15,7 @@ from api.dependencies import (
 )
 from db.repository import MenuRepository
 from supabase import Client
+from core.social_links import SOCIAL_PLATFORMS, SocialLinksValidationError
 from models.schemas import (
     CategoryCreateRequest,
     CategoryUpdateRequest,
@@ -101,6 +102,7 @@ class RestaurantPatchPayload(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     banner_url: str | None = None
+    social_links: dict[str, str | None] | None = None
 
     @field_validator("banner_url", mode="before")
     @classmethod
@@ -110,6 +112,20 @@ class RestaurantPatchPayload(BaseModel):
         if isinstance(value, str):
             trimmed = value.strip()
             return trimmed or None
+        return value
+
+    @field_validator("social_links")
+    @classmethod
+    def validate_social_link_keys(
+        cls,
+        value: dict[str, str | None] | None,
+    ) -> dict[str, str | None] | None:
+        if value is None:
+            return None
+        for key in value:
+            platform = str(key or "").strip().lower()
+            if platform not in SOCIAL_PLATFORMS:
+                raise ValueError(f"Unknown social platform: {platform}")
         return value
 
 
@@ -143,6 +159,32 @@ def _extract_storage_path_from_public_url(file_url: str) -> str:
 @router.get("/ping")
 async def ping_owner(_user_id: str = Depends(get_current_user)) -> dict[str, str]:
     return {"status": "ok", "scope": "owner"}
+
+
+@router.get("/me/restaurants")
+async def list_my_restaurants(
+    current_slug: str | None = Query(default=None),
+    user_id: str = Depends(get_current_user),
+    supabase_client: Client = Depends(get_supabase_client),
+    db: MenuRepository = Depends(get_db),
+) -> dict[str, object]:
+    profile_resp = (
+        supabase_client.table("profiles")
+        .select("role")
+        .eq("id", user_id)
+        .limit(1)
+        .execute()
+    )
+    profile_row = (profile_resp.data or [None])[0]
+    user_role = str((profile_row or {}).get("role") or "").strip().lower()
+    is_superadmin = user_role == "superadmin"
+
+    restaurants = await db.list_restaurants_for_user(
+        user_id,
+        is_superadmin,
+        current_slug=current_slug,
+    )
+    return {"restaurants": restaurants}
 
 
 @router.post("/{restaurant_slug}/categories")
@@ -297,10 +339,27 @@ async def patch_restaurant(
     access: RestaurantAccessContext = Depends(verify_restaurant_access),
     db: MenuRepository = Depends(get_db),
 ) -> dict[str, object]:
-    updated = await db.update_restaurant_banner_url(
-        access["restaurant_id"],
-        payload.banner_url,
-    )
+    patch_fields = payload.model_dump(exclude_unset=True)
+    if not patch_fields:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No fields to update.",
+        )
+
+    banner_url = patch_fields.get("banner_url", ...)
+    social_links = patch_fields.get("social_links", ...)
+    try:
+        updated = await db.patch_restaurant_settings(
+            access["restaurant_id"],
+            banner_url=banner_url,
+            social_links=social_links,
+        )
+    except SocialLinksValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
     if updated is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

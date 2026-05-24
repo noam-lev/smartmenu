@@ -212,15 +212,31 @@ class SupabaseDAL(MenuRepository):
     async def import_full_restaurant(self, payload: dict[str, Any]) -> dict[str, Any]:
         return await asyncio.to_thread(self._import_full_restaurant_sync, payload)
 
-    async def update_restaurant_banner_url(
+    async def list_restaurants_for_user(
+        self,
+        user_id: str,
+        is_superadmin: bool,
+        current_slug: str | None = None,
+    ) -> list[dict[str, Any]]:
+        return await asyncio.to_thread(
+            self._list_restaurants_for_user_sync,
+            user_id,
+            is_superadmin,
+            current_slug,
+        )
+
+    async def patch_restaurant_settings(
         self,
         restaurant_id: str,
-        banner_url: str | None,
+        *,
+        banner_url: str | None | object = ...,
+        social_links: dict[str, object] | None | object = ...,
     ) -> dict[str, Any] | None:
         return await asyncio.to_thread(
-            self._update_restaurant_banner_url_sync,
+            self._patch_restaurant_settings_sync,
             restaurant_id,
             banner_url,
+            social_links,
         )
 
     def _diagnose_menu_not_found_reason_sync(self, slug: str) -> str:
@@ -329,11 +345,17 @@ class SupabaseDAL(MenuRepository):
 
         return response.data or []
 
-    def _update_restaurant_banner_url_sync(
+    def _patch_restaurant_settings_sync(
         self,
         restaurant_id: str,
-        banner_url: str | None,
+        banner_url: str | None | object,
+        social_links: dict[str, object] | None | object,
     ) -> dict[str, Any] | None:
+        from core.social_links import (
+            apply_social_links_patch,
+            parse_social_links_from_settings,
+        )
+
         probe = (
             self._client.table("restaurants")
             .select("id,settings")
@@ -346,7 +368,18 @@ class SupabaseDAL(MenuRepository):
             return None
 
         settings = _as_dict(row.get("settings"))
-        settings["banner_image_url"] = banner_url
+        if banner_url is not ...:
+            settings["banner_image_url"] = banner_url
+        if social_links is not ...:
+            if social_links is None:
+                settings["social_links"] = {}
+            else:
+                current = parse_social_links_from_settings(settings)
+                settings["social_links"] = apply_social_links_patch(
+                    current,
+                    social_links,
+                )
+
         response = (
             self._client.table("restaurants")
             .update({"settings": settings})
@@ -360,7 +393,91 @@ class SupabaseDAL(MenuRepository):
         return {
             "id": str(updated_row.get("id") or ""),
             "banner_url": _as_optional_string(settings.get("banner_image_url")),
+            "settings": settings,
         }
+
+    def _list_restaurants_for_user_sync(
+        self,
+        user_id: str,
+        is_superadmin: bool,
+        current_slug: str | None = None,
+    ) -> list[dict[str, Any]]:
+        if is_superadmin:
+            if not current_slug:
+                return []
+            response = (
+                self._client.table("restaurants")
+                .select("id,name,slug,is_active,settings")
+                .eq("slug", current_slug.lower())
+                .eq("is_active", True)
+                .limit(1)
+                .execute()
+            )
+            restaurants = response.data or []
+            role = "superadmin"
+        else:
+            membership_resp = (
+                self._client.table("restaurant_members")
+                .select("restaurant_id,role")
+                .eq("user_id", user_id)
+                .execute()
+            )
+            memberships = membership_resp.data or []
+            if not memberships:
+                return []
+
+            membership_map: dict[str, str] = {}
+            restaurant_ids: list[str] = []
+            for row in memberships:
+                rid = str(row.get("restaurant_id") or "")
+                if rid:
+                    restaurant_ids.append(rid)
+                    membership_map[rid] = str(row.get("role") or "member")
+
+            response = (
+                self._client.table("restaurants")
+                .select("id,name,slug,is_active,settings")
+                .in_("id", restaurant_ids)
+                .eq("is_active", True)
+                .order("name")
+                .execute()
+            )
+            restaurants = response.data or []
+            role = None
+
+        result: list[dict[str, Any]] = []
+        for restaurant in restaurants:
+            rid = str(restaurant.get("id") or "")
+            if not rid:
+                continue
+
+            menus_resp = (
+                self._client.table("menus")
+                .select("id,name,is_active")
+                .eq("restaurant_id", rid)
+                .order("name")
+                .execute()
+            )
+
+            member_role = role if is_superadmin else membership_map.get(rid, "member")
+
+            result.append({
+                "id": rid,
+                "name": str(restaurant.get("name") or ""),
+                "slug": str(restaurant.get("slug") or ""),
+                "role": member_role,
+                "menus": [
+                    {
+                        "id": str(m.get("id") or ""),
+                        "name": str(m.get("name") or ""),
+                        "is_active": bool(m.get("is_active")),
+                    }
+                    for m in (menus_resp.data or [])
+                    if m.get("id")
+                ],
+            })
+
+        return result
 
     def _apply_menu_item_patch(
         self,

@@ -26,12 +26,16 @@ import {
   useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
+import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { CSS } from "@dnd-kit/utilities";
 import EditCategoryDrawer from "../components/EditCategoryDrawer";
 import EditItemDrawer, {
   placeholderMenuItem,
 } from "../components/EditItemDrawer";
 import SortableItemList from "../components/SortableItemList";
+import AdminSettingsDrawer, {
+  AdminSettingsMenuButton,
+} from "../components/admin/settings/AdminSettingsDrawer";
 import {
   createCategory,
   createMenuItem,
@@ -50,6 +54,7 @@ import {
 import { getMenuLoadErrorMessage } from "../lib/menuFetchError";
 import { useDialogs } from "../context/DialogProvider";
 import { useUiStore } from "../store/uiStore";
+import { createClient as createSupabaseBrowserClient } from "../utils/supabase/client";
 import type { Locale, MenuCategory, MenuItem, MenuPayload } from "../types/menu";
 import {
   getLocalizedText,
@@ -108,6 +113,7 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
   const [bannerError, setBannerError] = useState<string | null>(null);
   const [editingCategory, setEditingCategory] = useState<MenuCategory | null>(null);
   const [isCategoryDrawerOpen, setIsCategoryDrawerOpen] = useState(false);
+  const [isSettingsDrawerOpen, setIsSettingsDrawerOpen] = useState(false);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
   const languageMenuRef = useRef<HTMLDivElement | null>(null);
   const bannerFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -808,6 +814,23 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
   const bannerUrl = menuPayload?.restaurant.banner_url ?? null;
   const isBannerBusy = isBannerUploading || isBannerRemoving;
 
+  const handleSettingsSaved = (settings: Record<string, unknown>) => {
+    setMenuPayload((prev) =>
+      prev
+        ? {
+            ...prev,
+            restaurant: {
+              ...prev.restaurant,
+              settings: {
+                ...(prev.restaurant.settings ?? {}),
+                ...settings,
+              },
+            },
+          }
+        : prev,
+    );
+  };
+
   const handleBannerPick = () => {
     if (isBannerBusy) {
       return;
@@ -891,8 +914,12 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
     >
       <main className="mx-auto max-w-md bg-white pb-10">
         <header className="border-b border-zinc-200 px-4 py-4">
-          <div className="flex items-start justify-between gap-3">
-            <div>
+          <div className="flex items-start gap-3">
+            <AdminSettingsMenuButton
+              locale={locale}
+              onClick={() => setIsSettingsDrawerOpen(true)}
+            />
+            <div className="min-w-0 flex-1">
               <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
                 {getUiMessage("ownerDashboard", locale)}
               </p>
@@ -900,7 +927,7 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
                 {getUiMessage("menuEditor", locale)}
               </h1>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex shrink-0 items-center gap-2">
               <div className="relative" ref={languageMenuRef}>
                 <button
                   type="button"
@@ -952,6 +979,12 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
               </div>
               <button
                 type="button"
+                onClick={() => {
+                  const supabase = createSupabaseBrowserClient();
+                  void supabase.auth.signOut().then(() => {
+                    window.location.href = `/${encodeURIComponent(restaurantSlug)}`;
+                  });
+                }}
                 className="rounded-full border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-700 shadow-sm"
               >
                 {getUiMessage("logout", locale)}
@@ -1063,6 +1096,7 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
               <DndContext
                 sensors={categoryDnDSensors}
                 collisionDetection={closestCenter}
+                modifiers={[restrictToVerticalAxis]}
                 onDragEnd={handleCategoryDragEnd}
               >
                 <SortableContext
@@ -1210,6 +1244,17 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
         onClose={handleCloseDrawer}
         onSave={handleSaveItem}
       />
+
+      {menuPayload ? (
+        <AdminSettingsDrawer
+          locale={locale}
+          open={isSettingsDrawerOpen}
+          onClose={() => setIsSettingsDrawerOpen(false)}
+          restaurantSlug={restaurantSlug}
+          menuPayload={menuPayload}
+          onSettingsSaved={handleSettingsSaved}
+        />
+      ) : null}
     </div>
   );
 }

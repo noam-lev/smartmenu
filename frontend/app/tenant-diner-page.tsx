@@ -2,12 +2,19 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useShallow } from "zustand/react/shallow";
+import { CircleUser, Menu as MenuIcon, LogOut } from "lucide-react";
 import CartSummarySheet from "../components/CartSummarySheet";
+import OwnerDrawer from "../components/diner/OwnerDrawer";
 import ItemBottomSheet from "../components/ItemBottomSheet";
 import MenuItemCard from "../components/MenuItemCard";
+import SocialLinksFooter from "../components/SocialLinksFooter";
+import { parseSocialLinksForDisplay } from "../lib/socialLinks";
+import { useAuthUser } from "../hooks/useAuthUser";
 import { useMenuData } from "../hooks/useMenuData";
+import { useOwnerRestaurants } from "../hooks/useOwnerRestaurants";
 import { useCartStore } from "../store/cartStore";
 import { useUiStore } from "../store/uiStore";
+import { createClient as createSupabaseBrowserClient } from "../utils/supabase/client";
 import type { MenuCategory, MenuItem, MenuPayload, UpsellRule } from "../types/menu";
 import { formatILSCurrency } from "../utils/currency";
 import {
@@ -20,9 +27,13 @@ import {
 
 type DinerPageProps = {
   restaurantSlug?: string;
+  initialUserId?: string | null;
 };
 
-export function TenantDinerPage({ restaurantSlug = "yossis-hummus" }: DinerPageProps) {
+export function TenantDinerPage({
+  restaurantSlug = "yossis-hummus",
+  initialUserId = null,
+}: DinerPageProps) {
   const [activeCategoryId, setActiveCategoryId] = useState("");
   const handleMenuLoaded = useCallback((data: MenuPayload) => {
     const sortedCategories = [...data.menu.categories].sort(
@@ -58,7 +69,13 @@ export function TenantDinerPage({ restaurantSlug = "yossis-hummus" }: DinerPageP
   const [isCartSheetOpen, setIsCartSheetOpen] = useState(false);
   const [cartSheetSession, setCartSheetSession] = useState(0);
   const [isLanguageMenuOpen, setIsLanguageMenuOpen] = useState(false);
+  const [isOwnerDrawerOpen, setIsOwnerDrawerOpen] = useState(false);
+  const [menuPayloadState, setMenuPayloadState] = useState(menuPayload);
   const languageMenuRef = useRef<HTMLDivElement | null>(null);
+
+  const { userId } = useAuthUser(initialUserId);
+  const { restaurants, isLoading: isOwnerLoading } = useOwnerRestaurants(userId, restaurantSlug);
+  const hasRestaurants = restaurants.length > 0;
   const hasMounted = useSyncExternalStore(
     () => () => {},
     () => true,
@@ -80,6 +97,53 @@ export function TenantDinerPage({ restaurantSlug = "yossis-hummus" }: DinerPageP
   const setLocale = useUiStore((state) => state.setLocale);
   const cartItems = useMemo(() => Object.values(itemsByItemId), [itemsByItemId]);
   const isRtl = isRtlLocale(locale);
+  const socialLinks = useMemo(
+    () => parseSocialLinksForDisplay(menuPayload?.restaurant.settings),
+    [menuPayload?.restaurant.settings],
+  );
+  const hasSocialFooter = socialLinks.length > 0;
+  const mainBottomPaddingClass =
+    hasSocialFooter && totalItems > 0
+      ? "pb-40"
+      : hasSocialFooter
+        ? "pb-20"
+        : totalItems > 0
+          ? "pb-24"
+          : "pb-4";
+  const cartBottomClass = hasSocialFooter
+    ? "bottom-[calc(3.5rem+0.75rem+env(safe-area-inset-bottom,0px))]"
+    : "bottom-4";
+
+  const handleOwnerLogin = async () => {
+    const supabase = createSupabaseBrowserClient();
+    const redirectUrl = new URL("/auth/callback", window.location.origin);
+    redirectUrl.searchParams.set("next", `/${encodeURIComponent(restaurantSlug)}`);
+    await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: redirectUrl.toString() },
+    });
+  };
+
+  const handleSignOut = async () => {
+    const supabase = createSupabaseBrowserClient();
+    await supabase.auth.signOut();
+    setIsOwnerDrawerOpen(false);
+    window.location.reload();
+  };
+
+  const handleOwnerSettingsSaved = (settings: Record<string, unknown>) => {
+    setMenuPayloadState((prev) =>
+      prev
+        ? {
+            ...prev,
+            restaurant: {
+              ...prev.restaurant,
+              settings: { ...(prev.restaurant.settings ?? {}), ...settings },
+            },
+          }
+        : prev,
+    );
+  };
 
   const upsellRule = isUpsellStep ? activeUpsellRule ?? undefined : undefined;
   const restaurantName = menuPayload
@@ -274,7 +338,7 @@ export function TenantDinerPage({ restaurantSlug = "yossis-hummus" }: DinerPageP
       lang={locale}
       dir={isRtl ? "rtl" : "ltr"}
     >
-      <main className="mx-auto max-w-md bg-white pb-24">
+      <main className={`mx-auto max-w-md bg-white ${mainBottomPaddingClass}`}>
         <header className="border-b border-zinc-200">
           <div className="h-44 w-full overflow-hidden bg-zinc-100">
             {menuPayload.restaurant.banner_url ? (
@@ -287,9 +351,10 @@ export function TenantDinerPage({ restaurantSlug = "yossis-hummus" }: DinerPageP
           </div>
           <div className="px-4 pb-3 pt-4">
             <div className="flex items-center justify-between gap-3">
-              <h1 className="text-2xl font-bold text-zinc-900">
+              <h1 className="min-w-0 flex-1 text-2xl font-bold text-zinc-900">
                 {restaurantName}
               </h1>
+              <div className="flex shrink-0 items-center gap-2">
               <div className="relative" ref={languageMenuRef}>
                 <button
                   type="button"
@@ -338,6 +403,36 @@ export function TenantDinerPage({ restaurantSlug = "yossis-hummus" }: DinerPageP
                     </button>
                   </div>
                 ) : null}
+              </div>
+              {hasMounted ? (
+                userId ? (
+                  hasRestaurants ? (
+                    <button
+                      type="button"
+                      onClick={() => setIsOwnerDrawerOpen(true)}
+                      className="inline-flex items-center justify-center rounded-full border border-zinc-300 bg-white p-2 text-zinc-700 shadow-sm"
+                    >
+                      <MenuIcon className="h-5 w-5" aria-hidden />
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => void handleSignOut()}
+                      className="inline-flex items-center justify-center rounded-full border border-zinc-300 bg-white p-2 text-zinc-700 shadow-sm transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                    >
+                      <LogOut className="h-5 w-5" aria-hidden />
+                    </button>
+                  )
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => void handleOwnerLogin()}
+                    className="inline-flex items-center justify-center rounded-full border border-zinc-300 bg-white p-2 text-zinc-700 shadow-sm"
+                  >
+                    <CircleUser className="h-5 w-5" aria-hidden />
+                  </button>
+                )
+              ) : null}
               </div>
             </div>
             <p className="mt-1 text-sm text-zinc-500">{menuName}</p>
@@ -448,11 +543,13 @@ export function TenantDinerPage({ restaurantSlug = "yossis-hummus" }: DinerPageP
         onRemove={(itemId) => removeItem(restaurantSlug, itemId)}
       />
 
+      {hasSocialFooter ? <SocialLinksFooter locale={locale} links={socialLinks} /> : null}
+
       {hasMounted && totalItems > 0 ? (
         <button
           type="button"
           onClick={openCartSheet}
-          className="fixed bottom-4 left-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-2xl bg-zinc-900 px-4 py-3 text-start text-white shadow-lg active:scale-[0.995]"
+          className={`fixed left-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-2xl bg-zinc-900 px-4 py-3 text-start text-white shadow-lg active:scale-[0.995] ${cartBottomClass}`}
         >
           <p className="text-xs font-medium text-zinc-300">
             {getUiMessage("softOrdering", locale)}
@@ -465,6 +562,19 @@ export function TenantDinerPage({ restaurantSlug = "yossis-hummus" }: DinerPageP
             {formatILSCurrency(totalPrice)}
           </p>
         </button>
+      ) : null}
+
+      {hasRestaurants ? (
+        <OwnerDrawer
+          locale={locale}
+          open={isOwnerDrawerOpen}
+          onClose={() => setIsOwnerDrawerOpen(false)}
+          restaurants={restaurants}
+          currentSlug={restaurantSlug}
+          menuPayload={menuPayload}
+          onSettingsSaved={handleOwnerSettingsSaved}
+          onSignOut={() => void handleSignOut()}
+        />
       ) : null}
     </div>
   );

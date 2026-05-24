@@ -48,7 +48,7 @@ export function LandingFaq({ locale }: LandingFaqProps) {
                   <button
                     type="button"
                     id={triggerId}
-                    className="flex w-full items-center justify-between gap-4 py-5 ps-6 pe-6 text-start text-base font-bold leading-snug tracking-tight text-espresso transition hover:bg-kraft/80 md:text-lg"
+                    className="flex w-full cursor-pointer items-center justify-between gap-4 py-5 ps-6 pe-6 text-start text-base font-bold leading-snug tracking-tight text-espresso transition hover:bg-kraft/80 md:text-lg"
                     aria-expanded={isOpen}
                     aria-controls={panelId}
                     onClick={() => setOpenIndex(isOpen ? null : index)}

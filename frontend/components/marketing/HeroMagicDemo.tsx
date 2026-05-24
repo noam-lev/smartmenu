@@ -123,7 +123,7 @@ export function HeroMagicDemo({ locale }: { locale: LandingLocale }) {
               <span className="text-base font-black text-[#3E2723]">
                 {t.demoUpsell.split(":")[1]?.trim() || t.demoUpsell}
               </span>
-              <button className="rounded-xl border border-[#2E7D32]/20 bg-[#E8F5E9] px-4 py-2 text-sm font-black text-[#2E7D32] shadow-sm transition-transform active:scale-95">
+              <button className="cursor-pointer rounded-xl border border-[#2E7D32]/20 bg-[#E8F5E9] px-4 py-2 text-sm font-black text-[#2E7D32] shadow-sm transition-transform active:scale-95">
                 {t.demoAdd}
               </button>
             </div>

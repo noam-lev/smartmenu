@@ -130,10 +130,27 @@ class MenuRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def update_restaurant_banner_url(
+    async def list_restaurants_for_user(
+        self,
+        user_id: str,
+        is_superadmin: bool,
+        current_slug: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return restaurants (with nested menus) for a user.
+
+        Superadmins get only the restaurant matching current_slug (scoped
+        to avoid loading the entire DB). Normal users get all their
+        restaurant_members entries regardless of current_slug.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    async def patch_restaurant_settings(
         self,
         restaurant_id: str,
-        banner_url: str | None,
+        *,
+        banner_url: str | None | object = ...,
+        social_links: dict[str, object] | None | object = ...,
     ) -> dict[str, Any] | None:
-        """Patch restaurants.banner_url scoped by restaurant_id."""
+        """Merge banner_url and/or social_links into restaurants.settings."""
         raise NotImplementedError
