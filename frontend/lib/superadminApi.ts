@@ -1,8 +1,16 @@
+import { createClient as createSupabaseBrowserClient } from "../utils/supabase/client";
+
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
-/** localStorage key for Secure MVP superadmin session token */
-export const SUPERADMIN_TOKEN_STORAGE_KEY = "superadmin_token";
+let supabaseClient: ReturnType<typeof createSupabaseBrowserClient> | null = null;
+
+function getSupabaseClient() {
+  if (!supabaseClient) {
+    supabaseClient = createSupabaseBrowserClient();
+  }
+  return supabaseClient;
+}
 
 function readDetailFromBody(text: string): string {
   try {
@@ -19,99 +27,51 @@ function readDetailFromBody(text: string): string {
   return text || "Request failed";
 }
 
-/** Clears token and reloads so the app returns to the lock screen (401 / 429 on authed calls). */
-export function handleSuperadminAuthFailure(): void {
-  if (typeof window === "undefined") {
-    return;
+async function getAuthHeaders(
+  includeJsonContentType = true,
+): Promise<HeadersInit> {
+  const supabase = getSupabaseClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const accessToken = session?.access_token;
+  if (!accessToken) {
+    throw new Error("Authentication required. Please log in.");
   }
-  localStorage.removeItem(SUPERADMIN_TOKEN_STORAGE_KEY);
-  window.location.reload();
+  return {
+    ...(includeJsonContentType ? { "Content-Type": "application/json" } : {}),
+    Authorization: `Bearer ${accessToken}`,
+  };
 }
 
-export function getStoredSuperadminToken(): string | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-  return localStorage.getItem(SUPERADMIN_TOKEN_STORAGE_KEY);
-}
-
-export function setStoredSuperadminToken(token: string): void {
-  localStorage.setItem(SUPERADMIN_TOKEN_STORAGE_KEY, token);
-}
-
-export function clearStoredSuperadminToken(): void {
-  localStorage.removeItem(SUPERADMIN_TOKEN_STORAGE_KEY);
-}
-
-/** Login (no session header). Does not reload on 401/429 — caller shows errors. */
-export async function superadminLogin(password: string): Promise<{ token: string }> {
-  const response = await fetch(`${API_BASE_URL}/api/superadmin/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ password }),
-  });
-
-  const raw = await response.text();
-
-  if (!response.ok) {
-    throw new Error(readDetailFromBody(raw));
-  }
-
-  return JSON.parse(raw) as { token: string };
-}
-
-/** Server-side logout + clear local token (no full-page reload). */
-export async function superadminLogout(): Promise<void> {
-  const token = getStoredSuperadminToken();
-  if (!token) {
-    clearStoredSuperadminToken();
-    return;
-  }
-
-  try {
-    const response = await fetch(`${API_BASE_URL}/api/superadmin/logout`, {
-      method: "POST",
-      headers: { "X-Superadmin-Token": token },
-    });
-
-    clearStoredSuperadminToken();
-
-    if (response.status === 401 || response.status === 429) {
-      handleSuperadminAuthFailure();
-    }
-  } catch {
-    clearStoredSuperadminToken();
-  }
-}
-
-/**
- * Authenticated superadmin request. Injects `X-Superadmin-Token`.
- * On 401 or 429, clears storage and reloads (global session end).
- */
-export async function superadminFetch(
+async function superadminApiFetch(
   path: string,
   init: RequestInit = {},
 ): Promise<Response> {
-  const token = getStoredSuperadminToken();
-  if (!token) {
-    handleSuperadminAuthFailure();
-    throw new Error("No superadmin session");
+  const headers = await getAuthHeaders(false);
+  const merged = new Headers(init.headers);
+  for (const [k, v] of Object.entries(headers)) {
+    merged.set(k, v);
   }
-
-  const headers = new Headers(init.headers);
-  headers.set("X-Superadmin-Token", token);
-
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...init,
-    headers,
-  });
-
-  if (response.status === 401 || response.status === 429) {
-    handleSuperadminAuthFailure();
-  }
-
-  return response;
+  return fetch(`${API_BASE_URL}${path}`, { ...init, headers: merged });
 }
+
+// ---------------------------------------------------------------------------
+// Auth check
+// ---------------------------------------------------------------------------
+
+export async function pingSuperadmin(): Promise<boolean> {
+  try {
+    const response = await superadminApiFetch("/api/superadmin/ping");
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Menu parsing & import
+// ---------------------------------------------------------------------------
 
 export type ParsedItem = {
   name_he: string;
@@ -141,7 +101,7 @@ export async function parseMenuImage(file: File): Promise<ParsedMenu> {
   const formData = new FormData();
   formData.append("file", file);
 
-  const response = await superadminFetch("/api/superadmin/magic-parse", {
+  const response = await superadminApiFetch("/api/superadmin/magic-parse", {
     method: "POST",
     body: formData,
   });
@@ -157,13 +117,14 @@ export async function parseMenuImage(file: File): Promise<ParsedMenu> {
 export async function importRestaurant(
   data: RestaurantImportPayload,
 ): Promise<{ success: boolean; message: string; restaurant_slug: string }> {
-  const response = await superadminFetch("/api/superadmin/restaurants/import", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
+  const response = await superadminApiFetch(
+    "/api/superadmin/restaurants/import",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
     },
-    body: JSON.stringify(data),
-  });
+  );
 
   const raw = await response.text();
   if (!response.ok) {
@@ -244,23 +205,29 @@ export async function fetchRestaurants(params: {
 }): Promise<{ restaurants: RestaurantListItem[]; total: number }> {
   const qs = new URLSearchParams();
   if (params.search) qs.set("search", params.search);
-  if (params.is_active !== undefined) qs.set("is_active", String(params.is_active));
+  if (params.is_active !== undefined)
+    qs.set("is_active", String(params.is_active));
   if (params.offset !== undefined) qs.set("offset", String(params.offset));
   if (params.limit !== undefined) qs.set("limit", String(params.limit));
 
   const query = qs.toString();
-  const response = await superadminFetch(
+  const response = await superadminApiFetch(
     `/api/superadmin/restaurants${query ? `?${query}` : ""}`,
   );
   const raw = await response.text();
   if (!response.ok) throw new Error(readDetailFromBody(raw));
-  return JSON.parse(raw) as { restaurants: RestaurantListItem[]; total: number };
+  return JSON.parse(raw) as {
+    restaurants: RestaurantListItem[];
+    total: number;
+  };
 }
 
 export async function fetchRestaurantDetail(
   slug: string,
 ): Promise<RestaurantDetailResponse> {
-  const response = await superadminFetch(`/api/superadmin/restaurants/${slug}`);
+  const response = await superadminApiFetch(
+    `/api/superadmin/restaurants/${slug}`,
+  );
   const raw = await response.text();
   if (!response.ok) throw new Error(readDetailFromBody(raw));
   return JSON.parse(raw) as RestaurantDetailResponse;
@@ -277,11 +244,14 @@ export async function patchRestaurant(
     default_locale?: string;
   },
 ): Promise<{ success: boolean; slug: string }> {
-  const response = await superadminFetch(`/api/superadmin/restaurants/${slug}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(fields),
-  });
+  const response = await superadminApiFetch(
+    `/api/superadmin/restaurants/${slug}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(fields),
+    },
+  );
   const raw = await response.text();
   if (!response.ok) throw new Error(readDetailFromBody(raw));
   return JSON.parse(raw) as { success: boolean; slug: string };
@@ -292,7 +262,7 @@ export async function addRestaurantMember(
   email: string,
   role: string,
 ): Promise<{ success: boolean; member: RestaurantMember }> {
-  const response = await superadminFetch(
+  const response = await superadminApiFetch(
     `/api/superadmin/restaurants/${slug}/members`,
     {
       method: "POST",
@@ -310,7 +280,7 @@ export async function updateMemberRole(
   userId: string,
   role: string,
 ): Promise<{ success: boolean; role: string }> {
-  const response = await superadminFetch(
+  const response = await superadminApiFetch(
     `/api/superadmin/restaurants/${slug}/members/${userId}`,
     {
       method: "PATCH",
@@ -327,7 +297,7 @@ export async function removeMember(
   slug: string,
   userId: string,
 ): Promise<{ success: boolean }> {
-  const response = await superadminFetch(
+  const response = await superadminApiFetch(
     `/api/superadmin/restaurants/${slug}/members/${userId}`,
     { method: "DELETE" },
   );
@@ -341,7 +311,7 @@ export async function updateSubscription(
   planTier: string,
   subscriptionStatus: string = "active",
 ): Promise<{ success: boolean; subscription: RestaurantSubscription }> {
-  const response = await superadminFetch(
+  const response = await superadminApiFetch(
     `/api/superadmin/restaurants/${slug}/subscription`,
     {
       method: "PATCH",
@@ -358,4 +328,71 @@ export async function updateSubscription(
     success: boolean;
     subscription: RestaurantSubscription;
   };
+}
+
+// ---------------------------------------------------------------------------
+// Onboarding wizard helpers
+// ---------------------------------------------------------------------------
+
+export async function checkSlugAvailability(
+  slug: string,
+): Promise<{ available: boolean }> {
+  const response = await superadminApiFetch(
+    `/api/superadmin/restaurants/check-slug/${encodeURIComponent(slug)}`,
+  );
+  const raw = await response.text();
+  if (!response.ok) throw new Error(readDetailFromBody(raw));
+  return JSON.parse(raw) as { available: boolean };
+}
+
+export async function superadminUploadImage(
+  file: File,
+): Promise<{ public_url: string }> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await superadminApiFetch("/api/superadmin/upload-image", {
+    method: "POST",
+    body: formData,
+  });
+  const raw = await response.text();
+  if (!response.ok) throw new Error(readDetailFromBody(raw));
+  return JSON.parse(raw) as { public_url: string };
+}
+
+export type OnboardPayload = {
+  restaurant_name: string;
+  restaurant_slug: string;
+  categories: ParsedCategory[];
+  currency: string;
+  default_locale: string;
+  banner_image_url: string | null;
+  item_images: Record<string, string>;
+  owner_email: string | null;
+  plan_tier: string;
+};
+
+export type OnboardResult = {
+  success: boolean;
+  restaurant_slug: string;
+  restaurant_name: string;
+  categories_imported: number;
+  items_imported: number;
+  owner_linked: boolean;
+};
+
+export async function onboardRestaurant(
+  data: OnboardPayload,
+): Promise<OnboardResult> {
+  const response = await superadminApiFetch(
+    "/api/superadmin/restaurants/onboard",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    },
+  );
+  const raw = await response.text();
+  if (!response.ok) throw new Error(readDetailFromBody(raw));
+  return JSON.parse(raw) as OnboardResult;
 }

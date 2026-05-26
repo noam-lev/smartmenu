@@ -1,17 +1,19 @@
-"""Superadmin restaurant management endpoints (X-Superadmin-Token auth)."""
+"""Superadmin restaurant management endpoints (JWT Bearer auth)."""
 
 from __future__ import annotations
 
 import logging
+import uuid
+from pathlib import PurePosixPath
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, ConfigDict, field_validator
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from supabase import Client
 
-from api.dependencies import get_db, get_supabase_client
-from api.routes.superadmin import verify_superadmin_token
+from api.dependencies import get_db, get_supabase_client, verify_superadmin
 from db.repository import MenuRepository
+from models.schemas import ParsedCategory
 
 logger = logging.getLogger(__name__)
 
@@ -156,7 +158,7 @@ async def list_restaurants(
     is_active: bool | None = Query(default=None),
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),
-    _session: dict[str, Any] = Depends(verify_superadmin_token),
+    _user_id: str = Depends(verify_superadmin),
     supabase_client: Client = Depends(get_supabase_client),
 ) -> dict[str, Any]:
     query = supabase_client.table("restaurants").select(
@@ -243,13 +245,34 @@ async def list_restaurants(
 
 
 # ---------------------------------------------------------------------------
+# 1b. Check slug availability (MUST be before /restaurants/{slug})
+# ---------------------------------------------------------------------------
+
+@router.get("/restaurants/check-slug/{slug}")
+async def check_slug_availability(
+    slug: str,
+    _user_id: str = Depends(verify_superadmin),
+    supabase_client: Client = Depends(get_supabase_client),
+) -> dict[str, Any]:
+    normalized = slug.strip().lower()
+    resp = (
+        supabase_client.table("restaurants")
+        .select("id")
+        .eq("slug", normalized)
+        .limit(1)
+        .execute()
+    )
+    return {"available": not bool(resp.data)}
+
+
+# ---------------------------------------------------------------------------
 # 2. Get restaurant detail
 # ---------------------------------------------------------------------------
 
 @router.get("/restaurants/{slug}")
 async def get_restaurant_detail(
     slug: str,
-    _session: dict[str, Any] = Depends(verify_superadmin_token),
+    _user_id: str = Depends(verify_superadmin),
     supabase_client: Client = Depends(get_supabase_client),
 ) -> dict[str, Any]:
     resp = (
@@ -347,7 +370,7 @@ async def get_restaurant_detail(
 async def patch_restaurant(
     slug: str,
     body: RestaurantPatchBody,
-    _session: dict[str, Any] = Depends(verify_superadmin_token),
+    _user_id: str = Depends(verify_superadmin),
     supabase_client: Client = Depends(get_supabase_client),
 ) -> dict[str, Any]:
     fields = body.model_dump(exclude_unset=True)
@@ -423,7 +446,7 @@ async def patch_restaurant(
 @router.get("/restaurants/{slug}/members")
 async def list_members(
     slug: str,
-    _session: dict[str, Any] = Depends(verify_superadmin_token),
+    _user_id: str = Depends(verify_superadmin),
     supabase_client: Client = Depends(get_supabase_client),
 ) -> dict[str, Any]:
     rid = _resolve_restaurant_id(supabase_client, slug)
@@ -449,7 +472,7 @@ async def list_members(
 async def add_member(
     slug: str,
     body: AddMemberBody,
-    _session: dict[str, Any] = Depends(verify_superadmin_token),
+    _user_id: str = Depends(verify_superadmin),
     supabase_client: Client = Depends(get_supabase_client),
 ) -> dict[str, Any]:
     rid = _resolve_restaurant_id(supabase_client, slug)
@@ -505,7 +528,7 @@ async def update_member_role(
     slug: str,
     user_id: str,
     body: UpdateMemberRoleBody,
-    _session: dict[str, Any] = Depends(verify_superadmin_token),
+    _user_id: str = Depends(verify_superadmin),
     supabase_client: Client = Depends(get_supabase_client),
 ) -> dict[str, Any]:
     rid = _resolve_restaurant_id(supabase_client, slug)
@@ -527,7 +550,7 @@ async def update_member_role(
 async def remove_member(
     slug: str,
     user_id: str,
-    _session: dict[str, Any] = Depends(verify_superadmin_token),
+    _user_id: str = Depends(verify_superadmin),
     supabase_client: Client = Depends(get_supabase_client),
 ) -> dict[str, Any]:
     rid = _resolve_restaurant_id(supabase_client, slug)
@@ -553,7 +576,7 @@ async def remove_member(
 async def update_subscription(
     slug: str,
     body: UpdateSubscriptionBody,
-    _session: dict[str, Any] = Depends(verify_superadmin_token),
+    _user_id: str = Depends(verify_superadmin),
     supabase_client: Client = Depends(get_supabase_client),
 ) -> dict[str, Any]:
     rid = _resolve_restaurant_id(supabase_client, slug)
@@ -586,4 +609,239 @@ async def update_subscription(
             "plan_tier": body.plan_tier,
             "status": body.subscription_status,
         },
+    }
+
+
+# ---------------------------------------------------------------------------
+# 6. Image upload (superadmin)
+# ---------------------------------------------------------------------------
+
+@router.post("/upload-image")
+async def superadmin_upload_image(
+    file: UploadFile = File(...),
+    _user_id: str = Depends(verify_superadmin),
+    supabase_client: Client = Depends(get_supabase_client),
+) -> dict[str, str]:
+    content_type = (file.content_type or "").lower()
+    if not content_type.startswith("image/"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Uploaded file must be an image.",
+        )
+
+    raw_bytes = await file.read()
+    if not raw_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Uploaded file is empty.",
+        )
+
+    ext = PurePosixPath(file.filename or "").suffix.lower() or ".jpg"
+    object_path = f"onboarding/{uuid.uuid4()}{ext}"
+    bucket = supabase_client.storage.from_("menu-images")
+    bucket.upload(
+        path=object_path,
+        file=raw_bytes,
+        file_options={"content-type": file.content_type or "image/jpeg", "upsert": "false"},
+    )
+    public_url = bucket.get_public_url(object_path)
+    return {"public_url": public_url}
+
+
+# ---------------------------------------------------------------------------
+# 7. Onboard restaurant (full wizard payload)
+# ---------------------------------------------------------------------------
+
+class OnboardingItemImage(BaseModel):
+    key: str
+    url: str
+
+
+class OnboardingPayload(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    restaurant_name: str
+    restaurant_slug: str
+    categories: list[ParsedCategory] = Field(default_factory=list)
+    currency: str = "ILS"
+    default_locale: str = "he"
+    banner_image_url: str | None = None
+    item_images: dict[str, str] = Field(default_factory=dict)
+    owner_email: str | None = None
+    plan_tier: str = "free"
+
+    @field_validator("restaurant_slug", mode="before")
+    @classmethod
+    def normalize_slug(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            return value.strip().lower().replace(" ", "-")
+        return value
+
+    @field_validator("plan_tier")
+    @classmethod
+    def validate_tier(cls, value: str) -> str:
+        v = value.strip().lower()
+        if v not in _VALID_PLAN_TIERS:
+            raise ValueError(f"plan_tier must be one of: {', '.join(sorted(_VALID_PLAN_TIERS))}")
+        return v
+
+
+@router.post("/restaurants/onboard")
+async def onboard_restaurant(
+    payload: OnboardingPayload,
+    _user_id: str = Depends(verify_superadmin),
+    supabase_client: Client = Depends(get_supabase_client),
+) -> dict[str, Any]:
+    slug = payload.restaurant_slug
+    name = payload.restaurant_name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="restaurant_name is required.")
+    if not slug:
+        raise HTTPException(status_code=400, detail="restaurant_slug is required.")
+
+    existing = (
+        supabase_client.table("restaurants")
+        .select("id")
+        .eq("slug", slug)
+        .limit(1)
+        .execute()
+    )
+    if existing.data:
+        raise HTTPException(status_code=409, detail=f"Slug already exists: {slug}")
+
+    settings: dict[str, Any] = {
+        "default_locale": payload.default_locale,
+        "currency": payload.currency,
+        "theme_color": "#111827",
+    }
+    if payload.banner_image_url:
+        settings["banner_image_url"] = payload.banner_image_url
+
+    base_row: dict[str, Any] = {
+        "name": name,
+        "slug": slug,
+        "is_active": True,
+        "settings": settings,
+    }
+    try:
+        rest_resp = supabase_client.table("restaurants").insert(
+            {**base_row, "default_locale": payload.default_locale}
+        ).execute()
+    except Exception:
+        rest_resp = supabase_client.table("restaurants").insert(base_row).execute()
+
+    restaurant_row = (rest_resp.data or [None])[0]
+    if not restaurant_row:
+        raise HTTPException(status_code=500, detail="Failed to create restaurant.")
+    restaurant_id = str(restaurant_row.get("id") or "")
+
+    menu_resp = supabase_client.table("menus").insert({
+        "restaurant_id": restaurant_id,
+        "name": "Main Menu",
+        "is_active": True,
+        "translations": {},
+    }).execute()
+    menu_row = (menu_resp.data or [None])[0]
+    if not menu_row:
+        raise HTTPException(status_code=500, detail="Failed to create menu.")
+    menu_id = str(menu_row.get("id") or "")
+
+    inserted_categories = 0
+    inserted_items = 0
+
+    for cat_idx, cat in enumerate(payload.categories):
+        cat_dict = cat.model_dump()
+        name_he = str(cat_dict.get("name_he") or "").strip()
+        name_en = str(cat_dict.get("name_en") or "").strip()
+        if not name_he:
+            continue
+
+        cat_resp = supabase_client.table("categories").insert({
+            "menu_id": menu_id,
+            "name": name_he,
+            "sort_order": cat_idx,
+            "is_visible": True,
+            "translations": {"en": {"name": name_en}},
+        }).execute()
+        cat_row = (cat_resp.data or [None])[0]
+        if not cat_row:
+            continue
+        category_id = str(cat_row.get("id") or "")
+        inserted_categories += 1
+
+        items = cat_dict.get("items") or []
+        for item_idx, item in enumerate(items):
+            item_name_he = str(item.get("name_he") or "").strip()
+            if not item_name_he:
+                continue
+
+            desc_he = str(item.get("description_he") or "").strip() if item.get("description_he") else ""
+            desc_en = str(item.get("description_en") or "").strip() if item.get("description_en") else ""
+            base_price = float(item.get("base_price") or 0)
+
+            image_key = f"{cat_idx}-{item_idx}"
+            image_url = payload.item_images.get(image_key)
+
+            supabase_client.table("menu_items").insert({
+                "restaurant_id": restaurant_id,
+                "menu_id": menu_id,
+                "category_id": category_id,
+                "name": item_name_he,
+                "description": desc_he,
+                "base_price": base_price,
+                "is_available": True,
+                "is_visible": True,
+                "sort_order": item_idx,
+                "image_url": image_url,
+                "metadata": {},
+                "translations": {
+                    "en": {
+                        "name": str(item.get("name_en") or "").strip(),
+                        "description": desc_en,
+                    }
+                },
+            }).execute()
+            inserted_items += 1
+
+    owner_user_id: str | None = None
+    if payload.owner_email:
+        email = payload.owner_email.strip().lower()
+        try:
+            users_resp = supabase_client.auth.admin.list_users()
+            users = getattr(users_resp, "users", []) or []
+            for u in users:
+                if str(getattr(u, "email", "") or "").lower() == email:
+                    owner_user_id = str(getattr(u, "id", "") or "")
+                    break
+        except Exception as exc:
+            logger.warning("Failed to look up user by email: %s", exc)
+
+        if not owner_user_id:
+            try:
+                invite_resp = supabase_client.auth.admin.invite_user_by_email(email)
+                invited_user = getattr(invite_resp, "user", None)
+                owner_user_id = str(getattr(invited_user, "id", "") or "") if invited_user else None
+            except Exception as exc:
+                logger.warning("Failed to invite user %s: %s", email, exc)
+
+        if owner_user_id:
+            supabase_client.table("restaurant_members").insert({
+                "restaurant_id": restaurant_id,
+                "user_id": owner_user_id,
+                "role": "owner",
+            }).execute()
+
+    supabase_client.table("subscriptions").insert({
+        "restaurant_id": restaurant_id,
+        "plan_tier": payload.plan_tier,
+        "status": "active",
+    }).execute()
+
+    return {
+        "success": True,
+        "restaurant_slug": slug,
+        "restaurant_name": name,
+        "categories_imported": inserted_categories,
+        "items_imported": inserted_items,
+        "owner_linked": bool(owner_user_id),
     }

@@ -1,352 +1,199 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useState } from "react";
+import Link from "next/link";
 import {
-  importRestaurant,
-  parseMenuImage,
-  type ParsedCategory,
-  type ParsedItem,
-  type ParsedMenu,
+  checkSlugAvailability,
+  onboardRestaurant,
+  type OnboardResult,
 } from "../../../lib/superadminApi";
-
-function toSlug(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-");
-}
+import { STEPS, INITIAL_STATE, type WizardState } from "../../../components/superadmin/onboarding/types";
+import WizardShell from "../../../components/superadmin/onboarding/WizardShell";
+import StepRestaurantInfo from "../../../components/superadmin/onboarding/StepRestaurantInfo";
+import StepMenuUpload from "../../../components/superadmin/onboarding/StepMenuUpload";
+import StepImages from "../../../components/superadmin/onboarding/StepImages";
+import StepSettings from "../../../components/superadmin/onboarding/StepSettings";
+import StepOwnerPlan from "../../../components/superadmin/onboarding/StepOwnerPlan";
+import StepReview from "../../../components/superadmin/onboarding/StepReview";
 
 export default function SuperadminOnboardingPage() {
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [isParsing, setIsParsing] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+  const [step, setStep] = useState(0);
+  const [state, setState] = useState<WizardState>(INITIAL_STATE);
   const [error, setError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [preview, setPreview] = useState<ParsedMenu | null>(null);
-  const [restaurantName, setRestaurantName] = useState("");
-  const [restaurantSlug, setRestaurantSlug] = useState("");
-  const [isSlugManuallyEdited, setIsSlugManuallyEdited] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<OnboardResult | null>(null);
 
-  const totalItems = useMemo(() => {
-    if (!preview) {
-      return 0;
-    }
-    return preview.categories.reduce((sum, category) => sum + category.items.length, 0);
-  }, [preview]);
-
-  const handleParse = async () => {
-    if (!selectedFile) {
-      setError("Please select an image first.");
-      return;
-    }
-
+  const handleChange = useCallback((partial: Partial<WizardState>) => {
+    setState((prev) => ({ ...prev, ...partial }));
     setError(null);
-    setSuccessMessage(null);
-    setIsParsing(true);
-    setPreview(null);
-    try {
-      const parsed = await parseMenuImage(selectedFile);
-      setPreview(parsed);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to parse menu image.");
-    } finally {
-      setIsParsing(false);
-    }
-  };
+  }, []);
 
-  const updateCategory = (
-    categoryIndex: number,
-    updater: (category: ParsedCategory) => ParsedCategory,
-  ) => {
-    setPreview((prev) => {
-      if (!prev) {
-        return prev;
+  const validateAndNext = async () => {
+    setError(null);
+
+    if (step === 0) {
+      if (!state.name.trim()) {
+        setError("Restaurant name is required.");
+        return;
       }
-      const nextCategories = prev.categories.map((category, index) =>
-        index === categoryIndex ? updater(category) : category,
-      );
-      return { ...prev, categories: nextCategories };
-    });
+      if (!state.slug.trim()) {
+        setError("Slug is required.");
+        return;
+      }
+      setBusy(true);
+      try {
+        const { available } = await checkSlugAvailability(state.slug);
+        if (!available) {
+          setError(`Slug "${state.slug}" is already taken.`);
+          return;
+        }
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Failed to check slug availability.",
+        );
+        return;
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    if (step === 1) {
+      if (
+        !state.parsedMenu ||
+        state.parsedMenu.categories.length === 0
+      ) {
+        setError("Please upload and parse a menu, or add at least one category.");
+        return;
+      }
+    }
+
+    if (step === STEPS.length - 1) {
+      await handleCreate();
+      return;
+    }
+
+    setStep((s) => s + 1);
   };
 
-  const updateItem = (
-    categoryIndex: number,
-    itemIndex: number,
-    updater: (item: ParsedItem) => ParsedItem,
-  ) => {
-    updateCategory(categoryIndex, (category) => ({
-      ...category,
-      items: category.items.map((item, index) =>
-        index === itemIndex ? updater(item) : item,
-      ),
-    }));
-  };
-
-  const handleSaveRestaurant = async () => {
-    if (!preview) {
-      setError("Parse a menu image first.");
-      return;
-    }
-    const normalizedName = restaurantName.trim();
-    const normalizedSlug = toSlug(restaurantSlug);
-    if (!normalizedName) {
-      setError("Restaurant name is required.");
-      return;
-    }
-    if (!normalizedSlug) {
-      setError("Restaurant slug is required.");
-      return;
-    }
-
+  const handleCreate = async () => {
+    setBusy(true);
     setError(null);
-    setSuccessMessage(null);
-    setIsSaving(true);
     try {
-      const result = await importRestaurant({
-        restaurant_name: normalizedName,
-        restaurant_slug: normalizedSlug,
-        categories: preview.categories,
+      const res = await onboardRestaurant({
+        restaurant_name: state.name.trim(),
+        restaurant_slug: state.slug.trim(),
+        categories: state.parsedMenu?.categories ?? [],
+        currency: state.currency,
+        default_locale: state.defaultLocale,
+        banner_image_url: state.bannerUrl,
+        item_images: state.itemImages,
+        owner_email: state.ownerEmail.trim() || null,
+        plan_tier: state.planTier,
       });
-      setSuccessMessage(
-        `Restaurant "${result.restaurant_slug}" created successfully.`,
-      );
-      setSelectedFile(null);
-      setPreview(null);
-      setRestaurantName("");
-      setRestaurantSlug("");
-      setIsSlugManuallyEdited(false);
+      setResult(res);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to import restaurant.");
+      setError(
+        err instanceof Error ? err.message : "Failed to create restaurant.",
+      );
     } finally {
-      setIsSaving(false);
+      setBusy(false);
     }
   };
+
+  if (result) {
+    return (
+      <main className="px-4 py-5 sm:px-6 sm:py-6 md:py-8">
+        <div className="mx-auto max-w-2xl rounded-2xl border border-emerald-200 bg-emerald-50 p-6 text-center shadow-sm">
+          <h1 className="text-xl font-bold text-emerald-800">
+            Restaurant Created!
+          </h1>
+          <p className="mt-2 text-sm text-emerald-700">
+            <strong>{result.restaurant_name}</strong> was created with{" "}
+            {result.categories_imported} categories and{" "}
+            {result.items_imported} items.
+            {result.owner_linked && " Owner has been linked."}
+          </p>
+          <div className="mt-5 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+            <Link
+              href={`/superadmin/restaurants/${result.restaurant_slug}`}
+              className="rounded-xl bg-zinc-900 px-5 py-2.5 text-sm font-semibold text-white"
+            >
+              Manage Restaurant
+            </Link>
+            <Link
+              href={`/${result.restaurant_slug}`}
+              target="_blank"
+              className="rounded-xl border border-zinc-300 px-5 py-2.5 text-sm font-medium text-zinc-700"
+            >
+              View Diner Page
+            </Link>
+            <button
+              type="button"
+              onClick={() => {
+                setState(INITIAL_STATE);
+                setStep(0);
+                setResult(null);
+                setError(null);
+              }}
+              className="rounded-xl border border-zinc-300 px-5 py-2.5 text-sm font-medium text-zinc-700"
+            >
+              Onboard Another
+            </button>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  const stepComponent = (() => {
+    const props = { state, onChange: handleChange };
+    switch (step) {
+      case 0:
+        return <StepRestaurantInfo {...props} />;
+      case 1:
+        return <StepMenuUpload {...props} />;
+      case 2:
+        return <StepImages {...props} />;
+      case 3:
+        return <StepSettings {...props} />;
+      case 4:
+        return <StepOwnerPlan {...props} />;
+      case 5:
+        return <StepReview {...props} />;
+      default:
+        return null;
+    }
+  })();
 
   return (
     <main className="px-4 py-5 sm:px-6 sm:py-6 md:py-8">
-      <h1 className="text-xl font-bold text-zinc-900 sm:text-2xl">Onboarding</h1>
-      <p className="mt-2 max-w-3xl text-sm leading-relaxed text-zinc-600 sm:text-base">
-        Upload a menu photo and let AI extract bilingual categories and dishes for review.
+      <h1 className="text-xl font-bold text-zinc-900 sm:text-2xl">
+        Onboarding
+      </h1>
+      <p className="mt-1 max-w-3xl text-sm text-zinc-500">
+        Create a new restaurant step by step.
       </p>
 
-      <section className="mt-6 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5">
-        <h2 className="text-base font-semibold text-zinc-900">Restaurant Details</h2>
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-zinc-700">Restaurant Name</span>
-            <input
-              type="text"
-              value={restaurantName}
-              onChange={(event) => {
-                const next = event.target.value;
-                setRestaurantName(next);
-                if (!isSlugManuallyEdited) {
-                  setRestaurantSlug(toSlug(next));
-                }
-                setSuccessMessage(null);
-              }}
-              placeholder="Hummus Yossi"
-              className="w-full rounded-xl border border-zinc-300 px-3 py-2.5 text-sm text-zinc-800 outline-none ring-zinc-400 focus:ring-2"
-            />
-          </label>
-          <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-zinc-700">Restaurant Slug</span>
-            <input
-              type="text"
-              value={restaurantSlug}
-              onChange={(event) => {
-                setIsSlugManuallyEdited(true);
-                setRestaurantSlug(toSlug(event.target.value));
-                setSuccessMessage(null);
-              }}
-              placeholder="hummus-yossi"
-              className="w-full rounded-xl border border-zinc-300 px-3 py-2.5 text-sm text-zinc-800 outline-none ring-zinc-400 focus:ring-2"
-            />
-          </label>
-        </div>
-      </section>
-
-      <section className="mt-6 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5">
-        <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
-          <label className="block">
-            <span className="mb-2 block text-sm font-medium text-zinc-700">Menu Image</span>
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(event) => {
-                setSelectedFile(event.target.files?.[0] ?? null);
-                setError(null);
-              }}
-              className="block w-full cursor-pointer rounded-xl border border-zinc-300 bg-zinc-50 px-3 py-2.5 text-sm text-zinc-700 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white hover:bg-zinc-100"
-            />
-          </label>
-          <button
-            type="button"
-            onClick={() => {
-              void handleParse();
-            }}
-            disabled={!selectedFile || isParsing}
-            className="rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {isParsing ? "Analyzing..." : "Analyze Menu"}
-          </button>
-        </div>
-
-        {selectedFile ? (
-          <p className="mt-3 text-xs text-zinc-500">
-            Selected file: <span className="font-medium text-zinc-700">{selectedFile.name}</span>
-          </p>
-        ) : null}
-
-        {isParsing ? (
-          <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
-            AI is analyzing and translating the menu...
-          </div>
-        ) : null}
-
-        {error ? (
-          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-            {error}
-          </div>
-        ) : null}
-      </section>
-
-      {preview ? (
-        <section className="mt-6 space-y-4">
-          <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5">
-            <h2 className="text-lg font-semibold text-zinc-900">Preview</h2>
-            <p className="mt-1 text-sm text-zinc-600">
-              {preview.categories.length} categories, {totalItems} items extracted.
-            </p>
-          </div>
-
-          {preview.categories.map((category, idx) => (
-            <article
-              key={`category-${idx}`}
-              className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm"
-            >
-              <header className="border-b border-zinc-200 bg-zinc-50 px-4 py-3 sm:px-5">
-                <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">Category</p>
-                <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                  <input
-                    value={category.name_en}
-                    onChange={(event) =>
-                      updateCategory(idx, (curr) => ({
-                        ...curr,
-                        name_en: event.target.value,
-                      }))
-                    }
-                    className="rounded-lg border border-zinc-300 px-2.5 py-2 text-sm font-medium text-zinc-900 outline-none ring-zinc-400 focus:ring-2"
-                  />
-                  <input
-                    dir="rtl"
-                    value={category.name_he}
-                    onChange={(event) =>
-                      updateCategory(idx, (curr) => ({
-                        ...curr,
-                        name_he: event.target.value,
-                      }))
-                    }
-                    className="rounded-lg border border-zinc-300 px-2.5 py-2 text-sm font-medium text-zinc-900 outline-none ring-zinc-400 focus:ring-2 sm:text-right"
-                  />
-                </div>
-              </header>
-
-              <div className="divide-y divide-zinc-100">
-                {category.items.map((item, itemIdx) => (
-                  <div key={`category-${idx}-item-${itemIdx}`} className="px-4 py-3 sm:px-5">
-                    <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-start">
-                      <div>
-                        <input
-                          value={item.name_en}
-                          onChange={(event) =>
-                            updateItem(idx, itemIdx, (curr) => ({
-                              ...curr,
-                              name_en: event.target.value,
-                            }))
-                          }
-                          className="w-full rounded-lg border border-zinc-300 px-2.5 py-2 text-sm font-semibold text-zinc-900 outline-none ring-zinc-400 focus:ring-2"
-                        />
-                        <textarea
-                          value={item.description_en ?? ""}
-                          onChange={(event) =>
-                            updateItem(idx, itemIdx, (curr) => ({
-                              ...curr,
-                              description_en: event.target.value || null,
-                            }))
-                          }
-                          rows={2}
-                          className="mt-2 w-full rounded-lg border border-zinc-300 px-2.5 py-2 text-sm text-zinc-600 outline-none ring-zinc-400 focus:ring-2"
-                        />
-                      </div>
-                      <div className="sm:text-right" dir="rtl">
-                        <input
-                          value={item.name_he}
-                          onChange={(event) =>
-                            updateItem(idx, itemIdx, (curr) => ({
-                              ...curr,
-                              name_he: event.target.value,
-                            }))
-                          }
-                          className="w-full rounded-lg border border-zinc-300 px-2.5 py-2 text-sm font-semibold text-zinc-900 outline-none ring-zinc-400 focus:ring-2 sm:text-right"
-                        />
-                        <textarea
-                          dir="rtl"
-                          value={item.description_he ?? ""}
-                          onChange={(event) =>
-                            updateItem(idx, itemIdx, (curr) => ({
-                              ...curr,
-                              description_he: event.target.value || null,
-                            }))
-                          }
-                          rows={2}
-                          className="mt-2 w-full rounded-lg border border-zinc-300 px-2.5 py-2 text-sm text-zinc-600 outline-none ring-zinc-400 focus:ring-2 sm:text-right"
-                        />
-                      </div>
-                      <label className="sm:self-center">
-                        <span className="sr-only">Base price</span>
-                        <input
-                          type="number"
-                          step="0.01"
-                          min={0}
-                          value={Number.isFinite(item.base_price) ? item.base_price : 0}
-                          onChange={(event) =>
-                            updateItem(idx, itemIdx, (curr) => ({
-                              ...curr,
-                              base_price: Number(event.target.value || 0),
-                            }))
-                          }
-                          className="w-28 rounded-lg border border-zinc-300 px-2.5 py-2 text-sm font-semibold text-zinc-900 outline-none ring-zinc-400 focus:ring-2"
-                        />
-                      </label>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </article>
-          ))}
-
-          <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5">
-            <button
-              type="button"
-              disabled={isSaving}
-              onClick={() => {
-                void handleSaveRestaurant();
-              }}
-              className="w-full rounded-xl bg-zinc-900 px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {isSaving ? "Saving..." : "Save & Create Restaurant"}
-            </button>
-            {successMessage ? (
-              <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-                {successMessage}
-              </p>
-            ) : null}
-          </div>
-        </section>
-      ) : null}
+      <div className="mt-6">
+        <WizardShell
+          currentStep={step}
+          onBack={() => setStep((s) => Math.max(0, s - 1))}
+          onNext={() => void validateAndNext()}
+          nextLabel={step === STEPS.length - 1 ? "Create Restaurant" : "Next"}
+          nextDisabled={false}
+          nextBusy={busy}
+          hideBack={step === 0}
+        >
+          {stepComponent}
+          {error && (
+            <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+        </WizardShell>
+      </div>
     </main>
   );
 }
