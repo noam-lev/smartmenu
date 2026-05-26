@@ -248,6 +248,7 @@ function OverviewSection({
               <option value="ILS">&#8362; Shekel (ILS)</option>
               <option value="USD">$ Dollar (USD)</option>
               <option value="EUR">&#8364; Euro (EUR)</option>
+              <option value="HUF">Ft Forint (HUF)</option>
             </select>
           </Field>
           <Field label="Default locale">

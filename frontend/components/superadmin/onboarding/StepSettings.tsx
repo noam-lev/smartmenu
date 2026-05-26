@@ -6,6 +6,7 @@ const CURRENCIES = [
   { value: "ILS", label: "Shekel (₪)" },
   { value: "USD", label: "Dollar ($)" },
   { value: "EUR", label: "Euro (€)" },
+  { value: "HUF", label: "Forint (Ft)" },
 ] as const;
 
 const LOCALES = [

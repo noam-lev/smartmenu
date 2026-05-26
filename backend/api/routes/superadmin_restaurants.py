@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import logging
-import uuid
-from pathlib import PurePosixPath
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
@@ -14,6 +12,7 @@ from supabase import Client
 from api.dependencies import get_db, get_supabase_client, verify_superadmin
 from db.repository import MenuRepository
 from models.schemas import ParsedCategory
+from services.image_service import upload_image as cloudinary_upload
 
 logger = logging.getLogger(__name__)
 
@@ -620,7 +619,6 @@ async def update_subscription(
 async def superadmin_upload_image(
     file: UploadFile = File(...),
     _user_id: str = Depends(verify_superadmin),
-    supabase_client: Client = Depends(get_supabase_client),
 ) -> dict[str, str]:
     content_type = (file.content_type or "").lower()
     if not content_type.startswith("image/"):
@@ -636,15 +634,11 @@ async def superadmin_upload_image(
             detail="Uploaded file is empty.",
         )
 
-    ext = PurePosixPath(file.filename or "").suffix.lower() or ".jpg"
-    object_path = f"onboarding/{uuid.uuid4()}{ext}"
-    bucket = supabase_client.storage.from_("menu-images")
-    bucket.upload(
-        path=object_path,
-        file=raw_bytes,
-        file_options={"content-type": file.content_type or "image/jpeg", "upsert": "false"},
+    public_url = cloudinary_upload(
+        raw_bytes,
+        folder="smartmenu/onboarding",
+        content_type=file.content_type or "image/jpeg",
     )
-    public_url = bucket.get_public_url(object_path)
     return {"public_url": public_url}
 
 

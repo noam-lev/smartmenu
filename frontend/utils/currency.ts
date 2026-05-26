@@ -3,6 +3,7 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
   USD: "$",
   EUR: "\u20ac",
   GBP: "\u00a3",
+  HUF: "Ft",
 };
 
 export function formatCurrency(amount: number, currencyCode = "ILS"): string {
