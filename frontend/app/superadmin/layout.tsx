@@ -1,16 +1,13 @@
 "use client";
 
-import type { FormEvent, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
-import {
-  SUPERADMIN_TOKEN_STORAGE_KEY,
-  setStoredSuperadminToken,
-  superadminLogin,
-  superadminLogout,
-} from "../../lib/superadminApi";
+import { createClient } from "../../utils/supabase/client";
+import { pingSuperadmin } from "../../lib/superadminApi";
+import LoginButton from "../../components/auth/LoginButton";
 
 const NAV_ITEMS = [
   { href: "/superadmin", label: "Dashboard", end: true },
@@ -54,17 +51,49 @@ function NavLinks({
   );
 }
 
+type AuthState = "loading" | "unauthenticated" | "forbidden" | "authed";
+
 export default function SuperadminLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const [hydrated, setHydrated] = useState(false);
-  const [authed, setAuthed] = useState(false);
-  const [loginError, setLoginError] = useState<string | null>(null);
-  const [loginBusy, setLoginBusy] = useState(false);
+  const [authState, setAuthState] = useState<AuthState>("loading");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   useEffect(() => {
-    setAuthed(Boolean(localStorage.getItem(SUPERADMIN_TOKEN_STORAGE_KEY)));
-    setHydrated(true);
+    const supabase = createClient();
+    let cancelled = false;
+
+    async function check() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (cancelled) return;
+
+      if (!user) {
+        setAuthState("unauthenticated");
+        return;
+      }
+
+      const isSuperadmin = await pingSuperadmin();
+      if (cancelled) return;
+      setAuthState(isSuperadmin ? "authed" : "forbidden");
+    }
+
+    void check();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session?.user) {
+        setAuthState("unauthenticated");
+      } else {
+        void check();
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
@@ -89,35 +118,13 @@ export default function SuperadminLayout({ children }: { children: ReactNode }) 
     };
   }, [mobileNavOpen]);
 
-  const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setLoginError(null);
-    const form = event.currentTarget;
-    const password = String(new FormData(form).get("password") ?? "").trim();
-    if (!password) {
-      setLoginError("Password is required.");
-      return;
-    }
-
-    setLoginBusy(true);
-    try {
-      const { token } = await superadminLogin(password);
-      setStoredSuperadminToken(token);
-      setAuthed(true);
-      form.reset();
-    } catch (err) {
-      setLoginError(err instanceof Error ? err.message : "Login failed.");
-    } finally {
-      setLoginBusy(false);
-    }
-  };
-
   const handleLogout = async () => {
-    await superadminLogout();
-    setAuthed(false);
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    setAuthState("unauthenticated");
   };
 
-  if (!hydrated) {
+  if (authState === "loading") {
     return (
       <div className="flex min-h-[100dvh] items-center justify-center bg-zinc-950 text-zinc-400">
         <p className="text-sm">Loading…</p>
@@ -125,37 +132,37 @@ export default function SuperadminLayout({ children }: { children: ReactNode }) 
     );
   }
 
-  if (!authed) {
+  if (authState === "unauthenticated") {
     return (
       <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-zinc-950 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))]">
         <div className="w-full max-w-sm rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-xl">
           <h1 className="text-center text-lg font-semibold text-white">Superadmin</h1>
-          <p className="mt-1 text-center text-xs text-zinc-500">Secure MVP — authorized access only</p>
-          <form className="mt-6 space-y-4" onSubmit={handleLogin}>
-            <label className="block text-xs font-medium text-zinc-400" htmlFor="superadmin-password">
-              Password
-            </label>
-            <input
-              id="superadmin-password"
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              className="min-h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-base text-white outline-none ring-zinc-500 focus:ring-2 sm:text-sm"
-              disabled={loginBusy}
-            />
-            {loginError ? (
-              <p className="text-sm text-red-400" role="alert">
-                {loginError}
-              </p>
-            ) : null}
-            <button
-              type="submit"
-              disabled={loginBusy}
-              className="min-h-11 w-full rounded-xl bg-white py-2.5 text-sm font-semibold text-zinc-900 disabled:opacity-60"
-            >
-              {loginBusy ? "Signing in…" : "Unlock"}
-            </button>
-          </form>
+          <p className="mt-1 text-center text-xs text-zinc-500">
+            Sign in with your Google account to access the control center.
+          </p>
+          <div className="mt-6 flex justify-center">
+            <LoginButton nextPath="/superadmin" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (authState === "forbidden") {
+    return (
+      <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-zinc-950 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))]">
+        <div className="w-full max-w-sm rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-xl text-center">
+          <h1 className="text-lg font-semibold text-white">Access Denied</h1>
+          <p className="mt-2 text-sm text-zinc-400">
+            Your account does not have superadmin privileges.
+          </p>
+          <button
+            type="button"
+            onClick={() => void handleLogout()}
+            className="mt-5 min-h-11 w-full rounded-xl bg-white py-2.5 text-sm font-semibold text-zinc-900"
+          >
+            Sign out
+          </button>
         </div>
       </div>
     );

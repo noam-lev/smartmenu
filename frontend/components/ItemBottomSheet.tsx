@@ -6,7 +6,7 @@ import { useDraggableSheet } from "../hooks/useDraggableSheet";
 import { useImageLoadFailure } from "../hooks/useImageLoadFailure";
 import { useLockBodyScroll } from "../hooks/useLockBodyScroll";
 import { useSheetDialogA11y } from "../hooks/useSheetDialogA11y";
-import { formatILSCurrency } from "../utils/currency";
+import { formatCurrency } from "../utils/currency";
 import { getLocalizedText } from "../utils/i18n";
 import { hasRenderableImage } from "../utils/media";
 
@@ -15,6 +15,7 @@ type ItemBottomSheetProps = {
   isUpsellStep: boolean;
   quantity: number;
   locale: Locale;
+  currency?: string;
   upsellRule?: UpsellRule;
   labels: {
     quantity: string;
@@ -34,6 +35,7 @@ export default function ItemBottomSheet({
   isUpsellStep,
   quantity,
   locale,
+  currency = "ILS",
   upsellRule,
   labels,
   onClose,
@@ -151,7 +153,7 @@ export default function ItemBottomSheet({
               className="mt-5 w-full rounded-2xl bg-zinc-900 px-4 py-3 text-base font-semibold text-white active:scale-[0.995]"
             >
               {labels.addToOrder} -{" "}
-              {formatILSCurrency(selectedItem.base_price * quantity)}
+              {formatCurrency(selectedItem.base_price * quantity, currency)}
             </button>
           </>
         ) : (
@@ -183,7 +185,7 @@ export default function ItemBottomSheet({
                   {upsellItemName}
                 </p>
                 <p className="text-sm text-zinc-500">
-                  {formatILSCurrency(upsellPrice)}
+                  {formatCurrency(upsellPrice, currency)}
                 </p>
               </div>
             </div>
@@ -201,7 +203,7 @@ export default function ItemBottomSheet({
                 onClick={() => onUpsellDecision(true)}
                 className="rounded-2xl bg-zinc-900 px-4 py-3 text-sm font-semibold text-white active:scale-[0.99]"
               >
-                {labels.add} {formatILSCurrency(upsellPrice)}
+                {labels.add} {formatCurrency(upsellPrice, currency)}
               </button>
             </div>
           </>

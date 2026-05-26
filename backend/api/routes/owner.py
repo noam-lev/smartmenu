@@ -1,7 +1,4 @@
 from typing import Any
-from pathlib import Path
-from urllib.parse import unquote, urlparse
-import uuid
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
@@ -22,6 +19,7 @@ from models.schemas import (
     ItemReorderRequest,
     MenuItemCreateRequest,
 )
+from services.image_service import upload_image as cloudinary_upload, delete_image as cloudinary_delete
 
 
 router = APIRouter(tags=["owner"])
@@ -97,6 +95,8 @@ class DeleteImagePayload(BaseModel):
             raise ValueError("file_url is required.")
         return trimmed
 
+    model_config = ConfigDict(extra="ignore")
+
 
 class RestaurantPatchPayload(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -142,18 +142,6 @@ class CategoryReorderPayload(BaseModel):
             raise ValueError("category_ids must not contain duplicates.")
         return normalized
 
-
-def _extract_storage_path_from_public_url(file_url: str) -> str:
-    parsed = urlparse(file_url)
-    path = unquote(parsed.path or "")
-    marker = "/storage/v1/object/public/menu-images/"
-    marker_index = path.find(marker)
-    if marker_index == -1:
-        raise ValueError("Could not parse storage path from file_url.")
-    relative_path = path[marker_index + len(marker) :].strip("/")
-    if not relative_path:
-        raise ValueError("Invalid storage path.")
-    return relative_path
 
 
 @router.get("/ping")
@@ -373,7 +361,6 @@ async def upload_image(
     restaurant_slug: str,
     file: UploadFile = File(...),
     _access: RestaurantAccessContext = Depends(verify_restaurant_access),
-    supabase_client: Client = Depends(get_supabase_client),
 ) -> dict[str, str]:
     content_type = (file.content_type or "").lower()
     if not content_type.startswith("image/"):
@@ -389,15 +376,11 @@ async def upload_image(
             detail="Uploaded file is empty.",
         )
 
-    ext = Path(file.filename or "").suffix.lower() or ".jpg"
-    object_path = f"{restaurant_slug}/{uuid.uuid4()}{ext}"
-    bucket = supabase_client.storage.from_("menu-images")
-    bucket.upload(
-        path=object_path,
-        file=raw_bytes,
-        file_options={"content-type": file.content_type or "image/jpeg", "upsert": "false"},
+    public_url = cloudinary_upload(
+        raw_bytes,
+        folder=f"smartmenu/{restaurant_slug}",
+        content_type=file.content_type or "image/jpeg",
     )
-    public_url = bucket.get_public_url(object_path)
     return {"public_url": public_url}
 
 
@@ -406,24 +389,15 @@ async def delete_image(
     restaurant_slug: str,
     payload: DeleteImagePayload,
     _access: RestaurantAccessContext = Depends(verify_restaurant_access),
-    supabase_client: Client = Depends(get_supabase_client),
 ) -> dict[str, object]:
-    try:
-        object_path = _extract_storage_path_from_public_url(payload.file_url)
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
-        ) from exc
-
-    if not object_path.startswith(f"{restaurant_slug}/"):
+    if f"smartmenu/{restaurant_slug}/" not in payload.file_url:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Cannot delete images outside this restaurant scope.",
         )
 
-    supabase_client.storage.from_("menu-images").remove([object_path])
-    return {"success": True, "deleted_path": object_path}
+    deleted = cloudinary_delete(payload.file_url)
+    return {"success": deleted}
 
 
 @router.delete("/{restaurant_slug}/items/{item_id}")

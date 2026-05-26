@@ -16,7 +16,7 @@ import { useCartStore } from "../store/cartStore";
 import { useUiStore } from "../store/uiStore";
 import { createClient as createSupabaseBrowserClient } from "../utils/supabase/client";
 import type { MenuCategory, MenuItem, MenuPayload, UpsellRule } from "../types/menu";
-import { formatILSCurrency } from "../utils/currency";
+import { formatCurrency } from "../utils/currency";
 import {
   getLocalizedText,
   getUiMessage,
@@ -146,6 +146,7 @@ export function TenantDinerPage({
   };
 
   const upsellRule = isUpsellStep ? activeUpsellRule ?? undefined : undefined;
+  const currency = menuPayload?.restaurant?.currency || "ILS";
   const restaurantName = menuPayload
     ? getLocalizedText(menuPayload.restaurant, "name", locale)
     : "";
@@ -478,6 +479,7 @@ export function TenantDinerPage({
                   key={item.id}
                   item={item}
                   locale={locale}
+                  currency={currency}
                   unavailableLabel={getUiMessage("unavailable", locale)}
                   onClick={() => openItemSheet(item)}
                 />
@@ -497,6 +499,7 @@ export function TenantDinerPage({
         isUpsellStep={isUpsellStep}
         quantity={quantity}
         locale={locale}
+        currency={currency}
         upsellRule={upsellRule}
         labels={{
           quantity: getUiMessage("quantity", locale),
@@ -515,6 +518,7 @@ export function TenantDinerPage({
         key={`cart-sheet-${cartSheetSession}`}
         isOpen={isCartSheetOpen}
         locale={locale}
+        currency={currency}
         items={cartItems}
         subtotal={totalPrice}
         labels={{
@@ -559,7 +563,7 @@ export function TenantDinerPage({
             {totalItems === 1
               ? getUiMessage("itemSingular", locale)
               : getUiMessage("itemPlural", locale)}) -{" "}
-            {formatILSCurrency(totalPrice)}
+            {formatCurrency(totalPrice, currency)}
           </p>
         </button>
       ) : null}
