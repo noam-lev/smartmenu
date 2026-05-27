@@ -56,11 +56,14 @@ def upload_image(
     """
     _ensure_configured()
 
+    # public_id path is used in delivery URLs and owner delete scoping.
+    # asset_folder places the asset in the Media Library tree (dynamic folder mode).
     public_id = f"{folder}/{uuid.uuid4()}"
 
     result = cloudinary.uploader.upload(
         file_bytes,
         public_id=public_id,
+        asset_folder=folder,
         resource_type="image",
         overwrite=False,
     )
