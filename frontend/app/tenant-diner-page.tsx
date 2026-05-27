@@ -82,17 +82,37 @@ export function TenantDinerPage({
     () => false,
   );
 
-  const { addSelection, cartBucket, setItemQuantity, removeItem } = useCartStore(
-    useShallow((state) => ({
-      addSelection: state.addSelection,
-      cartBucket: state.cartsByRestaurant[restaurantSlug],
-      setItemQuantity: state.setItemQuantity,
-      removeItem: state.removeItem,
-    })),
-  );
+  const { addSelection, cartBucket, setItemQuantity, removeItem, clearCart, syncCartLifecycle } =
+    useCartStore(
+      useShallow((state) => ({
+        addSelection: state.addSelection,
+        cartBucket: state.cartsByRestaurant[restaurantSlug],
+        setItemQuantity: state.setItemQuantity,
+        removeItem: state.removeItem,
+        clearCart: state.clearCart,
+        syncCartLifecycle: state.syncCartLifecycle,
+      })),
+    );
+  const menuLastUpdated = menuPayload?.menu.last_updated;
   const itemsByItemId = cartBucket?.itemsByItemId ?? {};
   const totalItems = cartBucket?.totalItems ?? 0;
   const totalPrice = cartBucket?.totalPrice ?? 0;
+
+  useEffect(() => {
+    syncCartLifecycle(restaurantSlug, menuLastUpdated);
+  }, [restaurantSlug, menuLastUpdated, syncCartLifecycle, totalItems]);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== "visible") {
+        return;
+      }
+      syncCartLifecycle(restaurantSlug, menuLastUpdated);
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [restaurantSlug, menuLastUpdated, syncCartLifecycle, totalItems]);
   const locale = useUiStore((state) => state.locale);
   const setLocale = useUiStore((state) => state.setLocale);
   const cartItems = useMemo(() => Object.values(itemsByItemId), [itemsByItemId]);
@@ -303,6 +323,11 @@ export function TenantDinerPage({
 
   const closeCartSheet = () => {
     setIsCartSheetOpen(false);
+  };
+
+  const handleStartOver = () => {
+    clearCart(restaurantSlug);
+    closeCartSheet();
   };
 
   if (isMenuLoading) {
@@ -528,8 +553,10 @@ export function TenantDinerPage({
           each: getUiMessage("each", locale),
           remove: getUiMessage("remove", locale),
           subtotal: getUiMessage("subtotal", locale),
+          startOver: getUiMessage("startOver", locale),
         }}
         onClose={closeCartSheet}
+        onStartOver={handleStartOver}
         onIncrease={(itemId) => {
           const item = itemsByItemId[itemId];
           if (!item) {
