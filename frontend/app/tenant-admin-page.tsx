@@ -812,6 +812,7 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
   };
 
   const bannerUrl = menuPayload?.restaurant.banner_url ?? null;
+  const currency = menuPayload?.restaurant?.currency || "ILS";
   const isBannerBusy = isBannerUploading || isBannerRemoving;
 
   const handleSettingsSaved = (settings: Record<string, unknown>) => {
@@ -1198,6 +1199,7 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
                             items={category.items}
                             onReorder={(next) => void handleReorderItems(category.id, next)}
                             locale={locale}
+                            currency={currency}
                             unavailableLabel={getUiMessage("unavailable", locale)}
                             creationPendingItemId={creationPendingTempId}
                             onEditClick={handleEditClick}

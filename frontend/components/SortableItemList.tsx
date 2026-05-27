@@ -25,6 +25,7 @@ import { getUiMessage } from "../utils/i18n";
 type SortableMenuItemRowProps = {
   item: MenuItem;
   locale: Locale;
+  currency: string;
   unavailableLabel: string;
   isCreationPending: boolean;
   onEditClick: (item: MenuItem) => void;
@@ -35,6 +36,7 @@ type SortableMenuItemRowProps = {
 function SortableMenuItemRow({
   item,
   locale,
+  currency,
   unavailableLabel,
   isCreationPending,
   onEditClick,
@@ -59,6 +61,7 @@ function SortableMenuItemRow({
         mode="admin"
         item={item}
         locale={locale}
+        currency={currency}
         unavailableLabel={unavailableLabel}
         isCreationPending={isCreationPending}
         dragHandleListeners={listeners as DraggableSyntheticListeners}
@@ -76,6 +79,7 @@ export type SortableItemListProps = {
   items: MenuItem[];
   onReorder: (nextItems: MenuItem[]) => void;
   locale: Locale;
+  currency: string;
   unavailableLabel: string;
   creationPendingItemId: string | null;
   onEditClick: (item: MenuItem) => void;
@@ -87,6 +91,7 @@ export default function SortableItemList({
   items,
   onReorder,
   locale,
+  currency,
   unavailableLabel,
   creationPendingItemId,
   onEditClick,
@@ -124,6 +129,7 @@ export default function SortableItemList({
             key={item.id}
             item={item}
             locale={locale}
+            currency={currency}
             unavailableLabel={unavailableLabel}
             isCreationPending={creationPendingItemId === item.id}
             onEditClick={onEditClick}
