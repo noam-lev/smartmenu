@@ -33,9 +33,11 @@ import EditItemDrawer, {
   placeholderMenuItem,
 } from "../components/EditItemDrawer";
 import SortableItemList from "../components/SortableItemList";
-import AdminSettingsDrawer, {
-  AdminSettingsMenuButton,
-} from "../components/admin/settings/AdminSettingsDrawer";
+import OwnerDrawer from "../components/diner/OwnerDrawer";
+import OwnerMenuButton from "../components/diner/OwnerMenuButton";
+import { useAuthUser } from "../hooks/useAuthUser";
+import { useOwnerDrawerQueryParam } from "../hooks/useOwnerDrawerQueryParam";
+import { useOwnerRestaurants } from "../hooks/useOwnerRestaurants";
 import {
   createCategory,
   createMenuItem,
@@ -113,13 +115,17 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
   const [bannerError, setBannerError] = useState<string | null>(null);
   const [editingCategory, setEditingCategory] = useState<MenuCategory | null>(null);
   const [isCategoryDrawerOpen, setIsCategoryDrawerOpen] = useState(false);
-  const [isSettingsDrawerOpen, setIsSettingsDrawerOpen] = useState(false);
+  const [isOwnerDrawerOpen, setIsOwnerDrawerOpen] = useState(false);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
   const languageMenuRef = useRef<HTMLDivElement | null>(null);
   const bannerFileInputRef = useRef<HTMLInputElement | null>(null);
   const locale = useUiStore((state) => state.locale);
   const setLocale = useUiStore((state) => state.setLocale);
   const { confirm, alert } = useDialogs();
+  const { userId } = useAuthUser();
+  const { restaurants } = useOwnerRestaurants(userId, restaurantSlug);
+  const hasRestaurants = restaurants.length > 0;
+  useOwnerDrawerQueryParam(setIsOwnerDrawerOpen, Boolean(userId && hasRestaurants));
 
   const categories = useMemo(
     () =>
@@ -916,10 +922,14 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
       <main className="mx-auto max-w-md bg-white pb-10">
         <header className="border-b border-zinc-200 px-4 py-4">
           <div className="flex items-start gap-3">
-            <AdminSettingsMenuButton
-              locale={locale}
-              onClick={() => setIsSettingsDrawerOpen(true)}
-            />
+            {userId && hasRestaurants ? (
+              <OwnerMenuButton
+                locale={locale}
+                onClick={() => setIsOwnerDrawerOpen(true)}
+              />
+            ) : (
+              <span className="inline-flex h-9 w-9 shrink-0" aria-hidden />
+            )}
             <div className="min-w-0 flex-1">
               <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
                 {getUiMessage("ownerDashboard", locale)}
@@ -1247,14 +1257,21 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
         onSave={handleSaveItem}
       />
 
-      {menuPayload ? (
-        <AdminSettingsDrawer
+      {menuPayload && hasRestaurants ? (
+        <OwnerDrawer
           locale={locale}
-          open={isSettingsDrawerOpen}
-          onClose={() => setIsSettingsDrawerOpen(false)}
-          restaurantSlug={restaurantSlug}
+          open={isOwnerDrawerOpen}
+          onClose={() => setIsOwnerDrawerOpen(false)}
+          restaurants={restaurants}
+          currentSlug={restaurantSlug}
           menuPayload={menuPayload}
           onSettingsSaved={handleSettingsSaved}
+          onSignOut={() => {
+            const supabase = createSupabaseBrowserClient();
+            void supabase.auth.signOut().then(() => {
+              window.location.href = `/${encodeURIComponent(restaurantSlug)}`;
+            });
+          }}
         />
       ) : null}
     </div>

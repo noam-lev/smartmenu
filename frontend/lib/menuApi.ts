@@ -234,6 +234,29 @@ export async function updateRestaurantSocialLinks(
   return data.restaurant?.settings ?? {};
 }
 
+export async function updateRestaurantQrLogoUrl(
+  restaurantSlug: string,
+  qrLogoUrl: string | null,
+): Promise<Record<string, unknown>> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/owner/${encodeURIComponent(restaurantSlug)}/restaurant`,
+    {
+      method: "PATCH",
+      headers: await getOwnerAuthHeaders(true),
+      body: JSON.stringify({ qr_logo_url: qrLogoUrl }),
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to update QR logo (${response.status})`);
+  }
+
+  const data = (await response.json()) as {
+    restaurant?: { settings?: Record<string, unknown> };
+  };
+  return data.restaurant?.settings ?? {};
+}
+
 export async function fetchOwnerRestaurants(
   currentSlug?: string,
 ): Promise<OwnerRestaurant[]> {

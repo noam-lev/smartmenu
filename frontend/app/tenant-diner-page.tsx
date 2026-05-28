@@ -2,15 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { CircleUser, Menu as MenuIcon, LogOut } from "lucide-react";
+import { CircleUser, LogOut } from "lucide-react";
 import CartSummarySheet from "../components/CartSummarySheet";
 import OwnerDrawer from "../components/diner/OwnerDrawer";
+import OwnerMenuButton from "../components/diner/OwnerMenuButton";
 import ItemBottomSheet from "../components/ItemBottomSheet";
 import MenuItemCard from "../components/MenuItemCard";
 import SocialLinksFooter from "../components/SocialLinksFooter";
 import { parseSocialLinksForDisplay } from "../lib/socialLinks";
 import { useAuthUser } from "../hooks/useAuthUser";
 import { useMenuData } from "../hooks/useMenuData";
+import { useOwnerDrawerQueryParam } from "../hooks/useOwnerDrawerQueryParam";
 import { useOwnerRestaurants } from "../hooks/useOwnerRestaurants";
 import { useCartStore } from "../store/cartStore";
 import { useUiStore } from "../store/uiStore";
@@ -76,6 +78,7 @@ export function TenantDinerPage({
   const { userId } = useAuthUser(initialUserId);
   const { restaurants, isLoading: isOwnerLoading } = useOwnerRestaurants(userId, restaurantSlug);
   const hasRestaurants = restaurants.length > 0;
+  useOwnerDrawerQueryParam(setIsOwnerDrawerOpen, Boolean(userId && hasRestaurants));
   const hasMounted = useSyncExternalStore(
     () => () => {},
     () => true,
@@ -433,13 +436,10 @@ export function TenantDinerPage({
               {hasMounted ? (
                 userId ? (
                   hasRestaurants ? (
-                    <button
-                      type="button"
+                    <OwnerMenuButton
+                      locale={locale}
                       onClick={() => setIsOwnerDrawerOpen(true)}
-                      className="inline-flex items-center justify-center rounded-full border border-zinc-300 bg-white p-2 text-zinc-700 shadow-sm"
-                    >
-                      <MenuIcon className="h-5 w-5" aria-hidden />
-                    </button>
+                    />
                   ) : (
                     <button
                       type="button"
