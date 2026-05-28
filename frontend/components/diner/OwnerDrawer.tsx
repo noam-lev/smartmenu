@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Menu, Share2, UtensilsCrossed, X } from "lucide-react";
+import Link from "next/link";
+import { ChevronLeft, ChevronRight, Menu, QrCode, Share2, UtensilsCrossed, X } from "lucide-react";
 import type { Locale, MenuPayload } from "../../types/menu";
 import type { OwnerRestaurant } from "../../types/owner";
 import { getUiMessage, isRtlLocale } from "../../utils/i18n";
@@ -160,6 +161,16 @@ export default function OwnerDrawer({
                   </button>
                 );
               })}
+              {ownsCurrentRestaurant ? (
+                <Link
+                  href={`/${encodeURIComponent(currentSlug)}/admin/qr-codes`}
+                  onClick={onClose}
+                  className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium text-zinc-800 hover:bg-zinc-100"
+                >
+                  <QrCode className="h-5 w-5 shrink-0 text-zinc-600" strokeWidth={1.75} aria-hidden />
+                  {getUiMessage("qrCodesNav", locale)}
+                </Link>
+              ) : null}
             </nav>
           )}
         </div>

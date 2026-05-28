@@ -7,8 +7,11 @@ import { landingCopy } from "./landingDictionary";
 import { getUiMessage, localeFlagSrc, otherLocale } from "../../utils/i18n";
 import { HeroMagicDemo } from "./HeroMagicDemo";
 import { LeadCaptureDialog } from "./LeadCaptureDialog";
+import { LandingLoginDialog } from "./LandingLoginDialog";
 import { WhatsAppFloatingButton } from "./WhatsAppFloatingButton";
 import { LandingFaq } from "./LandingFaq";
+import { useAuthUser } from "../../hooks/useAuthUser";
+import { createClient } from "../../utils/supabase/client";
 
 /** Hero phone scene — edit these first when tuning the mockup. */
 const HERO_PHONE_SCENE = {
@@ -246,6 +249,9 @@ const TESTIMONIAL_TICKETS = [
 export function TafritoLandingPage() {
   const [locale, setLocale] = useState<LandingLocale>("he");
   const [leadOpen, setLeadOpen] = useState(false);
+  const [loginOpen, setLoginOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+  const { userId, isLoading: authLoading } = useAuthUser();
   const [headerBlend, setHeaderBlend] = useState(0);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [langMenuOpen, setLangMenuOpen] = useState(false);
@@ -274,6 +280,29 @@ export function TafritoLandingPage() {
   const mobileFlightHoldRef = useRef(0);
   const t = landingCopy[locale];
   const dir = locale === "he" ? "rtl" : "ltr";
+  const isLoggedIn = !authLoading && userId !== null;
+
+  async function handleAuthNavClick() {
+    if (isLoggedIn) {
+      if (signingOut) {
+        return;
+      }
+      setSigningOut(true);
+      try {
+        const supabase = createClient();
+        await supabase.auth.signOut();
+      } finally {
+        setSigningOut(false);
+        setMobileOpen(false);
+      }
+      return;
+    }
+    setLoginOpen(true);
+  }
+
+  const authNavLabel = isLoggedIn ? t.navLogout : t.navLogin;
+  const authNavButtonClass =
+    "cursor-pointer rounded-sm border border-espresso/20 bg-transparent px-3 py-2 text-xs font-bold tracking-tight text-espresso transition hover:bg-espresso/5 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60 md:py-2.5 md:text-sm";
 
   useEffect(() => {
     document.title = t.brand + " — " + (locale === "he" ? "תפריט דיגיטלי חכם" : "Smart Digital Menu");
@@ -447,6 +476,7 @@ export function TafritoLandingPage() {
   return (
     <div dir={dir} lang={locale} className="min-h-screen bg-kraft font-sans tracking-tight leading-snug text-warm-brown selection:bg-fresh-green/10">
       <LeadCaptureDialog open={leadOpen} onClose={() => setLeadOpen(false)} locale={locale} />
+      <LandingLoginDialog open={loginOpen} onClose={() => setLoginOpen(false)} locale={locale} />
       <WhatsAppFloatingButton locale={locale} />
 
       <header
@@ -461,7 +491,15 @@ export function TafritoLandingPage() {
       >
         <div className="mx-auto flex h-20 max-w-[1400px] items-center justify-between gap-4 ps-6 pe-6 md:ps-10 md:pe-10">
           <TafritoBrandMark label={t.brand} className="shrink-0" />
-          <div className="flex items-center gap-3 md:gap-5">
+          <div className="flex items-center gap-2 md:gap-3">
+            <button
+              type="button"
+              onClick={() => void handleAuthNavClick()}
+              disabled={signingOut}
+              className={`hidden sm:inline-block ${authNavButtonClass}`}
+            >
+              {authNavLabel}
+            </button>
             <button
               type="button"
               onClick={() => setLeadOpen(true)}
@@ -528,11 +566,19 @@ export function TafritoLandingPage() {
         </div>
         {mobileOpen && (
           <div
-            className="border-t border-espresso/10 ps-6 pe-6 py-4 backdrop-blur-md md:hidden"
+            className="flex items-center gap-3 border-t border-espresso/10 ps-6 pe-6 py-4 backdrop-blur-md md:hidden"
             style={{
               backgroundColor: `rgba(245, 242, 235, ${Math.max(headerBlend, 0.9)})`,
             }}
           >
+            <button
+              type="button"
+              onClick={() => void handleAuthNavClick()}
+              disabled={signingOut}
+              className={authNavButtonClass}
+            >
+              {authNavLabel}
+            </button>
             <button
               type="button"
               aria-label={getUiMessage(

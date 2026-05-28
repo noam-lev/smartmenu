@@ -1,0 +1,43 @@
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm;
+  }
+
+  .admin-no-print {
+    display: none !important;
+  }
+
+  .admin-print-surface {
+    background: white !important;
+    min-height: auto !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: none !important;
+  }
+
+  .qr-print-grid {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10mm 8mm;
+    align-items: start;
+    justify-items: center;
+    width: 100%;
+  }
+
+  .qr-print-grid--general {
+    grid-template-columns: 1fr !important;
+    justify-items: center;
+  }
+
+  .qr-print-cell {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .qr-print-label {
+    font-size: 11pt;
+    color: #000 !important;
+    margin-top: 4mm !important;
+  }
+}

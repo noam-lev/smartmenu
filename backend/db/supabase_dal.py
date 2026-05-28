@@ -230,12 +230,14 @@ class SupabaseDAL(MenuRepository):
         restaurant_id: str,
         *,
         banner_url: str | None | object = ...,
+        qr_logo_url: str | None | object = ...,
         social_links: dict[str, object] | None | object = ...,
     ) -> dict[str, Any] | None:
         return await asyncio.to_thread(
             self._patch_restaurant_settings_sync,
             restaurant_id,
             banner_url,
+            qr_logo_url,
             social_links,
         )
 
@@ -349,6 +351,7 @@ class SupabaseDAL(MenuRepository):
         self,
         restaurant_id: str,
         banner_url: str | None | object,
+        qr_logo_url: str | None | object,
         social_links: dict[str, object] | None | object,
     ) -> dict[str, Any] | None:
         from core.social_links import (
@@ -370,6 +373,8 @@ class SupabaseDAL(MenuRepository):
         settings = _as_dict(row.get("settings"))
         if banner_url is not ...:
             settings["banner_image_url"] = banner_url
+        if qr_logo_url is not ...:
+            settings["qr_logo_url"] = qr_logo_url
         if social_links is not ...:
             if social_links is None:
                 settings["social_links"] = {}

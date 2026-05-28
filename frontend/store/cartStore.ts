@@ -4,6 +4,9 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { TranslationsMap } from "../types/menu";
 
+/** Cart expires after 90 minutes with no cart mutations. */
+export const CART_IDLE_TTL_MS = 90 * 60 * 1000;
+
 export type CartItem = {
   itemId: string;
   name: string;
@@ -16,6 +19,8 @@ export type CartBucket = {
   itemsByItemId: Record<string, CartItem>;
   totalItems: number;
   totalPrice: number;
+  lastActivityAt: string;
+  menuLastUpdatedAt: string | null;
 };
 
 type CartStore = {
@@ -33,7 +38,53 @@ type CartStore = {
   setItemQuantity: (restaurantSlug: string, itemId: string, quantity: number) => void;
   removeItem: (restaurantSlug: string, itemId: string) => void;
   clearCart: (restaurantSlug: string) => void;
+  /**
+   * Silently drops the cart when idle TTL expired or the live menu is newer than
+   * the stored baseline. Adopts `menuLastUpdatedAt` when missing on a non-empty cart.
+   */
+  syncCartLifecycle: (
+    restaurantSlug: string,
+    liveMenuLastUpdated: string | null | undefined,
+  ) => void;
 };
+
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+function parseTimestampMs(value: string | null | undefined): number | null {
+  if (!value) {
+    return null;
+  }
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+export function isCartIdleExpired(
+  bucket: Pick<CartBucket, "lastActivityAt">,
+  atMs: number = Date.now(),
+): boolean {
+  const lastMs = parseTimestampMs(bucket.lastActivityAt);
+  if (lastMs === null) {
+    return true;
+  }
+  return atMs - lastMs >= CART_IDLE_TTL_MS;
+}
+
+export function isMenuNewerThanCart(
+  liveMenuLastUpdated: string,
+  cartMenuLastUpdatedAt: string | null,
+): boolean {
+  if (!cartMenuLastUpdatedAt) {
+    return false;
+  }
+  const liveMs = parseTimestampMs(liveMenuLastUpdated);
+  const cartMs = parseTimestampMs(cartMenuLastUpdatedAt);
+  if (liveMs === null || cartMs === null) {
+    return false;
+  }
+  return liveMs > cartMs;
+}
 
 function computeCartTotals(itemsByItemId: Record<string, CartItem>) {
   return Object.values(itemsByItemId).reduce(
@@ -46,13 +97,108 @@ function computeCartTotals(itemsByItemId: Record<string, CartItem>) {
   );
 }
 
-function makeCartBucket(itemsByItemId: Record<string, CartItem>): CartBucket {
+function makeCartBucket(
+  itemsByItemId: Record<string, CartItem>,
+  meta: { lastActivityAt: string; menuLastUpdatedAt: string | null },
+): CartBucket {
   const totals = computeCartTotals(itemsByItemId);
   return {
     itemsByItemId,
     totalItems: totals.totalItems,
     totalPrice: totals.totalPrice,
+    lastActivityAt: meta.lastActivityAt,
+    menuLastUpdatedAt: meta.menuLastUpdatedAt,
   };
+}
+
+function bucketHasItems(bucket: CartBucket | undefined): bucket is CartBucket {
+  return Boolean(bucket && Object.keys(bucket.itemsByItemId).length > 0);
+}
+
+function touchBucketMeta(
+  existing: CartBucket | undefined,
+  menuLastUpdatedAt?: string | null,
+): { lastActivityAt: string; menuLastUpdatedAt: string | null } {
+  return {
+    lastActivityAt: nowIso(),
+    menuLastUpdatedAt:
+      menuLastUpdatedAt !== undefined
+        ? menuLastUpdatedAt
+        : (existing?.menuLastUpdatedAt ?? null),
+  };
+}
+
+function migratePersistedBuckets(
+  persistedState: unknown,
+): Pick<CartStore, "cartsByRestaurant"> {
+  const state = (persistedState ?? {}) as Partial<
+    CartStore & {
+      restaurantSlug?: string | null;
+      itemsByItemId?: Record<string, CartItem>;
+    }
+  >;
+
+  const adoptedAt = nowIso();
+  const normalizeBucket = (
+    slug: string,
+    raw: Partial<CartBucket> & { itemsByItemId?: Record<string, CartItem> },
+  ): CartBucket | null => {
+    const items = raw.itemsByItemId ?? {};
+    if (!slug || Object.keys(items).length === 0) {
+      return null;
+    }
+    return makeCartBucket(items, {
+      lastActivityAt: raw.lastActivityAt ?? adoptedAt,
+      menuLastUpdatedAt: raw.menuLastUpdatedAt ?? null,
+    });
+  };
+
+  if (state.cartsByRestaurant && typeof state.cartsByRestaurant === "object") {
+    const cartsByRestaurant = Object.entries(state.cartsByRestaurant).reduce(
+      (acc, [slug, bucket]) => {
+        const normalized = normalizeBucket(slug, bucket ?? {});
+        if (normalized) {
+          acc[slug] = normalized;
+        }
+        return acc;
+      },
+      {} as Record<string, CartBucket>,
+    );
+    return { cartsByRestaurant };
+  }
+
+  const legacySlug = state.restaurantSlug ?? null;
+  const legacyItems = state.itemsByItemId ?? {};
+  const cartsByRestaurant: Record<string, CartBucket> = {};
+  if (legacySlug && Object.keys(legacyItems).length > 0) {
+    cartsByRestaurant[legacySlug] = makeCartBucket(legacyItems, {
+      lastActivityAt: adoptedAt,
+      menuLastUpdatedAt: null,
+    });
+  }
+  return { cartsByRestaurant };
+}
+
+function purgeIdleExpiredCarts(
+  cartsByRestaurant: Record<string, CartBucket>,
+  atMs: number = Date.now(),
+): Record<string, CartBucket> {
+  let changed = false;
+  const nextCarts: Record<string, CartBucket> = {};
+
+  for (const [slug, bucket] of Object.entries(cartsByRestaurant)) {
+    if (!bucketHasItems(bucket)) {
+      changed = true;
+      continue;
+    }
+    if (isCartIdleExpired(bucket, atMs)) {
+      changed = true;
+      continue;
+    }
+    nextCarts[slug] = bucket;
+  }
+
+  return changed ? nextCarts : cartsByRestaurant;
 }
 
 export const useCartStore = create<CartStore>()(
@@ -73,8 +219,8 @@ export const useCartStore = create<CartStore>()(
         displayUnitPrice,
       }) =>
         set((state) => {
-          const baseItems =
-            state.cartsByRestaurant[restaurantSlug]?.itemsByItemId ?? {};
+          const existingBucket = state.cartsByRestaurant[restaurantSlug];
+          const baseItems = existingBucket?.itemsByItemId ?? {};
           const existing = baseItems[itemId];
           const nextQuantity = (existing?.quantity ?? 0) + quantity;
           const nextItemsByItemId = {
@@ -87,7 +233,10 @@ export const useCartStore = create<CartStore>()(
               quantity: nextQuantity,
             },
           };
-          const nextBucket = makeCartBucket(nextItemsByItemId);
+          const nextBucket = makeCartBucket(
+            nextItemsByItemId,
+            touchBucketMeta(existingBucket),
+          );
 
           return {
             cartsByRestaurant: {
@@ -108,6 +257,8 @@ export const useCartStore = create<CartStore>()(
             return state;
           }
 
+          const meta = touchBucketMeta(bucket);
+
           if (quantity <= 0) {
             const nextItems = { ...bucket.itemsByItemId };
             delete nextItems[itemId];
@@ -120,7 +271,7 @@ export const useCartStore = create<CartStore>()(
             return {
               cartsByRestaurant: {
                 ...nextCarts,
-                [restaurantSlug]: makeCartBucket(nextItems),
+                [restaurantSlug]: makeCartBucket(nextItems, meta),
               },
             };
           }
@@ -136,7 +287,7 @@ export const useCartStore = create<CartStore>()(
           return {
             cartsByRestaurant: {
               ...state.cartsByRestaurant,
-              [restaurantSlug]: makeCartBucket(nextItemsByItemId),
+              [restaurantSlug]: makeCartBucket(nextItemsByItemId, meta),
             },
           };
         }),
@@ -158,7 +309,7 @@ export const useCartStore = create<CartStore>()(
           return {
             cartsByRestaurant: {
               ...nextCarts,
-              [restaurantSlug]: makeCartBucket(nextItems),
+              [restaurantSlug]: makeCartBucket(nextItems, touchBucketMeta(bucket)),
             },
           };
         }),
@@ -168,42 +319,58 @@ export const useCartStore = create<CartStore>()(
           delete nextCarts[restaurantSlug];
           return { cartsByRestaurant: nextCarts };
         }),
+      syncCartLifecycle: (restaurantSlug, liveMenuLastUpdated) => {
+        const bucket = get().cartsByRestaurant[restaurantSlug];
+        if (!bucketHasItems(bucket)) {
+          return;
+        }
+
+        if (isCartIdleExpired(bucket)) {
+          get().clearCart(restaurantSlug);
+          return;
+        }
+
+        if (liveMenuLastUpdated) {
+          if (
+            bucket.menuLastUpdatedAt &&
+            isMenuNewerThanCart(liveMenuLastUpdated, bucket.menuLastUpdatedAt)
+          ) {
+            get().clearCart(restaurantSlug);
+            return;
+          }
+
+          if (!bucket.menuLastUpdatedAt) {
+            set((state) => {
+              const current = state.cartsByRestaurant[restaurantSlug];
+              if (!bucketHasItems(current)) {
+                return state;
+              }
+              return {
+                cartsByRestaurant: {
+                  ...state.cartsByRestaurant,
+                  [restaurantSlug]: {
+                    ...current,
+                    menuLastUpdatedAt: liveMenuLastUpdated,
+                  },
+                },
+              };
+            });
+          }
+        }
+      },
     }),
     {
       name: "smartmenu-cart",
-      version: 4,
-      migrate: (persistedState: unknown) => {
-        const state = (persistedState ?? {}) as Partial<
-          CartStore & {
-            restaurantSlug?: string | null;
-            itemsByItemId?: Record<string, CartItem>;
-          }
-        >;
-
-        if (state.cartsByRestaurant && typeof state.cartsByRestaurant === "object") {
-          return {
-            cartsByRestaurant: Object.entries(state.cartsByRestaurant).reduce(
-              (acc, [slug, bucket]) => {
-                const items = bucket?.itemsByItemId ?? {};
-                if (slug && Object.keys(items).length > 0) {
-                  acc[slug] = makeCartBucket(items);
-                }
-                return acc;
-              },
-              {} as Record<string, CartBucket>,
-            ),
-          } as Pick<CartStore, "cartsByRestaurant">;
+      version: 5,
+      migrate: (persistedState) => migratePersistedBuckets(persistedState),
+      onRehydrateStorage: () => (state, error) => {
+        if (error || !state) {
+          return;
         }
-
-        const legacySlug = state.restaurantSlug ?? null;
-        const legacyItems = state.itemsByItemId ?? {};
-        const cartsByRestaurant: Record<string, CartBucket> = {};
-        if (legacySlug && Object.keys(legacyItems).length > 0) {
-          cartsByRestaurant[legacySlug] = makeCartBucket(legacyItems);
+        const purged = purgeIdleExpiredCarts(state.cartsByRestaurant);
+        if (purged !== state.cartsByRestaurant) {
+          useCartStore.setState({ cartsByRestaurant: purged });
         }
-        return {
-          cartsByRestaurant,
-        } as Pick<CartStore, "cartsByRestaurant">;
       },
     },
   ),

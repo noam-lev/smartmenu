@@ -1,6 +1,6 @@
 ***
 
-# 🧠 SmartMenu AI — Master Project Context (V2.1)
+# 🧠 SmartMenu AI — Master Project Context (V2.2)
 
 **To the AI Assistant:** Read this document carefully. It contains the complete business, architectural, and technical context of the project. We have already made definitive architectural decisions. Do not suggest altering the core stack, the database schema, or the strategic decisions listed below. Your goal is to help me continue developing from the **Current Status** point.
 
@@ -35,8 +35,9 @@
     * `frontend/` — Next.js 16 (App Router), TypeScript, Tailwind CSS 4, Zustand (`cartStore`, `uiStore`).
     * `backend/` — Python, FastAPI, Pydantic (`uv`, `pyproject.toml`).
 * **Database & Auth:** PostgreSQL + Supabase Auth (Google OAuth for owners). Backend uses **service-role** client; owner writes validate JWT + `restaurant_members` (or `profiles.role = superadmin`).
-* **Storage:** Supabase bucket `menu-images` for item/banner uploads (owner API).
+* **Images:** **Cloudinary** for owner + superadmin item/banner uploads (`backend/services/image_service.py`, folder `smartmenu/{slug}/`). Env: Cloudinary credentials in `backend/.env`.
 * **Email (marketing):** Resend via `backend/services/lead_notification.py` (`RESEND_API_KEY`, etc. in `backend/core/config.py`).
+* **Local backend:** `backend/README.md` — `uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload --log-config uvicorn_log_config.json`.
 * **Deploy signals:** Vercel Analytics + Speed Insights on root layout; `metadata.robots` still `noindex` (see §7).
 
 ## 3. Security, Data & Performance Rules
@@ -59,7 +60,7 @@
 ## 5. Database Schema (Deployed in Supabase)
 
 **Core menu (unchanged intent):**
-* `restaurants`: id (UUID), owner_id, name, slug (unique, lowercase), `settings` JSONB (`theme_color`, `currency`, `banner_image_url`, `default_locale`, …), is_active, timestamps.
+* `restaurants`: id (UUID), owner_id, name, slug (unique, lowercase), `settings` JSONB (`theme_color`, `currency`, `banner_image_url`, `default_locale`, `social_links`, …), is_active, timestamps.
 * `menus`: id, restaurant_id, name, is_active, timestamps. API exposes `menus.updated_at` as `menu.last_updated`.
 * `categories`: id, menu_id, name, sort_order, is_visible, `translations` JSONB, created_at.
 * `menu_items`: id, restaurant_id, menu_id, category_id, name, description, base_price, is_available, is_visible, sort_order, image_url, raw_ocr_data, metadata, translations (JSONB), created_at.
@@ -79,9 +80,12 @@
 |--------|---------|
 | `GET /api/diner/menus/{slug}` | Public fat menu (no auth) |
 | `GET /api/owner/ping` | Auth smoke test (Bearer JWT) |
-| `POST/PATCH/DELETE /api/owner/{slug}/…` | Owner menu CRUD, images, upsells, reorder |
+| `GET /api/owner/me/restaurants?current_slug=` | List restaurants (+ menus) for current user; optional slug scopes superadmin |
+| `POST/PATCH/DELETE /api/owner/{slug}/…` | Owner menu CRUD, upsells, reorder, banner/settings (`social_links`) |
+| `POST/DELETE /api/owner/{slug}/upload-image`, `delete-image` | Cloudinary upload/delete |
 | `POST /api/marketing/leads` | Landing lead capture (+ IP rate limit) |
-| `POST /api/superadmin/login`, `magic-parse`, `restaurants/import`, … | In-memory superadmin session (`X-Superadmin-Token`) |
+| `POST /api/superadmin/magic-parse`, `restaurants/import`, … | JWT + `verify_superadmin` (`profiles.role`) |
+| `GET/PATCH/POST /api/superadmin/restaurants/…` | Superadmin tenant CRUD, members, subscription, onboard, images (`superadmin_restaurants.py`) |
 | `GET /health` | Health check |
 
 **Reference payload:** `frontend/data/mockMenu.json` — still used by `backend/seed.py` for local seeding; **runtime diner UI reads live API**, not this file.
@@ -146,21 +150,20 @@ Nested menu shape (abbreviated):
 **Phase:** MVP diner + owner flows are largely built; **Phase 2** (events, soft-order server awareness, analytics) is not started.
 
 **MVP checklist (done unless noted):**
-* Diner: `/{slug}` → `tenant-diner-page.tsx` — live menu, Wolt-style UI, cart (Zustand + localStorage), smart upsell, bilingual UI + API translations, optional restaurant banner.
-* Owner: `/{slug}/admin` → `tenant-admin-page.tsx` — categories/items CRUD, drag-and-drop reorder (`@dnd-kit`), availability toggles, image upload, banner, upsell rules in drawer, hard delete with confirm modals.
-* Platform: `/` marketing landing (`TafritoLandingPage`), lead form → `POST /api/marketing/leads`.
-* Superadmin: `/superadmin` login + `/superadmin/onboarding` (magic parse + import). `/superadmin/restaurants` is a **placeholder**.
-* Seed: `backend/seed.py` idempotent import from `mockMenu.json`.
+* Diner: `/{slug}` → `tenant-diner-page.tsx` — live menu (`useMenuData`), Wolt-style UI, cart, smart upsell, bilingual UI, banner, **social links footer**, **owner drawer** for logged-in managers, `formatCurrency` from `restaurant.currency`, accessible bottom sheets.
+* Owner: `/{slug}/admin` → `tenant-admin-page.tsx` — categories/items CRUD, drag-and-drop reorder (`@dnd-kit`), availability toggles, Cloudinary image upload, banner, upsell rules, social links settings, hard delete with confirm modals.
+* Platform: `/` marketing landing (`TafritoLandingPage`) with nav login/logout (`useAuthUser`, `LandingLoginDialog`), lead form → `POST /api/marketing/leads`.
+* Superadmin: `/superadmin` (Supabase + superadmin role), **multi-step onboarding wizard**, **paginated restaurants list** + full management API.
+* Seed: `backend/seed.py` idempotent import from `mockMenu.json` (`--reset`).
 
 **Auth (May 2026):**
-* **Owners:** Google OAuth via Supabase (`LoginButton`, `/login`, `/auth/callback`). `middleware.ts` redirects unauthenticated users away from `/{slug}/admin`. Owner API calls send `Authorization: Bearer <access_token>` (`menuApi.getOwnerAuthHeaders`). Backend `verify_restaurant_access` checks `restaurant_members` or superadmin `profiles.role`. Stale `# TODO: ADD AUTH` comments remain on some owner routes but **deps are wired**.
-* **Superadmin:** Separate in-memory token auth (`X-Superadmin-Token`), not Supabase.
+* **Owners:** Google OAuth via Supabase (`LoginButton`, `/login`, `/auth/callback`). `middleware.ts` redirects unauthenticated users away from `/{slug}/admin`. Owner API: `Authorization: Bearer` + `verify_restaurant_access` (`restaurant_members` or superadmin `profiles.role`).
+* **Superadmin:** Same Supabase OAuth; backend `verify_superadmin` checks `profiles.role = superadmin`. Frontend `superadmin/layout.tsx` gates via `pingSuperadmin()`; no in-memory `X-Superadmin-Token`.
 
 **Not done (explicit gaps):**
 * `events` ingestion / analytics APIs.
 * Server-side awareness of diner cart (“soft order” submit).
 * RLS enforcement audit in app code (service-role bypasses RLS — tenant scoping is application-layer).
-* Superadmin restaurant list/management UI.
 * Search indexing (`robots` still noindex — ask user before enabling).
 
 **Immediate next task:** Phase-2 `POST` flows for events (and optional soft-order payload), aligned with existing fat menu read contract.
@@ -168,16 +171,18 @@ Nested menu shape (abbreviated):
 ### Routes (frontend)
 | Path | Component / role |
 |------|------------------|
-| `/` | `TafritoLandingPage` + `LeadCaptureDialog` / `HeroMagicDemo` |
+| `/` | `TafritoLandingPage` + `LeadCaptureDialog` / `HeroMagicDemo` / `LandingLoginDialog` |
 | `/login` | Google admin login (`next` redirect) |
-| `/{slug}` | Diner menu |
+| `/{slug}` | Diner menu (`[restaurant_slug]/page.tsx` passes `initialUserId` SSR) |
 | `/{slug}/admin` | Owner editor (auth required) |
 | `/superadmin`, `/superadmin/onboarding`, `/superadmin/restaurants` | Superadmin tools |
 
-Shared modules: `frontend/lib/menuApi.ts`, `frontend/lib/marketingApi.ts`, `frontend/lib/superadminApi.ts`, `frontend/utils/supabase/{client,server}.ts`.
+Shared modules: `frontend/lib/menuApi.ts`, `frontend/lib/marketingApi.ts`, `frontend/lib/superadminApi.ts`, `frontend/lib/socialLinks.ts`, `frontend/utils/supabase/{client,server}.ts`.
+
+Hooks: `useMenuData`, `useImageLoadFailure`, `useSheetDialogA11y`, `useAuthUser`, `useOwnerRestaurants`, `useLockBodyScroll`, `useDraggableSheet`.
 
 ### Owner dashboard (current build)
-* **Admin UI (`/{restaurant_slug}/admin`):** Full menu editor — categories (create/rename/delete, reorder), items (create/edit/delete, reorder within category, availability PATCH), restaurant banner, item images via owner upload endpoints.
+* **Admin UI (`/{restaurant_slug}/admin`):** Full menu editor — categories (create/rename/delete, reorder), items (create/edit/delete, reorder within category, availability PATCH), restaurant banner/settings (incl. **social links**), item images via Cloudinary upload endpoints.
 * **`EditItemDrawer`:** Tabs **General**, **Translations**, **Upsells** (`UpsellTab.tsx` — create/edit/delete rules, bilingual messages). Merges per-locale `translations`; respects `restaurant.default_locale` for base `name`/`description`.
 * **`EditCategoryDrawer`:** Category name + translations.
 * **UI i18n:** `useUiStore` + `getUiMessage` / `getUiTemplate` (`frontend/utils/i18n.ts`). Content i18n via API `translations` + `getLocalizedText`. Locale flags: `frontend/public/flags/{il,us}.svg`.
@@ -201,11 +206,12 @@ These updates are in the repo so future work can assume this behavior without re
 
 **Superadmin + Magic Onboarding (May 2026)**
 
-- **Secure MVP auth (`backend/api/routes/superadmin.py`):** in-memory session tokens with expiry + IP binding (`X-Superadmin-Token`), login lockout on repeated failures (per-IP), logout endpoint, and protected superadmin routes.
-- **AI parse pipeline (no direct diner impact):** `POST /api/superadmin/magic-parse` accepts image upload, encodes to data URL, calls OpenAI (`gpt-4o`) with structured output into strict schemas (`ParsedMenu`, `ParsedCategory`, `ParsedItem`), then returns editable preview data.
-- **Import pipeline:** `POST /api/superadmin/restaurants/import` receives edited bilingual payload (`RestaurantImportPayload`) and creates tenant + menu + categories + items with Hebrew base fields and English `translations` mapping.
-- **Important DB reality check:** `restaurants.id` is **UUID**, `restaurants.slug` is text. Slug is used for routing; backend resolves slug -> UUID for owner writes and FK-safe inserts.
-- **Onboarding UI (`/superadmin/onboarding`):** upload, loading, editable bilingual preview, restaurant name+slug inputs, slug auto-follow-until-manual-edit behavior, save button, success/error feedback.
+- **Auth (`verify_superadmin`):** Supabase JWT Bearer; `profiles.role = superadmin`. Replaces earlier in-memory `X-Superadmin-Token` MVP.
+- **AI parse:** `POST /api/superadmin/magic-parse` — image upload → OpenAI (`gpt-4o`) structured `ParsedMenu` preview.
+- **Legacy import:** `POST /api/superadmin/restaurants/import` — bilingual `RestaurantImportPayload` (still available).
+- **Full onboard:** `POST /api/superadmin/restaurants/onboard` — multi-field wizard payload from new onboarding UI.
+- **DB:** `restaurants.id` is UUID; `slug` is lowercase unique text for routing.
+- **Onboarding UI:** multi-step wizard under `components/superadmin/onboarding/` (restaurant info, menu upload, images, settings, owner/plan, review).
 
 **Multi-tenant routing + owner API (May 2026)**
 
@@ -220,11 +226,32 @@ These updates are in the repo so future work can assume this behavior without re
 - **`TafritoLandingPage`:** Hebrew/English copy in `landingDictionary.ts`, FAQ (`LandingFaq`), animated hero phone demo, feature orbit, lead capture.
 - **Leads:** `POST /api/marketing/leads` — validates body, per-IP rate limit (8/hr), emails via Resend (team notification + optional welcome). Frontend: `marketingApi.ts` + `LeadCaptureForm`.
 
+**Technical debt cleanup — Sprint A & B (May 2026)**
+
+- **Sprint A (hygiene, no behavior change):** Removed stale `# TODO: ADD AUTH` from `owner.py`; deleted unused `core/security.py`. Frontend: `hooks/useMenuData.ts`, `hooks/useImageLoadFailure.ts`, `useShallow` cart selector in `tenant-diner-page.tsx`. Root `.gitignore` uses repo-wide `__pycache__/`.
+- **Sprint B (diner sheet a11y):** `hooks/useSheetDialogA11y.ts` on `ItemBottomSheet` + `CartSummarySheet` — `role="dialog"`, `aria-modal`, Escape, Tab focus trap, focus restore.
+
+**Superadmin platform (late May 2026)**
+
+- **Restaurant management API:** `backend/api/routes/superadmin_restaurants.py` — list/search, patch tenant, members, subscription, menu ops, `POST …/restaurants/onboard`, Cloudinary upload.
+- **Restaurants list UI:** `/superadmin/restaurants` — paginated table (search, active filter, plan badges).
+
+**Diner menu — owner & social (late May 2026)**
+
+- **SSR auth hint:** `app/[restaurant_slug]/page.tsx` passes `initialUserId` into `TenantDinerPage`; `useAuthUser(initialUserId)` avoids auth flash.
+- **Owner drawer:** `OwnerDrawer` on diner menu for logged-in owners — `GET /api/owner/me/restaurants`, jump to admin, edit `social_links` via `SocialLinksEditor`.
+- **Social links:** `restaurants.settings.social_links` validated in `backend/core/social_links.py` (instagram, facebook, tiktok, whatsapp, website, waze). Diner: `SocialLinksFooter` when links exist.
+- **Currency:** `formatCurrency(amount, restaurant.currency)` in diner UI (`utils/currency.ts` — ILS, USD, EUR, GBP, HUF).
+
+**Marketing / landing auth (late May 2026)**
+
+- **`useAuthUser` on landing:** nav login vs sign-out; `LandingLoginDialog` + `googleSignIn.ts`.
+
 **Operational updates**
 
-- **Backend log timestamps:** Uvicorn log format includes timestamps (`main.py` embedded config + `backend/uvicorn_log_config.json`).
+- **Backend log timestamps:** `uvicorn_log_config.json` — run via `backend/README.md`. Logger name `uvicorn.error` on INFO lines is normal (server lifecycle, not an error).
 - **Search indexing:** `app/layout.tsx` — `metadataBase` `https://tafrito.com`, OG/Twitter images, `robots: noindex`. **Ask the user** before enabling indexing.
-- **Env (typical):** `frontend/.env.local` — `NEXT_PUBLIC_API_BASE_URL`, Supabase URL/anon key. `backend/.env` — Supabase service key, OpenAI (superadmin parse), Resend, `SUPERADMIN_*` credentials.
+- **Env (typical):** `frontend/.env.local` — `NEXT_PUBLIC_API_BASE_URL`, Supabase URL/anon key. `backend/.env` — Supabase service key, OpenAI, Resend, Cloudinary, etc.
 
 ## 8. Visual & UX Architecture (The "Wolt-Style" Experience)
 To ensure all frontend components align with the overall user experience, here is the mental model for the diner's UI:
@@ -242,6 +269,8 @@ To ensure all frontend components align with the overall user experience, here i
 * **The Floating Cart (Sticky Footer):**
   * Invisible when the cart is empty.
   * Once an item is added, a floating button appears anchored to the bottom of the screen.
-  * Displays a summary: "View Order (2 items) - 44 ₪". Tapping it opens the final cart summary to show the waiter (Soft Ordering).
+  * Displays a summary: "View Order (2 items) - 44 ₪" (amount uses `restaurant.currency` via `formatCurrency`). Tapping it opens the final cart summary to show the waiter (Soft Ordering).
+* **Owner shortcut (when logged in):** Header control opens **Owner drawer** — switch managed restaurants or edit social links without leaving the diner menu.
+* **Social footer:** Optional row of platform links (Instagram, WhatsApp, etc.) when configured in restaurant settings.
 
 **End of Context Document.**

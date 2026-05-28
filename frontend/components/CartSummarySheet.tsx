@@ -22,11 +22,13 @@ type CartSummarySheetProps = {
     each: string;
     remove: string;
     subtotal: string;
+    startOver: string;
   };
   onClose: () => void;
   onIncrease: (itemId: string) => void;
   onDecrease: (itemId: string) => void;
   onRemove: (itemId: string) => void;
+  onStartOver: () => void;
 };
 
 export default function CartSummarySheet({
@@ -40,6 +42,7 @@ export default function CartSummarySheet({
   onIncrease,
   onDecrease,
   onRemove,
+  onStartOver,
 }: CartSummarySheetProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const { sheetOffsetY, sheetDragging, dragHandlers } = useDraggableSheet({
@@ -163,6 +166,13 @@ export default function CartSummarySheet({
                   {formatCurrency(subtotal, currency)}
                 </p>
               </div>
+              <button
+                type="button"
+                onClick={onStartOver}
+                className="mt-3 w-full py-1 text-center text-sm font-medium text-zinc-500 underline underline-offset-2"
+              >
+                {labels.startOver}
+              </button>
             </div>
           </>
         )}

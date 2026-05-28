@@ -102,11 +102,12 @@ class RestaurantPatchPayload(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     banner_url: str | None = None
+    qr_logo_url: str | None = None
     social_links: dict[str, str | None] | None = None
 
-    @field_validator("banner_url", mode="before")
+    @field_validator("banner_url", "qr_logo_url", mode="before")
     @classmethod
-    def normalize_banner_url(cls, value: Any) -> Any:
+    def normalize_nullable_url(cls, value: Any) -> Any:
         if value is None:
             return None
         if isinstance(value, str):
@@ -335,11 +336,13 @@ async def patch_restaurant(
         )
 
     banner_url = patch_fields.get("banner_url", ...)
+    qr_logo_url = patch_fields.get("qr_logo_url", ...)
     social_links = patch_fields.get("social_links", ...)
     try:
         updated = await db.patch_restaurant_settings(
             access["restaurant_id"],
             banner_url=banner_url,
+            qr_logo_url=qr_logo_url,
             social_links=social_links,
         )
     except SocialLinksValidationError as exc:

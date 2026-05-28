@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { createClient } from "../../utils/supabase/client";
+import { signInWithGoogle } from "./googleSignIn";
 
 type LoginButtonProps = {
   nextPath?: string;
@@ -11,29 +11,11 @@ export default function LoginButton({ nextPath = "/" }: LoginButtonProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const getRedirectUrl = () => {
-    const url = new URL("/auth/callback", window.location.origin);
-    if (nextPath) {
-      url.searchParams.set("next", nextPath);
-    }
-    return url.toString();
-  };
-
   const handleLogin = async () => {
     setError(null);
     setIsLoading(true);
     try {
-      const supabase = createClient();
-
-      const { error: signInError } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: getRedirectUrl(),
-        },
-      });
-      if (signInError) {
-        throw signInError;
-      }
+      await signInWithGoogle(nextPath);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Google sign-in failed.");
       setIsLoading(false);
@@ -55,4 +37,3 @@ export default function LoginButton({ nextPath = "/" }: LoginButtonProps) {
     </div>
   );
 }
-

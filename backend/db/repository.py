@@ -150,7 +150,8 @@ class MenuRepository(ABC):
         restaurant_id: str,
         *,
         banner_url: str | None | object = ...,
+        qr_logo_url: str | None | object = ...,
         social_links: dict[str, object] | None | object = ...,
     ) -> dict[str, Any] | None:
-        """Merge banner_url and/or social_links into restaurants.settings."""
+        """Merge banner_url / qr_logo_url / social_links into restaurants.settings."""
         raise NotImplementedError

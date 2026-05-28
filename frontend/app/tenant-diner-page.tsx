@@ -2,15 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { CircleUser, Menu as MenuIcon, LogOut } from "lucide-react";
+import { CircleUser, LogOut } from "lucide-react";
 import CartSummarySheet from "../components/CartSummarySheet";
 import OwnerDrawer from "../components/diner/OwnerDrawer";
+import OwnerMenuButton from "../components/diner/OwnerMenuButton";
 import ItemBottomSheet from "../components/ItemBottomSheet";
 import MenuItemCard from "../components/MenuItemCard";
 import SocialLinksFooter from "../components/SocialLinksFooter";
 import { parseSocialLinksForDisplay } from "../lib/socialLinks";
 import { useAuthUser } from "../hooks/useAuthUser";
 import { useMenuData } from "../hooks/useMenuData";
+import { useOwnerDrawerQueryParam } from "../hooks/useOwnerDrawerQueryParam";
 import { useOwnerRestaurants } from "../hooks/useOwnerRestaurants";
 import { useCartStore } from "../store/cartStore";
 import { useUiStore } from "../store/uiStore";
@@ -76,23 +78,44 @@ export function TenantDinerPage({
   const { userId } = useAuthUser(initialUserId);
   const { restaurants, isLoading: isOwnerLoading } = useOwnerRestaurants(userId, restaurantSlug);
   const hasRestaurants = restaurants.length > 0;
+  useOwnerDrawerQueryParam(setIsOwnerDrawerOpen, Boolean(userId && hasRestaurants));
   const hasMounted = useSyncExternalStore(
     () => () => {},
     () => true,
     () => false,
   );
 
-  const { addSelection, cartBucket, setItemQuantity, removeItem } = useCartStore(
-    useShallow((state) => ({
-      addSelection: state.addSelection,
-      cartBucket: state.cartsByRestaurant[restaurantSlug],
-      setItemQuantity: state.setItemQuantity,
-      removeItem: state.removeItem,
-    })),
-  );
+  const { addSelection, cartBucket, setItemQuantity, removeItem, clearCart, syncCartLifecycle } =
+    useCartStore(
+      useShallow((state) => ({
+        addSelection: state.addSelection,
+        cartBucket: state.cartsByRestaurant[restaurantSlug],
+        setItemQuantity: state.setItemQuantity,
+        removeItem: state.removeItem,
+        clearCart: state.clearCart,
+        syncCartLifecycle: state.syncCartLifecycle,
+      })),
+    );
+  const menuLastUpdated = menuPayload?.menu.last_updated;
   const itemsByItemId = cartBucket?.itemsByItemId ?? {};
   const totalItems = cartBucket?.totalItems ?? 0;
   const totalPrice = cartBucket?.totalPrice ?? 0;
+
+  useEffect(() => {
+    syncCartLifecycle(restaurantSlug, menuLastUpdated);
+  }, [restaurantSlug, menuLastUpdated, syncCartLifecycle, totalItems]);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== "visible") {
+        return;
+      }
+      syncCartLifecycle(restaurantSlug, menuLastUpdated);
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [restaurantSlug, menuLastUpdated, syncCartLifecycle, totalItems]);
   const locale = useUiStore((state) => state.locale);
   const setLocale = useUiStore((state) => state.setLocale);
   const cartItems = useMemo(() => Object.values(itemsByItemId), [itemsByItemId]);
@@ -305,6 +328,11 @@ export function TenantDinerPage({
     setIsCartSheetOpen(false);
   };
 
+  const handleStartOver = () => {
+    clearCart(restaurantSlug);
+    closeCartSheet();
+  };
+
   if (isMenuLoading) {
     return (
       <div className="flex min-h-[100dvh] items-center justify-center bg-zinc-50 px-6">
@@ -408,13 +436,10 @@ export function TenantDinerPage({
               {hasMounted ? (
                 userId ? (
                   hasRestaurants ? (
-                    <button
-                      type="button"
+                    <OwnerMenuButton
+                      locale={locale}
                       onClick={() => setIsOwnerDrawerOpen(true)}
-                      className="inline-flex items-center justify-center rounded-full border border-zinc-300 bg-white p-2 text-zinc-700 shadow-sm"
-                    >
-                      <MenuIcon className="h-5 w-5" aria-hidden />
-                    </button>
+                    />
                   ) : (
                     <button
                       type="button"
@@ -528,8 +553,10 @@ export function TenantDinerPage({
           each: getUiMessage("each", locale),
           remove: getUiMessage("remove", locale),
           subtotal: getUiMessage("subtotal", locale),
+          startOver: getUiMessage("startOver", locale),
         }}
         onClose={closeCartSheet}
+        onStartOver={handleStartOver}
         onIncrease={(itemId) => {
           const item = itemsByItemId[itemId];
           if (!item) {
