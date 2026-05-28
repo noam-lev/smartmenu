@@ -47,6 +47,7 @@ export default function StepReview({ state }: StepProps) {
           value={`${totalCategories} categories, ${totalItems} items`}
         />
         <Row label="Banner" value={<Badge yes={!!state.bannerUrl} />} />
+        <Row label="QR Logo" value={<Badge yes={!!state.qrLogoUrl} />} />
         <Row
           label="Dish Photos"
           value={totalImages > 0 ? `${totalImages} uploaded` : "None"}

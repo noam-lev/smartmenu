@@ -88,6 +88,7 @@ export default function SuperadminOnboardingPage() {
         currency: state.currency,
         default_locale: state.defaultLocale,
         banner_image_url: state.bannerUrl,
+        qr_logo_url: state.qrLogoUrl,
         item_images: state.itemImages,
         owner_email: state.ownerEmail.trim() || null,
         plan_tier: state.planTier,
