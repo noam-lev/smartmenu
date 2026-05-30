@@ -44,7 +44,7 @@ import {
   deleteCategory,
   deleteMenuItem,
   deleteOwnerImage,
-  fetchMenuBySlug,
+  fetchOwnerMenu,
   reorderCategories,
   reorderCategoryItems,
   updateCategory,
@@ -55,17 +55,17 @@ import {
 } from "../lib/menuApi";
 import { getMenuLoadErrorMessage } from "../lib/menuFetchError";
 import { useDialogs } from "../context/DialogProvider";
-import { useUiStore } from "../store/uiStore";
+import { useTenantLocale } from "../context/TenantLocaleContext";
 import { createClient as createSupabaseBrowserClient } from "../utils/supabase/client";
-import type { Locale, MenuCategory, MenuItem, MenuPayload } from "../types/menu";
+import type { FatMenuPayload, Locale, MenuCategory, MenuItem } from "../types/menu";
 import {
   getLocalizedText,
   getUiMessage,
   getUiTemplate,
-  isRtlLocale,
   localeFlagSrc,
   otherLocale,
 } from "../utils/i18n";
+import { mergeRestaurantSettingsIntoPayload } from "../lib/mergeRestaurantSettings";
 import { hasRenderableImage } from "../utils/media";
 
 type AdminMenuPageProps = {
@@ -101,7 +101,7 @@ function SortableCategorySection({ categoryId, children }: SortableCategorySecti
 }
 
 export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuPageProps) {
-  const [menuPayload, setMenuPayload] = useState<MenuPayload | null>(null);
+  const [menuPayload, setMenuPayload] = useState<FatMenuPayload | null>(null);
   const [isMenuLoading, setIsMenuLoading] = useState(true);
   const [menuError, setMenuError] = useState<string | null>(null);
   const [isLanguageMenuOpen, setIsLanguageMenuOpen] = useState(false);
@@ -119,8 +119,7 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
   const languageMenuRef = useRef<HTMLDivElement | null>(null);
   const bannerFileInputRef = useRef<HTMLInputElement | null>(null);
-  const locale = useUiStore((state) => state.locale);
-  const setLocale = useUiStore((state) => state.setLocale);
+  const { locale, setLocale, isRtl, applyServerDefaultLocale } = useTenantLocale();
   const { confirm, alert } = useDialogs();
   const { userId } = useAuthUser();
   const { restaurants } = useOwnerRestaurants(userId, restaurantSlug);
@@ -141,7 +140,7 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
   );
 
   const refreshMenuForDrawer = useCallback(async () => {
-    const data = await fetchMenuBySlug(restaurantSlug);
+    const data = await fetchOwnerMenu(restaurantSlug);
     setMenuPayload(data);
     setEditingItem((prev) => {
       if (!prev) {
@@ -163,7 +162,6 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
     });
   }, [restaurantSlug]);
 
-  const isRtl = isRtlLocale(locale);
   const categoryDnDSensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 8 },
@@ -178,7 +176,7 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
         setIsMenuLoading(true);
         setMenuError(null);
 
-        const data = await fetchMenuBySlug(restaurantSlug);
+        const data = await fetchOwnerMenu(restaurantSlug);
 
         if (!isMounted) {
           return;
@@ -188,15 +186,14 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
           (a, b) => a.sort_order - b.sort_order,
         );
         setMenuPayload(data);
-        setLocale(data.restaurant.default_locale ?? "en");
+        applyServerDefaultLocale(data.restaurant.default_locale);
         setActiveCategoryId(sortedCategories[0]?.id ?? "");
       } catch (error) {
         if (!isMounted) {
           return;
         }
 
-        const uiLocale = useUiStore.getState().locale;
-        setMenuError(getMenuLoadErrorMessage(error, uiLocale));
+        setMenuError(getMenuLoadErrorMessage(error, locale));
       } finally {
         if (isMounted) {
           setIsMenuLoading(false);
@@ -209,9 +206,7 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
     return () => {
       isMounted = false;
     };
-    // setLocale from Zustand is stable for this one-time bootstrap load.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [restaurantSlug]);
+  }, [restaurantSlug, applyServerDefaultLocale]);
 
   useEffect(() => {
     const sections = categories
@@ -823,18 +818,7 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
 
   const handleSettingsSaved = (settings: Record<string, unknown>) => {
     setMenuPayload((prev) =>
-      prev
-        ? {
-            ...prev,
-            restaurant: {
-              ...prev.restaurant,
-              settings: {
-                ...(prev.restaurant.settings ?? {}),
-                ...settings,
-              },
-            },
-          }
-        : prev,
+      prev ? mergeRestaurantSettingsIntoPayload(prev, settings) : prev,
     );
   };
 
@@ -914,11 +898,7 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
   };
 
   return (
-    <div
-      className="min-h-[100dvh] bg-zinc-50"
-      lang={locale}
-      dir={isRtl ? "rtl" : "ltr"}
-    >
+    <div className="min-h-[100dvh] bg-zinc-50">
       <main className="mx-auto max-w-md bg-white pb-10">
         <header className="border-b border-zinc-200 px-4 py-4">
           <div className="flex items-start gap-3">

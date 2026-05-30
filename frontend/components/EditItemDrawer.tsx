@@ -5,6 +5,12 @@ import type { Locale, MenuItem, TranslationsMap } from "../types/menu";
 import { useUiStore } from "../store/uiStore";
 import { getLocalizedText, getUiMessage, isRtlLocale } from "../utils/i18n";
 import UpsellTab from "./UpsellTab";
+import DietaryIconPicker from "./DietaryIconPicker";
+import {
+  buildMetadataWithDietaryIcons,
+  parseDietaryIcons,
+  type DietaryIconId,
+} from "../lib/dietaryIcons";
 import { deleteOwnerImage, uploadOwnerImage } from "../lib/menuApi";
 import { hasRenderableImage } from "../utils/media";
 
@@ -61,17 +67,24 @@ function buildPatchFromForm(
   description: string,
   basePrice: number,
   imageUrl: string | null,
+  dietaryIcons: DietaryIconId[],
 ): Partial<MenuItem> {
+  const metadata = buildMetadataWithDietaryIcons(
+    item?.metadata ?? null,
+    dietaryIcons,
+  );
+
   if (!item) {
     return {
       name: name.trim(),
       description,
       base_price: basePrice,
       image_url: imageUrl,
+      metadata,
     };
   }
 
-  const patch: Partial<MenuItem> = { base_price: basePrice };
+  const patch: Partial<MenuItem> = { base_price: basePrice, metadata };
   const trimmedName = name.trim();
 
   let nextTranslations: TranslationsMap = {
@@ -132,7 +145,8 @@ function placeholderMenuItem(tempId: string, patch: Partial<MenuItem>): MenuItem
     base_price: patch.base_price ?? 0,
     is_available: true,
     sort_order: patch.sort_order ?? 0,
-    image_url: null,
+    image_url: patch.image_url ?? null,
+    metadata: patch.metadata,
     translations: patch.translations,
     variants: [],
     upsell_rules: [],
@@ -165,6 +179,7 @@ export default function EditItemDrawer({
   const [isImageRemoving, setIsImageRemoving] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [selectedDietaryIcons, setSelectedDietaryIcons] = useState<DietaryIconId[]>([]);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
@@ -183,6 +198,7 @@ export default function EditItemDrawer({
       setImageError(null);
       setIsImageUploading(false);
       setIsImageRemoving(false);
+      setSelectedDietaryIcons([]);
       return;
     }
 
@@ -193,6 +209,7 @@ export default function EditItemDrawer({
     setImageError(null);
     setIsImageUploading(false);
     setIsImageRemoving(false);
+    setSelectedDietaryIcons(parseDietaryIcons(item.metadata));
   }, [isOpen, item, locale, isCreateMode]);
 
   useEffect(() => {
@@ -251,6 +268,7 @@ export default function EditItemDrawer({
       description,
       parsedPrice,
       imageUrl,
+      selectedDietaryIcons,
     );
 
     setIsSaving(true);
@@ -433,6 +451,12 @@ export default function EditItemDrawer({
                     className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none focus:border-zinc-400"
                   />
                 </div>
+                <DietaryIconPicker
+                  locale={locale}
+                  selected={selectedDietaryIcons}
+                  onChange={setSelectedDietaryIcons}
+                  disabled={isSaving}
+                />
                 <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-3">
                   <p className="text-xs font-semibold uppercase tracking-wide text-zinc-600">
                     {getUiMessage("imageManagementTitle", locale)}

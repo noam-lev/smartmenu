@@ -660,6 +660,7 @@ class OnboardingPayload(BaseModel):
     currency: str = "ILS"
     default_locale: str = "he"
     banner_image_url: str | None = None
+    qr_logo_url: str | None = None
     item_images: dict[str, str] = Field(default_factory=dict)
     owner_email: str | None = None
     plan_tier: str = "free"
@@ -703,13 +704,18 @@ async def onboard_restaurant(
     if existing.data:
         raise HTTPException(status_code=409, detail=f"Slug already exists: {slug}")
 
+    default_loc = str(payload.default_locale or "he").strip().lower()
+    supported = ["en", "he"] if default_loc == "en" else ["he", "en"]
     settings: dict[str, Any] = {
         "default_locale": payload.default_locale,
+        "supported_locales": supported,
         "currency": payload.currency,
         "theme_color": "#111827",
     }
     if payload.banner_image_url:
         settings["banner_image_url"] = payload.banner_image_url
+    if payload.qr_logo_url:
+        settings["qr_logo_url"] = payload.qr_logo_url
 
     base_row: dict[str, Any] = {
         "name": name,

@@ -26,6 +26,8 @@ export default function StepImages({ state, onChange }: StepProps) {
         const { public_url } = await superadminUploadImage(file);
         if (key === "banner") {
           onChange({ bannerUrl: public_url });
+        } else if (key === "qr-logo") {
+          onChange({ qrLogoUrl: public_url });
         } else {
           onChange({ itemImages: { ...state.itemImages, [key]: public_url } });
         }
@@ -45,25 +47,50 @@ export default function StepImages({ state, onChange }: StepProps) {
     <div className="space-y-6">
       <h2 className="text-lg font-semibold text-zinc-900">Images</h2>
       <p className="text-sm text-zinc-500">
-        Upload a banner and optionally add photos for each dish. Images upload
-        immediately.
+        Upload a banner, a QR center logo, and optionally add photos for each
+        dish. Images upload immediately. The owner can replace the QR logo later
+        from the admin QR page.
       </p>
 
-      {/* Banner */}
-      <div className="space-y-2">
-        <span className="block text-sm font-medium text-zinc-700">Banner Image</span>
-        {state.bannerUrl ? (
-          <div className="relative overflow-hidden rounded-xl border border-zinc-200">
-            <img
-              src={state.bannerUrl}
-              alt="Banner"
-              className="h-40 w-full object-cover"
-            />
-            <div className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 text-white">
-              <Check className="h-3.5 w-3.5" />
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Banner */}
+        <div className="space-y-2">
+          <span className="block text-sm font-medium text-zinc-700">
+            Banner Image
+          </span>
+          {state.bannerUrl ? (
+            <div className="relative overflow-hidden rounded-xl border border-zinc-200">
+              <img
+                src={state.bannerUrl}
+                alt="Banner"
+                className="h-40 w-full object-cover"
+              />
+              <div className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 text-white">
+                <Check className="h-3.5 w-3.5" />
+              </div>
+              <label className="absolute inset-0 flex cursor-pointer items-center justify-center bg-black/0 opacity-0 transition hover:bg-black/30 hover:opacity-100">
+                <span className="text-sm font-medium text-white">Replace</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) void handleUpload("banner", f);
+                  }}
+                />
+              </label>
             </div>
-            <label className="absolute inset-0 flex cursor-pointer items-center justify-center bg-black/0 opacity-0 transition hover:bg-black/30 hover:opacity-100">
-              <span className="text-sm font-medium text-white">Replace</span>
+          ) : (
+            <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-zinc-300 bg-zinc-50 px-6 py-10 text-zinc-400 transition hover:border-zinc-400 hover:text-zinc-500">
+              {uploading["banner"] ? (
+                <Loader2 className="h-8 w-8 animate-spin" />
+              ) : (
+                <Upload className="h-8 w-8" />
+              )}
+              <span className="text-sm font-medium">
+                {uploading["banner"] ? "Uploading…" : "Click to upload banner"}
+              </span>
               <input
                 type="file"
                 accept="image/*"
@@ -74,31 +101,70 @@ export default function StepImages({ state, onChange }: StepProps) {
                 }}
               />
             </label>
-          </div>
-        ) : (
-          <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-zinc-300 bg-zinc-50 px-6 py-10 text-zinc-400 transition hover:border-zinc-400 hover:text-zinc-500">
-            {uploading["banner"] ? (
-              <Loader2 className="h-8 w-8 animate-spin" />
-            ) : (
-              <Upload className="h-8 w-8" />
-            )}
-            <span className="text-sm font-medium">
-              {uploading["banner"] ? "Uploading…" : "Click to upload banner"}
-            </span>
-            <input
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) void handleUpload("banner", f);
-              }}
-            />
-          </label>
-        )}
-        {errors["banner"] && (
-          <p className="text-xs text-red-600">{errors["banner"]}</p>
-        )}
+          )}
+          {errors["banner"] && (
+            <p className="text-xs text-red-600">{errors["banner"]}</p>
+          )}
+        </div>
+
+        {/* QR center logo */}
+        <div className="space-y-2">
+          <span className="block text-sm font-medium text-zinc-700">
+            QR Center Logo
+          </span>
+          <p className="text-xs text-zinc-500">
+            Shown in the middle of printed QR codes. Square logos work best.
+          </p>
+          {state.qrLogoUrl ? (
+            <div className="relative overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50">
+              <img
+                src={state.qrLogoUrl}
+                alt="QR logo"
+                className="mx-auto h-40 w-40 object-contain p-4"
+              />
+              <div className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 text-white">
+                <Check className="h-3.5 w-3.5" />
+              </div>
+              <label className="absolute inset-0 flex cursor-pointer items-center justify-center bg-black/0 opacity-0 transition hover:bg-black/30 hover:opacity-100">
+                <span className="text-sm font-medium text-white">Replace</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) void handleUpload("qr-logo", f);
+                  }}
+                />
+              </label>
+            </div>
+          ) : (
+            <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-zinc-300 bg-zinc-50 px-6 py-10 text-zinc-400 transition hover:border-zinc-400 hover:text-zinc-500">
+              {uploading["qr-logo"] ? (
+                <Loader2 className="h-8 w-8 animate-spin" />
+              ) : (
+                <Upload className="h-8 w-8" />
+              )}
+              <span className="text-sm font-medium">
+                {uploading["qr-logo"]
+                  ? "Uploading…"
+                  : "Click to upload QR logo"}
+              </span>
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void handleUpload("qr-logo", f);
+                }}
+              />
+            </label>
+          )}
+          {errors["qr-logo"] && (
+            <p className="text-xs text-red-600">{errors["qr-logo"]}</p>
+          )}
+        </div>
       </div>
 
       {/* Dish images */}

@@ -3,6 +3,7 @@ from typing import Any
 
 from supabase import Client
 
+from core.dietary_icons import merge_dietary_icons_into_metadata
 from core.menu_lookup import (
     MENU_NOT_PUBLISHABLE,
     NO_ACTIVE_MENU,
@@ -97,6 +98,8 @@ class SupabaseDAL(MenuRepository):
         )
 
         description = fields.get("description")
+        dietary_icons = fields.get("dietary_icons")
+        metadata = merge_dietary_icons_into_metadata({}, dietary_icons)
         row = {
             "restaurant_id": restaurant_id,
             "menu_id": menu_id,
@@ -108,8 +111,8 @@ class SupabaseDAL(MenuRepository):
             "is_available": True,
             "is_visible": True,
             "sort_order": next_sort,
-            "metadata": {},
-            "translations": {},
+            "metadata": metadata,
+            "translations": fields.get("translations") or {},
         }
 
         inserted = await asyncio.to_thread(self._insert_menu_item_row, row)
@@ -232,6 +235,7 @@ class SupabaseDAL(MenuRepository):
         banner_url: str | None | object = ...,
         qr_logo_url: str | None | object = ...,
         social_links: dict[str, object] | None | object = ...,
+        default_locale: str | None | object = ...,
     ) -> dict[str, Any] | None:
         return await asyncio.to_thread(
             self._patch_restaurant_settings_sync,
@@ -239,6 +243,7 @@ class SupabaseDAL(MenuRepository):
             banner_url,
             qr_logo_url,
             social_links,
+            default_locale,
         )
 
     def _diagnose_menu_not_found_reason_sync(self, slug: str) -> str:
@@ -353,6 +358,7 @@ class SupabaseDAL(MenuRepository):
         banner_url: str | None | object,
         qr_logo_url: str | None | object,
         social_links: dict[str, object] | None | object,
+        default_locale: str | None | object,
     ) -> dict[str, Any] | None:
         from core.social_links import (
             apply_social_links_patch,
@@ -384,6 +390,11 @@ class SupabaseDAL(MenuRepository):
                     current,
                     social_links,
                 )
+        if default_locale is not ...:
+            if default_locale is None:
+                settings.pop("default_locale", None)
+            else:
+                settings["default_locale"] = str(default_locale).strip().lower()
 
         response = (
             self._client.table("restaurants")
@@ -490,14 +501,42 @@ class SupabaseDAL(MenuRepository):
         fields: dict[str, Any],
         restaurant_id: str,
     ) -> dict[str, Any] | None:
+        patch_fields = dict(fields)
+        if "dietary_icons" in patch_fields:
+            dietary_icons = patch_fields.pop("dietary_icons")
+            current_meta = self._fetch_menu_item_metadata(item_id, restaurant_id) or {}
+            patch_fields["metadata"] = merge_dietary_icons_into_metadata(
+                current_meta,
+                dietary_icons,
+            )
+
         response = (
             self._client.table("menu_items")
-            .update(fields)
+            .update(patch_fields)
             .eq("id", item_id)
             .eq("restaurant_id", restaurant_id)
             .execute()
         )
         return _first(response.data or []) if response.data else None
+
+    def _fetch_menu_item_metadata(
+        self,
+        item_id: str,
+        restaurant_id: str,
+    ) -> dict[str, Any] | None:
+        response = (
+            self._client.table("menu_items")
+            .select("metadata")
+            .eq("id", item_id)
+            .eq("restaurant_id", restaurant_id)
+            .limit(1)
+            .execute()
+        )
+        row = _first(response.data or [])
+        if row is None:
+            return None
+        metadata = _as_dict(row.get("metadata"))
+        return metadata if metadata else {}
 
     def _fetch_menu_item_patch_snapshot(
         self,
@@ -506,13 +545,35 @@ class SupabaseDAL(MenuRepository):
     ) -> dict[str, Any] | None:
         response = (
             self._client.table("menu_items")
-            .select("id,name,description,base_price,is_available,translations")
+            .select(
+                "id,name,description,base_price,is_available,image_url,metadata,translations"
+            )
             .eq("id", item_id)
             .eq("restaurant_id", restaurant_id)
             .limit(1)
             .execute()
         )
-        return _first(response.data or [])
+        row = _first(response.data or [])
+        if row is None:
+            return None
+        metadata = _as_dict(row.get("metadata"))
+        image_val = row.get("image_url")
+        image_out: str | None
+        if isinstance(image_val, str) and image_val.strip():
+            image_out = image_val.strip()
+        else:
+            image_out = None
+        return {
+            "id": str(row.get("id") or ""),
+            "name": str(row.get("name") or ""),
+            "description": str(row.get("description") or ""),
+            "base_price": _to_float(row.get("base_price")),
+            "is_available": bool(row.get("is_available")),
+            "image_url": image_out,
+            "tags": _as_string_list(metadata.get("tags")),
+            "metadata": metadata if metadata else None,
+            "translations": _as_optional_dict(row.get("translations")),
+        }
 
     def _resolve_category_restaurant_menu(
         self,
@@ -1174,6 +1235,7 @@ class SupabaseDAL(MenuRepository):
             "is_active": True,
             "settings": {
                 "default_locale": "he",
+                "supported_locales": ["he", "en"],
                 "theme_color": "#111827",
                 "currency": "ILS",
             },

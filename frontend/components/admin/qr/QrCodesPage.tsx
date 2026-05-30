@@ -7,21 +7,21 @@ import OwnerMenuButton from "../../diner/OwnerMenuButton";
 import { useAuthUser } from "../../../hooks/useAuthUser";
 import { useOwnerDrawerQueryParam } from "../../../hooks/useOwnerDrawerQueryParam";
 import { useOwnerRestaurants } from "../../../hooks/useOwnerRestaurants";
+import { useTenantLocale } from "../../../context/TenantLocaleContext";
 import {
   deleteOwnerImage,
-  fetchMenuBySlug,
+  fetchDinerMenu,
   updateRestaurantQrLogoUrl,
   uploadOwnerImage,
 } from "../../../lib/menuApi";
 import { getMenuLoadErrorMessage } from "../../../lib/menuFetchError";
-import { useUiStore } from "../../../store/uiStore";
+import { mergeRestaurantSettingsIntoPayload } from "../../../lib/mergeRestaurantSettings";
 import { createClient as createSupabaseBrowserClient } from "../../../utils/supabase/client";
-import type { MenuPayload } from "../../../types/menu";
+import type { SlimMenuPayload } from "../../../types/menu";
 import {
   getLocalizedText,
   getUiMessage,
   getUiTemplate,
-  isRtlLocale,
 } from "../../../utils/i18n";
 import { hasRenderableImage } from "../../../utils/media";
 import QrCodeCard from "./QrCodeCard";
@@ -43,8 +43,7 @@ function buildMenuUrl(origin: string, slug: string, table?: number) {
 }
 
 export default function QrCodesPage({ restaurantSlug }: QrCodesPageProps) {
-  const locale = useUiStore((state) => state.locale);
-  const isRtl = isRtlLocale(locale);
+  const { locale, isRtl, applyServerDefaultLocale } = useTenantLocale();
 
   const { userId } = useAuthUser();
   const { restaurants } = useOwnerRestaurants(userId, restaurantSlug);
@@ -52,7 +51,7 @@ export default function QrCodesPage({ restaurantSlug }: QrCodesPageProps) {
   const [isOwnerDrawerOpen, setIsOwnerDrawerOpen] = useState(false);
   useOwnerDrawerQueryParam(setIsOwnerDrawerOpen, Boolean(userId && hasRestaurants));
 
-  const [menuPayload, setMenuPayload] = useState<MenuPayload | null>(null);
+  const [menuPayload, setMenuPayload] = useState<SlimMenuPayload | null>(null);
   const [isMenuLoading, setIsMenuLoading] = useState(true);
   const [menuError, setMenuError] = useState<string | null>(null);
   const [origin, setOrigin] = useState("");
@@ -71,10 +70,11 @@ export default function QrCodesPage({ restaurantSlug }: QrCodesPageProps) {
     setIsMenuLoading(true);
     setMenuError(null);
 
-    void fetchMenuBySlug(restaurantSlug)
+    void fetchDinerMenu(restaurantSlug, locale)
       .then((data) => {
         if (!cancelled) {
           setMenuPayload(data);
+          applyServerDefaultLocale(data.restaurant.default_locale);
         }
       })
       .catch((error: unknown) => {
@@ -91,7 +91,7 @@ export default function QrCodesPage({ restaurantSlug }: QrCodesPageProps) {
     return () => {
       cancelled = true;
     };
-  }, [restaurantSlug, locale]);
+  }, [restaurantSlug, locale, applyServerDefaultLocale]);
 
   const restaurantName = menuPayload
     ? getLocalizedText(menuPayload.restaurant, "name", locale)
@@ -147,18 +147,7 @@ export default function QrCodesPage({ restaurantSlug }: QrCodesPageProps) {
 
   const handleSettingsSaved = (settings: Record<string, unknown>) => {
     setMenuPayload((prev) =>
-      prev
-        ? {
-            ...prev,
-            restaurant: {
-              ...prev.restaurant,
-              settings: {
-                ...(prev.restaurant.settings ?? {}),
-                ...settings,
-              },
-            },
-          }
-        : prev,
+      prev ? mergeRestaurantSettingsIntoPayload(prev, settings) : prev,
     );
   };
 
@@ -215,7 +204,7 @@ export default function QrCodesPage({ restaurantSlug }: QrCodesPageProps) {
   };
 
   return (
-    <div className="min-h-[100dvh] bg-zinc-50" lang={locale} dir={isRtl ? "rtl" : "ltr"}>
+    <div className="min-h-[100dvh] bg-zinc-50">
       <div className="admin-no-print mx-auto max-w-4xl px-4 py-6">
         <header className="mb-6 flex items-start gap-3 border-b border-zinc-200 pb-4">
           {userId && hasRestaurants ? (

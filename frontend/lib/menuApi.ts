@@ -1,11 +1,18 @@
 import type { OwnerRestaurant } from "../types/owner";
-import type { Locale, MenuCategory, MenuItem, MenuPayload } from "../types/menu";
+import type {
+  FatMenuPayload,
+  Locale,
+  MenuCategory,
+  MenuItem,
+  SlimMenuPayload,
+} from "../types/menu";
 import {
   logMenuFetchFailure,
   MenuFetchError,
   parseApiErrorBody,
 } from "./menuFetchError";
 import { createClient as createSupabaseBrowserClient } from "../utils/supabase/client";
+import { parseDietaryIcons } from "./dietaryIcons";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
@@ -34,12 +41,14 @@ async function getOwnerAuthHeaders(includeJsonContentType = true): Promise<Heade
   };
 }
 
-export async function fetchMenuBySlug(slug: string): Promise<MenuPayload> {
-  const url = `${API_BASE_URL}/api/diner/menus/${encodeURIComponent(slug)}`;
-
+async function fetchMenuFromUrl(
+  slug: string,
+  url: string,
+  init?: RequestInit,
+): Promise<Response> {
   let response: Response;
   try {
-    response = await fetch(url);
+    response = await fetch(url, init);
   } catch (cause) {
     const error = new MenuFetchError({
       kind: "network",
@@ -82,7 +91,36 @@ export async function fetchMenuBySlug(slug: string): Promise<MenuPayload> {
     throw error;
   }
 
-  return response.json() as Promise<MenuPayload>;
+  return response;
+}
+
+/** Public diner menu — always slim; optional lang (server uses default_locale when omitted). */
+export async function fetchDinerMenu(
+  slug: string,
+  lang?: Locale,
+): Promise<SlimMenuPayload> {
+  const url = new URL(
+    `${API_BASE_URL}/api/diner/menus/${encodeURIComponent(slug)}`,
+  );
+  if (lang) {
+    url.searchParams.set("lang", lang);
+  }
+  const response = await fetchMenuFromUrl(slug, url.toString());
+  return response.json() as Promise<SlimMenuPayload>;
+}
+
+/** Owner admin menu — full multilingual tree (requires auth). */
+export async function fetchOwnerMenu(slug: string): Promise<FatMenuPayload> {
+  const url = `${API_BASE_URL}/api/owner/${encodeURIComponent(slug)}/menu`;
+  const response = await fetchMenuFromUrl(slug, url, {
+    headers: await getOwnerAuthHeaders(false),
+  });
+  return response.json() as Promise<FatMenuPayload>;
+}
+
+/** @deprecated Use fetchDinerMenu or fetchOwnerMenu. */
+export async function fetchMenuBySlug(slug: string): Promise<FatMenuPayload> {
+  return fetchOwnerMenu(slug);
 }
 
 export async function updateItemAvailability(
@@ -99,7 +137,13 @@ export async function updateMenuItem(
   data: Partial<
     Pick<
       MenuItem,
-      "name" | "description" | "base_price" | "translations" | "is_available" | "image_url"
+      | "name"
+      | "description"
+      | "base_price"
+      | "translations"
+      | "is_available"
+      | "image_url"
+      | "metadata"
     >
   >,
 ): Promise<void> {
@@ -122,6 +166,9 @@ export async function updateMenuItem(
   }
   if (data.image_url !== undefined) {
     body.image_url = data.image_url;
+  }
+  if (data.metadata !== undefined) {
+    body.dietary_icons = parseDietaryIcons(data.metadata);
   }
 
   const response = await fetch(
@@ -234,6 +281,38 @@ export async function updateRestaurantSocialLinks(
   return data.restaurant?.settings ?? {};
 }
 
+export async function updateRestaurantDefaultLocale(
+  restaurantSlug: string,
+  defaultLocale: Locale,
+): Promise<Record<string, unknown>> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/owner/${encodeURIComponent(restaurantSlug)}/restaurant`,
+    {
+      method: "PATCH",
+      headers: await getOwnerAuthHeaders(true),
+      body: JSON.stringify({ default_locale: defaultLocale }),
+    },
+  );
+
+  if (!response.ok) {
+    let detail = `Failed to update default language (${response.status})`;
+    try {
+      const body = (await response.json()) as { detail?: string };
+      if (typeof body.detail === "string" && body.detail.trim()) {
+        detail = body.detail;
+      }
+    } catch {
+      // ignore parse errors
+    }
+    throw new Error(detail);
+  }
+
+  const data = (await response.json()) as {
+    restaurant?: { settings?: Record<string, unknown> };
+  };
+  return data.restaurant?.settings ?? {};
+}
+
 export async function updateRestaurantQrLogoUrl(
   restaurantSlug: string,
   qrLogoUrl: string | null,
@@ -309,6 +388,12 @@ export async function createMenuItem(
     body.image_url = data.image_url.trim();
   } else if (data.image_url === null) {
     body.image_url = null;
+  }
+  if (data.metadata !== undefined) {
+    const icons = parseDietaryIcons(data.metadata);
+    if (icons.length > 0) {
+      body.dietary_icons = icons;
+    }
   }
 
   const response = await fetch(

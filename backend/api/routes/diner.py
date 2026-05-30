@@ -1,9 +1,10 @@
 import logging
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from api.dependencies import get_db
 from core.exceptions import MenuNotFoundError
+from core.menu_localize import resolve_effective_locale, slim_menu_payload
 from db.repository import MenuRepository
 from models.schemas import MenuPayload
 
@@ -16,6 +17,7 @@ router = APIRouter(tags=["diner"])
 @router.get("/menus/{restaurant_slug}", response_model=MenuPayload)
 async def get_diner_menu(
     restaurant_slug: str,
+    lang: str | None = Query(default=None, description="Display locale (en|he). Omit to use restaurant default."),
     db: MenuRepository = Depends(get_db),
 ) -> MenuPayload:
     try:
@@ -30,7 +32,11 @@ async def get_diner_menu(
             )
             raise MenuNotFoundError(code=code)
 
-        return menu
+        effective_locale = resolve_effective_locale(
+            lang,
+            menu.restaurant.default_locale,
+        )
+        return slim_menu_payload(menu, effective_locale)
     except MenuNotFoundError:
         raise
     except Exception:

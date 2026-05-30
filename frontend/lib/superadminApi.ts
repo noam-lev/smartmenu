@@ -367,6 +367,7 @@ export type OnboardPayload = {
   currency: string;
   default_locale: string;
   banner_image_url: string | null;
+  qr_logo_url: string | null;
   item_images: Record<string, string>;
   owner_email: string | null;
   plan_tier: string;

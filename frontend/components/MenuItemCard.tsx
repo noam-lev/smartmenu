@@ -6,6 +6,8 @@ import { formatCurrency } from "../utils/currency";
 import { getLocalizedText, getUiMessage, getUiTemplate } from "../utils/i18n";
 import type { Locale } from "../types/menu";
 import { hasRenderableImage } from "../utils/media";
+import { parseDietaryIcons } from "../lib/dietaryIcons";
+import DietaryIconBadges from "./DietaryIconBadges";
 
 type MenuItemCardProps = {
   item: MenuItem;
@@ -45,15 +47,19 @@ export default function MenuItemCard({
   const formattedPrice = formatCurrency(item.base_price, currency);
   const itemName = getLocalizedText(item, "name", locale);
   const itemDescription = getLocalizedText(item, "description", locale);
+  const dietaryIcons = parseDietaryIcons(item.metadata);
   const imageUrl = hasRenderableImage(item.image_url) ? item.image_url : null;
   const hasImage = hasLoadableImage(imageUrl);
   const cardContent = (
     <div className="flex items-start gap-3">
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-3">
-          <p className="text-[17px] font-semibold leading-5 text-zinc-900">
-            {itemName}
-          </p>
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <p className="min-w-0 text-[17px] font-semibold leading-5 text-zinc-900">
+              {itemName}
+            </p>
+            <DietaryIconBadges icons={dietaryIcons} locale={locale} />
+          </div>
           {mode === "admin" ? (
             isCreationPending ? (
               <span
@@ -224,14 +230,30 @@ export default function MenuItemCard({
     );
   }
 
+  const openItemLabel = `Open ${itemName}`;
+
   return (
-    <button
-      type="button"
-      aria-label={`Open ${itemName}`}
-      onClick={onClick}
-      className="group w-full border-b border-zinc-200 bg-white px-4 py-3 text-start transition-transform duration-100 active:scale-[0.985]"
+    <div
+      tabIndex={0}
+      aria-label={openItemLabel}
+      onClick={(event) => {
+        if ((event.target as HTMLElement).closest("button")) {
+          return;
+        }
+        onClick?.();
+      }}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) {
+          return;
+        }
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onClick?.();
+        }
+      }}
+      className="group w-full cursor-pointer border-b border-zinc-200 bg-white px-4 py-3 text-start transition-transform duration-100 active:scale-[0.985] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-inset"
     >
       {cardContent}
-    </button>
+    </div>
   );
 }

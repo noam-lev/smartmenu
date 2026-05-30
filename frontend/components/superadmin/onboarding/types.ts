@@ -15,6 +15,7 @@ export type WizardState = {
   isSlugManual: boolean;
   parsedMenu: ParsedMenu | null;
   bannerUrl: string | null;
+  qrLogoUrl: string | null;
   itemImages: Record<string, string>;
   currency: string;
   defaultLocale: string;
@@ -28,6 +29,7 @@ export const INITIAL_STATE: WizardState = {
   isSlugManual: false,
   parsedMenu: null,
   bannerUrl: null,
+  qrLogoUrl: null,
   itemImages: {},
   currency: "ILS",
   defaultLocale: "he",

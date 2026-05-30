@@ -49,23 +49,52 @@ export type MenuCategory = {
   items: MenuItem[];
 };
 
-export type MenuPayload = {
-  restaurant: {
-    name: string;
-    slug: string;
-    theme_color: string;
-    currency: string;
-    banner_url?: string | null;
-    banner_image_url?: string | null;
-    default_locale?: Locale;
-    translations?: TranslationsMap;
-    settings?: Record<string, unknown> | null;
-  };
-  menu: {
-    id: string;
-    name: string;
-    last_updated: string;
-    translations?: TranslationsMap;
-    categories: MenuCategory[];
-  };
+export type RestaurantInfo = {
+  name: string;
+  slug: string;
+  theme_color: string;
+  currency: string;
+  banner_url?: string | null;
+  banner_image_url?: string | null;
+  default_locale?: Locale;
+  translations?: TranslationsMap;
+  settings?: Record<string, unknown> | null;
 };
+
+export type MenuInfo = {
+  id: string;
+  name: string;
+  last_updated: string;
+  translations?: TranslationsMap;
+  categories: MenuCategory[];
+};
+
+/** Owner admin API: full tree with all translation buckets. */
+export type FatMenuPayload = {
+  restaurant: RestaurantInfo;
+  menu: MenuInfo;
+};
+
+/** Public diner API: strings resolved for one locale; no translations blobs. */
+export type SlimOfferItemSnapshot = Omit<OfferItemSnapshot, "translations">;
+export type SlimUpsellRule = Omit<UpsellRule, "translations" | "offer_item_snapshot"> & {
+  offer_item_snapshot: SlimOfferItemSnapshot;
+};
+export type SlimMenuItem = Omit<MenuItem, "translations" | "upsell_rules"> & {
+  upsell_rules: SlimUpsellRule[];
+};
+export type SlimMenuCategory = Omit<MenuCategory, "translations" | "items"> & {
+  items: SlimMenuItem[];
+};
+export type SlimRestaurantInfo = Omit<RestaurantInfo, "translations">;
+export type SlimMenuInfo = Omit<MenuInfo, "translations" | "categories"> & {
+  categories: SlimMenuCategory[];
+};
+
+export type SlimMenuPayload = {
+  restaurant: SlimRestaurantInfo;
+  menu: SlimMenuInfo;
+};
+
+/** @deprecated Use FatMenuPayload or SlimMenuPayload explicitly. */
+export type MenuPayload = FatMenuPayload;
