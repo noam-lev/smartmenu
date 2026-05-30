@@ -9,6 +9,8 @@ import { useSheetDialogA11y } from "../hooks/useSheetDialogA11y";
 import { formatCurrency } from "../utils/currency";
 import { getLocalizedText } from "../utils/i18n";
 import { hasRenderableImage } from "../utils/media";
+import { parseDietaryIcons } from "../lib/dietaryIcons";
+import DietaryIconBadges from "./DietaryIconBadges";
 
 type ItemBottomSheetProps = {
   selectedItem: MenuItem | null;
@@ -58,6 +60,7 @@ export default function ItemBottomSheet({
 
   const itemName = getLocalizedText(selectedItem, "name", locale);
   const itemDescription = getLocalizedText(selectedItem, "description", locale);
+  const dietaryIcons = parseDietaryIcons(selectedItem.metadata);
   const upsellItemName = upsellRule
     ? getLocalizedText(upsellRule.offer_item_snapshot, "name", locale)
     : "";
@@ -114,12 +117,15 @@ export default function ItemBottomSheet({
                 onError={createImgErrorHandler(mainImageUrl)}
               />
             ) : null}
-            <h3
-              id="item-bottom-sheet-title"
-              className="mt-4 text-xl font-bold text-zinc-900"
-            >
-              {itemName}
-            </h3>
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <h3
+                id="item-bottom-sheet-title"
+                className="text-xl font-bold text-zinc-900"
+              >
+                {itemName}
+              </h3>
+              <DietaryIconBadges icons={dietaryIcons} locale={locale} size="md" />
+            </div>
             <p className="mt-1 text-sm leading-6 text-zinc-600">
               {itemDescription}
             </p>

@@ -135,6 +135,14 @@ class MenuItemCreateRequest(BaseModel):
     base_price: float = Field(..., ge=0)
     description: str | None = None
     image_url: str | None = None
+    dietary_icons: list[str] = Field(default_factory=list)
+
+    @field_validator("dietary_icons")
+    @classmethod
+    def validate_dietary_icons(cls, value: list[str]) -> list[str]:
+        from core.dietary_icons import normalize_dietary_icons
+
+        return normalize_dietary_icons(value)
 
     @field_validator("name")
     @classmethod

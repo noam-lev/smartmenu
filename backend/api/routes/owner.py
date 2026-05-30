@@ -1,6 +1,8 @@
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from core.dietary_icons import normalize_dietary_icons
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 
 from api.dependencies import (
@@ -13,11 +15,13 @@ from api.dependencies import (
 from db.repository import MenuRepository
 from supabase import Client
 from core.social_links import SOCIAL_PLATFORMS, SocialLinksValidationError
+from core.exceptions import MenuNotFoundError
 from models.schemas import (
     CategoryCreateRequest,
     CategoryUpdateRequest,
     ItemReorderRequest,
     MenuItemCreateRequest,
+    MenuPayload,
 )
 from services.image_service import upload_image as cloudinary_upload, delete_image as cloudinary_delete
 
@@ -36,6 +40,14 @@ class MenuItemPatchPayload(BaseModel):
     base_price: float | None = None
     image_url: str | None = None
     translations: dict[str, Any] | None = None
+    dietary_icons: list[str] | None = None
+
+    @field_validator("dietary_icons")
+    @classmethod
+    def validate_dietary_icons(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return None
+        return normalize_dietary_icons(value)
 
     @field_validator("name", "description", mode="before")
     @classmethod
@@ -98,12 +110,26 @@ class DeleteImagePayload(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
 
+_ALLOWED_RESTAURANT_LOCALES = frozenset({"en", "he"})
+
+
 class RestaurantPatchPayload(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     banner_url: str | None = None
     qr_logo_url: str | None = None
     social_links: dict[str, str | None] | None = None
+    default_locale: str | None = None
+
+    @field_validator("default_locale")
+    @classmethod
+    def validate_default_locale(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        low = value.strip().lower()
+        if low not in _ALLOWED_RESTAURANT_LOCALES:
+            raise ValueError("default_locale must be 'en' or 'he'.")
+        return low
 
     @field_validator("banner_url", "qr_logo_url", mode="before")
     @classmethod
@@ -148,6 +174,20 @@ class CategoryReorderPayload(BaseModel):
 @router.get("/ping")
 async def ping_owner(_user_id: str = Depends(get_current_user)) -> dict[str, str]:
     return {"status": "ok", "scope": "owner"}
+
+
+@router.get("/{restaurant_slug}/menu", response_model=MenuPayload)
+async def get_owner_menu(
+    restaurant_slug: str,
+    _access: RestaurantAccessContext = Depends(verify_restaurant_access),
+    db: MenuRepository = Depends(get_db),
+) -> MenuPayload:
+    """Full multilingual menu tree for owner admin / editors."""
+    menu = await db.get_fat_menu_by_slug(restaurant_slug)
+    if menu is None:
+        code = await db.diagnose_menu_not_found_reason(restaurant_slug)
+        raise MenuNotFoundError(code=code)
+    return menu
 
 
 @router.get("/me/restaurants")
@@ -338,12 +378,14 @@ async def patch_restaurant(
     banner_url = patch_fields.get("banner_url", ...)
     qr_logo_url = patch_fields.get("qr_logo_url", ...)
     social_links = patch_fields.get("social_links", ...)
+    default_locale = patch_fields.get("default_locale", ...)
     try:
         updated = await db.patch_restaurant_settings(
             access["restaurant_id"],
             banner_url=banner_url,
             qr_logo_url=qr_logo_url,
             social_links=social_links,
+            default_locale=default_locale,
         )
     except SocialLinksValidationError as exc:
         raise HTTPException(

@@ -157,6 +157,21 @@ const uiMessages = {
     ownerDrawerClose: "Close panel",
     ownerDrawerBack: "Back",
     ownerDrawerMenus: "Menus",
+    ownerDrawerSettings: "Settings",
+    ownerSettingsDefaultLanguage: "Default menu language",
+    ownerSettingsDefaultLanguageLabel: "Language",
+    ownerSettingsDefaultLanguageHint:
+      "New guests see the menu in this language first. QR scans without a language choice use this too.",
+    ownerSettingsSaved: "Saved",
+    dietaryIconsSection: "Dietary & spicy labels",
+    dietaryIconsHint: "Optional labels shown next to the dish name on the menu.",
+    dietaryGlutenFree: "Gluten-free",
+    dietaryVegetarian: "Vegetarian",
+    dietaryVegan: "Vegan",
+    dietarySpicy: "Spicy / hot",
+    dietaryIconAria: "{{label}}",
+    dietaryIconToggleOn: "{{label}}, selected",
+    dietaryIconToggleOff: "{{label}}, not selected",
     ownerDrawerEditMenu: "Edit menu",
     ownerDrawerMenuActive: "Active",
     ownerDrawerMenuInactive: "Inactive",
@@ -306,6 +321,21 @@ const uiMessages = {
     ownerDrawerClose: "סגירת לוח",
     ownerDrawerBack: "חזרה",
     ownerDrawerMenus: "תפריטים",
+    ownerDrawerSettings: "הגדרות",
+    ownerSettingsDefaultLanguage: "שפת תפריט ברירת מחדל",
+    ownerSettingsDefaultLanguageLabel: "שפה",
+    ownerSettingsDefaultLanguageHint:
+      "אורחים חדשים רואים את התפריט בשפה זו קודם. גם סריקת QR ללא בחירת שפה משתמשת בזה.",
+    ownerSettingsSaved: "נשמר",
+    dietaryIconsSection: "תוויות תזונה וחריפות",
+    dietaryIconsHint: "תוויות אופציונליות שמוצגות ליד שם המנה בתפריט.",
+    dietaryGlutenFree: "ללא גלוטן",
+    dietaryVegetarian: "צמחוני",
+    dietaryVegan: "טבעוני",
+    dietarySpicy: "חריף",
+    dietaryIconAria: "{{label}}",
+    dietaryIconToggleOn: "{{label}}, נבחר",
+    dietaryIconToggleOff: "{{label}}, לא נבחר",
     ownerDrawerEditMenu: "עריכת תפריט",
     ownerDrawerMenuActive: "פעיל",
     ownerDrawerMenuInactive: "לא פעיל",
@@ -349,6 +379,6 @@ export function getUiTemplate(
   return result;
 }
 
-export function isRtlLocale(locale: Locale): boolean {
-  return locale === "he";
+export function isRtlLocale(locale: Locale | string): boolean {
+  return locale === "he" || locale === "ar";
 }

@@ -704,8 +704,11 @@ async def onboard_restaurant(
     if existing.data:
         raise HTTPException(status_code=409, detail=f"Slug already exists: {slug}")
 
+    default_loc = str(payload.default_locale or "he").strip().lower()
+    supported = ["en", "he"] if default_loc == "en" else ["he", "en"]
     settings: dict[str, Any] = {
         "default_locale": payload.default_locale,
+        "supported_locales": supported,
         "currency": payload.currency,
         "theme_color": "#111827",
     }

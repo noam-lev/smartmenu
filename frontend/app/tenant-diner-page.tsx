@@ -11,13 +11,15 @@ import MenuItemCard from "../components/MenuItemCard";
 import SocialLinksFooter from "../components/SocialLinksFooter";
 import { parseSocialLinksForDisplay } from "../lib/socialLinks";
 import { useAuthUser } from "../hooks/useAuthUser";
+import { useTenantLocale } from "../context/TenantLocaleContext";
 import { useMenuData } from "../hooks/useMenuData";
 import { useOwnerDrawerQueryParam } from "../hooks/useOwnerDrawerQueryParam";
 import { useOwnerRestaurants } from "../hooks/useOwnerRestaurants";
+import { mergeRestaurantSettingsIntoPayload } from "../lib/mergeRestaurantSettings";
+import { tenantHref } from "../lib/tenantLocale";
 import { useCartStore } from "../store/cartStore";
-import { useUiStore } from "../store/uiStore";
 import { createClient as createSupabaseBrowserClient } from "../utils/supabase/client";
-import type { MenuCategory, MenuItem, MenuPayload, UpsellRule } from "../types/menu";
+import type { MenuCategory, MenuItem, SlimMenuPayload, UpsellRule } from "../types/menu";
 import { formatCurrency } from "../utils/currency";
 import {
   getLocalizedText,
@@ -37,7 +39,8 @@ export function TenantDinerPage({
   initialUserId = null,
 }: DinerPageProps) {
   const [activeCategoryId, setActiveCategoryId] = useState("");
-  const handleMenuLoaded = useCallback((data: MenuPayload) => {
+  const { locale, setLocale, isRtl } = useTenantLocale();
+  const handleMenuLoaded = useCallback((data: SlimMenuPayload) => {
     const sortedCategories = [...data.menu.categories].sort(
       (a, b) => a.sort_order - b.sort_order,
     );
@@ -73,6 +76,10 @@ export function TenantDinerPage({
   const [isLanguageMenuOpen, setIsLanguageMenuOpen] = useState(false);
   const [isOwnerDrawerOpen, setIsOwnerDrawerOpen] = useState(false);
   const [menuPayloadState, setMenuPayloadState] = useState(menuPayload);
+
+  useEffect(() => {
+    setMenuPayloadState(menuPayload);
+  }, [menuPayload]);
   const languageMenuRef = useRef<HTMLDivElement | null>(null);
 
   const { userId } = useAuthUser(initialUserId);
@@ -116,10 +123,7 @@ export function TenantDinerPage({
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
   }, [restaurantSlug, menuLastUpdated, syncCartLifecycle, totalItems]);
-  const locale = useUiStore((state) => state.locale);
-  const setLocale = useUiStore((state) => state.setLocale);
   const cartItems = useMemo(() => Object.values(itemsByItemId), [itemsByItemId]);
-  const isRtl = isRtlLocale(locale);
   const socialLinks = useMemo(
     () => parseSocialLinksForDisplay(menuPayload?.restaurant.settings),
     [menuPayload?.restaurant.settings],
@@ -140,7 +144,10 @@ export function TenantDinerPage({
   const handleOwnerLogin = async () => {
     const supabase = createSupabaseBrowserClient();
     const redirectUrl = new URL("/auth/callback", window.location.origin);
-    redirectUrl.searchParams.set("next", `/${encodeURIComponent(restaurantSlug)}`);
+    redirectUrl.searchParams.set(
+      "next",
+      tenantHref(`/${encodeURIComponent(restaurantSlug)}`, locale),
+    );
     await supabase.auth.signInWithOAuth({
       provider: "google",
       options: { redirectTo: redirectUrl.toString() },
@@ -156,15 +163,7 @@ export function TenantDinerPage({
 
   const handleOwnerSettingsSaved = (settings: Record<string, unknown>) => {
     setMenuPayloadState((prev) =>
-      prev
-        ? {
-            ...prev,
-            restaurant: {
-              ...prev.restaurant,
-              settings: { ...(prev.restaurant.settings ?? {}), ...settings },
-            },
-          }
-        : prev,
+      prev ? mergeRestaurantSettingsIntoPayload(prev, settings) : prev,
     );
   };
 
@@ -362,11 +361,7 @@ export function TenantDinerPage({
   }
 
   return (
-    <div
-      className="min-h-[100dvh] bg-zinc-50"
-      lang={locale}
-      dir={isRtl ? "rtl" : "ltr"}
-    >
+    <div className="min-h-[100dvh] bg-zinc-50">
       <main className={`mx-auto max-w-md bg-white ${mainBottomPaddingClass}`}>
         <header className="border-b border-zinc-200">
           <div className="h-44 w-full overflow-hidden bg-zinc-100">
@@ -602,7 +597,7 @@ export function TenantDinerPage({
           onClose={() => setIsOwnerDrawerOpen(false)}
           restaurants={restaurants}
           currentSlug={restaurantSlug}
-          menuPayload={menuPayload}
+          menuPayload={menuPayloadState ?? menuPayload}
           onSettingsSaved={handleOwnerSettingsSaved}
           onSignOut={() => void handleSignOut()}
         />
