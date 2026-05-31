@@ -19,6 +19,7 @@ import { mergeRestaurantSettingsIntoPayload } from "../lib/mergeRestaurantSettin
 import { tenantHref } from "../lib/tenantLocale";
 import { useCartStore } from "../store/cartStore";
 import { createClient as createSupabaseBrowserClient } from "../utils/supabase/client";
+import type { SelectedModifier } from "../lib/cart";
 import type { MenuCategory, MenuItem, SlimMenuPayload, UpsellRule } from "../types/menu";
 import { formatCurrency } from "../utils/currency";
 import {
@@ -92,9 +93,10 @@ export function TenantDinerPage({
     () => false,
   );
 
-  const { addSelection, cartBucket, setLineQuantity, removeLine, clearCart, syncCartLifecycle } =
+  const { addOrMergeLine, addSelection, cartBucket, setLineQuantity, removeLine, clearCart, syncCartLifecycle } =
     useCartStore(
       useShallow((state) => ({
+        addOrMergeLine: state.addOrMergeLine,
         addSelection: state.addSelection,
         cartBucket: state.cartsByRestaurant[restaurantSlug],
         setLineQuantity: state.setLineQuantity,
@@ -246,20 +248,21 @@ export function TenantDinerPage({
     return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, [isLanguageMenuOpen]);
 
-  const handlePrimaryAdd = () => {
+  const handlePrimaryAdd = (selections: SelectedModifier[]) => {
     if (!selectedItem) {
       return;
     }
 
     const primaryVariant = selectedItem.variants[0];
-    addSelection({
+    addOrMergeLine({
       restaurantSlug,
-      itemId: selectedItem.id,
+      menuItemId: selectedItem.id,
+      variantId: primaryVariant?.id ?? "",
       quantity,
       name: selectedItem.name,
       translations: selectedItem.translations,
-      displayUnitPrice: primaryVariant?.price ?? selectedItem.base_price,
-      variantId: primaryVariant?.id ?? "",
+      variantPrice: primaryVariant?.price ?? selectedItem.base_price,
+      selections,
     });
 
     const rules = selectedItem.upsell_rules ?? [];
