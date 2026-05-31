@@ -6,11 +6,21 @@ import { fileURLToPath } from "url";
 // otherwise infer `frontend/app` as the root on some setups, breaking resolution.
 const turbopackRoot = path.dirname(fileURLToPath(import.meta.url));
 
+const backendUrl = process.env.BACKEND_URL ?? "http://127.0.0.1:8000";
+
 const nextConfig: NextConfig = {
   turbopack: {
     root: turbopackRoot,
   },
   allowedDevOrigins: ["10.100.102.11", "localhost", "10.100.102.2", "10.100.102.3", "10.100.102.13"],
+  async rewrites() {
+    return [
+      {
+        source: "/api/backend/:path*",
+        destination: `${backendUrl}/:path*`,
+      },
+    ];
+  },
 };
 
 export default nextConfig;

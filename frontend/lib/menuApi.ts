@@ -13,9 +13,7 @@ import {
 } from "./menuFetchError";
 import { createClient as createSupabaseBrowserClient } from "../utils/supabase/client";
 import { parseDietaryIcons } from "./dietaryIcons";
-
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+import { API_BASE_URL, buildApiUrl } from "./apiBase";
 let supabaseClient: ReturnType<typeof createSupabaseBrowserClient> | null = null;
 
 function getSupabaseClient() {
@@ -99,13 +97,10 @@ export async function fetchDinerMenu(
   slug: string,
   lang?: Locale,
 ): Promise<SlimMenuPayload> {
-  const url = new URL(
-    `${API_BASE_URL}/api/diner/menus/${encodeURIComponent(slug)}`,
-  );
-  if (lang) {
-    url.searchParams.set("lang", lang);
-  }
-  const response = await fetchMenuFromUrl(slug, url.toString());
+  const url = buildApiUrl(`/api/diner/menus/${encodeURIComponent(slug)}`, {
+    lang,
+  });
+  const response = await fetchMenuFromUrl(slug, url);
   return response.json() as Promise<SlimMenuPayload>;
 }
 
@@ -339,11 +334,10 @@ export async function updateRestaurantQrLogoUrl(
 export async function fetchOwnerRestaurants(
   currentSlug?: string,
 ): Promise<OwnerRestaurant[]> {
-  const url = new URL(`${API_BASE_URL}/api/owner/me/restaurants`);
-  if (currentSlug) {
-    url.searchParams.set("current_slug", currentSlug);
-  }
-  const response = await fetch(url.toString(), {
+  const url = buildApiUrl("/api/owner/me/restaurants", {
+    current_slug: currentSlug,
+  });
+  const response = await fetch(url, {
     method: "GET",
     headers: await getOwnerAuthHeaders(false),
   });

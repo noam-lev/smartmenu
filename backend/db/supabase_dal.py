@@ -1,7 +1,111 @@
 import asyncio
+import logging
 from typing import Any
 
+from postgrest.exceptions import APIError
 from supabase import Client
+
+logger = logging.getLogger(__name__)
+
+_MODIFIER_ASSIGNMENT_SELECT_HINTS = """
+menu_item_id,
+sort_order,
+min_select_override,
+max_select_override,
+modifier_groups!menu_item_modifier_groups_modifier_group_id_fkey(
+    id,
+    restaurant_id,
+    name,
+    translations,
+    selection_mode,
+    min_select,
+    max_select,
+    is_active,
+    sort_order,
+    modifier_options!modifier_options_modifier_group_id_fkey(
+        id,
+        name,
+        translations,
+        price_delta,
+        is_default,
+        is_available,
+        sort_order
+    )
+)
+"""
+
+_MODIFIER_ASSIGNMENT_SELECT_PLAIN = """
+menu_item_id,
+sort_order,
+min_select_override,
+max_select_override,
+modifier_groups(
+    id,
+    restaurant_id,
+    name,
+    translations,
+    selection_mode,
+    min_select,
+    max_select,
+    is_active,
+    sort_order,
+    modifier_options(
+        id,
+        name,
+        translations,
+        price_delta,
+        is_default,
+        is_available,
+        sort_order
+    )
+)
+"""
+
+_MENU_ITEM_IDS_BATCH_SIZE = 80
+
+_MENU_SELECT = """
+                id,
+                name,
+                slug,
+                settings,
+                is_active,
+                menus(
+                    id,
+                    name,
+                    translations,
+                    is_active,
+                    updated_at,
+                    categories(
+                        id,
+                        name,
+                        translations,
+                        sort_order,
+                        is_visible,
+                        menu_items(
+                            id,
+                            name,
+                            description,
+                            base_price,
+                            is_available,
+                            is_visible,
+                            sort_order,
+                            image_url,
+                            metadata,
+                            translations,
+                            item_variants(
+                                id,
+                                name,
+                                price
+                            ),
+                            upsell_rules!upsell_rules_trigger_item_id_fkey(
+                                *,
+                                translations,
+                                offer_item:menu_items!upsell_rules_offer_item_id_fkey(*)
+                            )
+                        )
+                    )
+                )
+                """
 
 from core.dietary_icons import merge_dietary_icons_into_metadata
 from core.menu_lookup import (
@@ -16,6 +120,8 @@ from models.schemas import (
     MenuItemResponse,
     MenuPayload,
     MenuResponse,
+    ModifierGroupResponse,
+    ModifierOptionResponse,
     OfferItemSnapshotResponse,
     RestaurantResponse,
     UpsellRuleResponse,
@@ -33,6 +139,15 @@ class SupabaseDAL(MenuRepository):
 
         if restaurant is None:
             return None
+
+        item_ids = _collect_menu_item_ids_from_restaurant(restaurant)
+        if item_ids:
+            by_item_id = await asyncio.to_thread(
+                self._fetch_modifier_assignments_by_item_ids,
+                item_ids,
+            )
+            if by_item_id:
+                _inject_modifier_groups_into_restaurant(restaurant, by_item_id)
 
         active_menu = _first(_as_list(restaurant.get("menus")))
         if active_menu is None:
@@ -158,6 +273,68 @@ class SupabaseDAL(MenuRepository):
 
     async def delete_upsell_rule(self, rule_id: str, restaurant_id: str) -> bool:
         return await asyncio.to_thread(self._delete_upsell_rule_sync, rule_id, restaurant_id)
+
+    async def list_modifier_groups(self, restaurant_id: str) -> list[dict[str, Any]]:
+        return await asyncio.to_thread(self._list_modifier_groups_sync, restaurant_id)
+
+    async def create_modifier_group_atomic(
+        self,
+        restaurant_id: str,
+        attach_to_item_id: str,
+        fields: dict[str, Any],
+    ) -> str | None:
+        return await asyncio.to_thread(
+            self._create_modifier_group_atomic_sync,
+            restaurant_id,
+            attach_to_item_id,
+            fields,
+        )
+
+    async def attach_modifier_group(
+        self,
+        menu_item_id: str,
+        modifier_group_id: str,
+        restaurant_id: str,
+    ) -> bool:
+        return await asyncio.to_thread(
+            self._attach_modifier_group_sync,
+            menu_item_id,
+            modifier_group_id,
+            restaurant_id,
+        )
+
+    async def detach_modifier_group(
+        self,
+        menu_item_id: str,
+        modifier_group_id: str,
+        restaurant_id: str,
+    ) -> bool:
+        return await asyncio.to_thread(
+            self._detach_modifier_group_sync,
+            menu_item_id,
+            modifier_group_id,
+            restaurant_id,
+        )
+
+    async def update_modifier_group(
+        self,
+        group_id: str,
+        restaurant_id: str,
+        fields: dict[str, Any],
+    ) -> bool:
+        return await asyncio.to_thread(
+            self._update_modifier_group_sync,
+            group_id,
+            restaurant_id,
+            fields,
+        )
+
+    async def delete_modifier_group(self, group_id: str, restaurant_id: str) -> str | None:
+        return await asyncio.to_thread(
+            self._delete_modifier_group_sync,
+            group_id,
+            restaurant_id,
+        )
 
     async def create_category(
         self,
@@ -293,54 +470,14 @@ class SupabaseDAL(MenuRepository):
         rid = row.get("id")
         return str(rid) if rid else None
 
-    def _fetch_restaurant_menu(self, slug: str) -> list[dict[str, Any]]:
+    def _execute_restaurant_menu_query(
+        self,
+        slug: str,
+        select_graph: str,
+    ) -> list[dict[str, Any]]:
         response = (
             self._client.table("restaurants")
-            .select(
-                """
-                id,
-                name,
-                slug,
-                settings,
-                is_active,
-                menus(
-                    id,
-                    name,
-                    translations,
-                    is_active,
-                    updated_at,
-                    categories(
-                        id,
-                        name,
-                        translations,
-                        sort_order,
-                        is_visible,
-                        menu_items(
-                            id,
-                            name,
-                            description,
-                            base_price,
-                            is_available,
-                            is_visible,
-                            sort_order,
-                            image_url,
-                            metadata,
-                            translations,
-                            item_variants(
-                                id,
-                                name,
-                                price
-                            ),
-                            upsell_rules!upsell_rules_trigger_item_id_fkey(
-                                *,
-                                translations,
-                                offer_item:menu_items!upsell_rules_offer_item_id_fkey(*)
-                            )
-                        )
-                    )
-                )
-                """
-            )
+            .select(select_graph)
             .eq("slug", slug.lower())
             .eq("is_active", True)
             .eq("menus.is_active", True)
@@ -349,8 +486,59 @@ class SupabaseDAL(MenuRepository):
             .limit(1)
             .execute()
         )
-
         return response.data or []
+
+    def _fetch_modifier_assignments_by_item_ids(
+        self,
+        item_ids: list[str],
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Load junction + groups + options in a separate query (avoids menu_items embed)."""
+        if not item_ids:
+            return {}
+
+        by_item: dict[str, list[dict[str, Any]]] = {}
+        for offset in range(0, len(item_ids), _MENU_ITEM_IDS_BATCH_SIZE):
+            batch = item_ids[offset : offset + _MENU_ITEM_IDS_BATCH_SIZE]
+            rows = self._fetch_modifier_assignment_rows(batch)
+            for row in rows:
+                item_id = str(row.get("menu_item_id") or "")
+                if not item_id:
+                    continue
+                by_item.setdefault(item_id, []).append(row)
+
+        for assignments in by_item.values():
+            assignments.sort(
+                key=lambda row: (
+                    int(row.get("sort_order") or 0),
+                    str(row.get("id") or ""),
+                ),
+            )
+
+        return by_item
+
+    def _fetch_modifier_assignment_rows(self, item_ids: list[str]) -> list[dict[str, Any]]:
+        for select_graph in (
+            _MODIFIER_ASSIGNMENT_SELECT_HINTS,
+            _MODIFIER_ASSIGNMENT_SELECT_PLAIN,
+        ):
+            try:
+                response = (
+                    self._client.table("menu_item_modifier_groups")
+                    .select(select_graph)
+                    .in_("menu_item_id", item_ids)
+                    .execute()
+                )
+                return list(response.data or [])
+            except APIError as error:
+                logger.warning(
+                    "Modifier assignment fetch failed (batch=%s): %s",
+                    len(item_ids),
+                    error,
+                )
+        return []
+
+    def _fetch_restaurant_menu(self, slug: str) -> list[dict[str, Any]]:
+        return self._execute_restaurant_menu_query(slug, _MENU_SELECT)
 
     def _patch_restaurant_settings_sync(
         self,
@@ -834,6 +1022,336 @@ class SupabaseDAL(MenuRepository):
         ).execute()
         return True
 
+    def _modifier_attachment_counts(self, restaurant_id: str) -> dict[str, int]:
+        groups = (
+            self._client.table("modifier_groups")
+            .select("id")
+            .eq("restaurant_id", restaurant_id)
+            .execute()
+        )
+        group_ids = [str(row.get("id")) for row in (groups.data or []) if row.get("id")]
+        if not group_ids:
+            return {}
+
+        links = (
+            self._client.table("menu_item_modifier_groups")
+            .select("modifier_group_id, menu_item_id")
+            .in_("modifier_group_id", group_ids)
+            .execute()
+        )
+        counts: dict[str, set[str]] = {}
+        for row in links.data or []:
+            gid = str(row.get("modifier_group_id") or "")
+            iid = str(row.get("menu_item_id") or "")
+            if gid and iid:
+                counts.setdefault(gid, set()).add(iid)
+        return {gid: len(items) for gid, items in counts.items()}
+
+    def _list_modifier_groups_sync(self, restaurant_id: str) -> list[dict[str, Any]]:
+        response = (
+            self._client.table("modifier_groups")
+            .select(
+                "id, name, translations, selection_mode, min_select, max_select, sort_order, "
+                "modifier_options(id, name, translations, price_delta, is_default, is_available, sort_order)"
+            )
+            .eq("restaurant_id", restaurant_id)
+            .order("name")
+            .execute()
+        )
+        attachment_counts = self._modifier_attachment_counts(restaurant_id)
+        rows: list[dict[str, Any]] = []
+        for group in response.data or []:
+            gid = str(group.get("id") or "")
+            options = sorted(
+                _as_list(group.get("modifier_options")),
+                key=lambda row: (
+                    int(row.get("sort_order") or 0),
+                    str(row.get("id") or ""),
+                ),
+            )
+            rows.append(
+                {
+                    "id": gid,
+                    "name": str(group.get("name") or ""),
+                    "selection_mode": str(group.get("selection_mode") or "single"),
+                    "min_select": int(group.get("min_select") or 0),
+                    "max_select": int(group.get("max_select") or 1),
+                    "sort_order": int(group.get("sort_order") or 0),
+                    "translations": group.get("translations"),
+                    "options": options,
+                    "attached_item_count": attachment_counts.get(gid, 0),
+                }
+            )
+        return rows
+
+    def _create_modifier_group_atomic_sync(
+        self,
+        restaurant_id: str,
+        attach_to_item_id: str,
+        fields: dict[str, Any],
+    ) -> str | None:
+        if self._menu_item_restaurant_id(attach_to_item_id) != restaurant_id:
+            return None
+
+        options = fields.get("options") or []
+        if not isinstance(options, list) or len(options) < 1:
+            return None
+
+        selection_mode = str(fields.get("selection_mode") or "single").strip().lower()
+        if selection_mode not in ("single", "multi"):
+            selection_mode = "single"
+
+        min_select = int(fields.get("min_select") or 0)
+        max_select = int(fields.get("max_select") or 1)
+        if max_select < min_select:
+            return None
+
+        name = str(fields.get("name") or "").strip()
+        if not name:
+            return None
+
+        options_json: list[dict[str, Any]] = []
+        for idx, opt in enumerate(options):
+            if not isinstance(opt, dict):
+                continue
+            opt_name = str(opt.get("name") or "").strip()
+            if not opt_name:
+                continue
+            options_json.append(
+                {
+                    "name": opt_name,
+                    "translations": opt.get("translations") or {},
+                    "price_delta": float(opt.get("price_delta") or 0),
+                    "is_default": bool(opt.get("is_default", False)),
+                    "is_available": bool(opt.get("is_available", True)),
+                    "sort_order": idx,
+                }
+            )
+
+        if not options_json:
+            return None
+
+        try:
+            response = self._client.rpc(
+                "create_modifier_group_atomic",
+                {
+                    "p_restaurant_id": restaurant_id,
+                    "p_menu_item_id": attach_to_item_id,
+                    "p_name": name,
+                    "p_translations": fields.get("translations") or {},
+                    "p_selection_mode": selection_mode,
+                    "p_min_select": min_select,
+                    "p_max_select": max_select,
+                    "p_options": options_json,
+                },
+            ).execute()
+        except APIError:
+            logger.exception("create_modifier_group_atomic RPC failed")
+            return None
+
+        raw = response.data
+        if isinstance(raw, str):
+            return raw
+        if raw is not None:
+            return str(raw)
+        return None
+
+    def _attach_modifier_group_sync(
+        self,
+        menu_item_id: str,
+        modifier_group_id: str,
+        restaurant_id: str,
+    ) -> bool:
+        if self._menu_item_restaurant_id(menu_item_id) != restaurant_id:
+            return False
+        group = (
+            self._client.table("modifier_groups")
+            .select("id")
+            .eq("id", modifier_group_id)
+            .eq("restaurant_id", restaurant_id)
+            .limit(1)
+            .execute()
+        )
+        if _first(group.data or []) is None:
+            return False
+
+        existing = (
+            self._client.table("menu_item_modifier_groups")
+            .select("id")
+            .eq("menu_item_id", menu_item_id)
+            .eq("modifier_group_id", modifier_group_id)
+            .limit(1)
+            .execute()
+        )
+        if _first(existing.data or []) is not None:
+            return False
+
+        sort_response = (
+            self._client.table("menu_item_modifier_groups")
+            .select("sort_order")
+            .eq("menu_item_id", menu_item_id)
+            .order("sort_order", desc=True)
+            .limit(1)
+            .execute()
+        )
+        top = _first(sort_response.data or [])
+        next_sort = int(top.get("sort_order") or -1) + 1 if top else 0
+
+        inserted = (
+            self._client.table("menu_item_modifier_groups")
+            .insert(
+                {
+                    "menu_item_id": menu_item_id,
+                    "modifier_group_id": modifier_group_id,
+                    "sort_order": next_sort,
+                }
+            )
+            .execute()
+        )
+        return bool(inserted.data)
+
+    def _detach_modifier_group_sync(
+        self,
+        menu_item_id: str,
+        modifier_group_id: str,
+        restaurant_id: str,
+    ) -> bool:
+        if self._menu_item_restaurant_id(menu_item_id) != restaurant_id:
+            return False
+        probe = (
+            self._client.table("menu_item_modifier_groups")
+            .select("id")
+            .eq("menu_item_id", menu_item_id)
+            .eq("modifier_group_id", modifier_group_id)
+            .limit(1)
+            .execute()
+        )
+        if _first(probe.data or []) is None:
+            return False
+
+        self._client.table("menu_item_modifier_groups").delete().eq(
+            "menu_item_id",
+            menu_item_id,
+        ).eq("modifier_group_id", modifier_group_id).execute()
+        return True
+
+    def _update_modifier_group_sync(
+        self,
+        group_id: str,
+        restaurant_id: str,
+        fields: dict[str, Any],
+    ) -> bool:
+        probe = (
+            self._client.table("modifier_groups")
+            .select("id")
+            .eq("id", group_id)
+            .eq("restaurant_id", restaurant_id)
+            .limit(1)
+            .execute()
+        )
+        if _first(probe.data or []) is None:
+            return False
+
+        selection_mode = str(fields.get("selection_mode") or "single").strip().lower()
+        if selection_mode not in ("single", "multi"):
+            selection_mode = "single"
+
+        min_select = int(fields.get("min_select") or 0)
+        max_select = int(fields.get("max_select") or 1)
+        if max_select < min_select:
+            return False
+
+        name = str(fields.get("name") or "").strip()
+        if not name:
+            return False
+
+        patch = {
+            "name": name,
+            "translations": fields.get("translations") or {},
+            "selection_mode": selection_mode,
+            "min_select": min_select,
+            "max_select": max_select,
+        }
+        self._client.table("modifier_groups").update(patch).eq("id", group_id).eq(
+            "restaurant_id",
+            restaurant_id,
+        ).execute()
+
+        options = fields.get("options") or []
+        if not isinstance(options, list):
+            return True
+
+        existing_resp = (
+            self._client.table("modifier_options")
+            .select("id")
+            .eq("modifier_group_id", group_id)
+            .execute()
+        )
+        existing_ids = {
+            str(row.get("id"))
+            for row in (existing_resp.data or [])
+            if row.get("id")
+        }
+        kept_ids: set[str] = set()
+
+        for idx, opt in enumerate(options):
+            if not isinstance(opt, dict):
+                continue
+            opt_name = str(opt.get("name") or "").strip()
+            if not opt_name:
+                continue
+            row = {
+                "name": opt_name,
+                "translations": opt.get("translations") or {},
+                "price_delta": float(opt.get("price_delta") or 0),
+                "is_default": bool(opt.get("is_default", False)),
+                "is_available": bool(opt.get("is_available", True)),
+                "sort_order": idx,
+            }
+            opt_id = opt.get("id")
+            if isinstance(opt_id, str) and opt_id.strip():
+                oid = opt_id.strip()
+                if oid not in existing_ids:
+                    continue
+                kept_ids.add(oid)
+                self._client.table("modifier_options").update(row).eq("id", oid).eq(
+                    "modifier_group_id",
+                    group_id,
+                ).execute()
+            else:
+                row["modifier_group_id"] = group_id
+                self._client.table("modifier_options").insert(row).execute()
+
+        for orphan_id in existing_ids - kept_ids:
+            self._client.table("modifier_options").delete().eq("id", orphan_id).eq(
+                "modifier_group_id",
+                group_id,
+            ).execute()
+
+        return True
+
+    def _delete_modifier_group_sync(self, group_id: str, restaurant_id: str) -> str | None:
+        probe = (
+            self._client.table("modifier_groups")
+            .select("id")
+            .eq("id", group_id)
+            .eq("restaurant_id", restaurant_id)
+            .limit(1)
+            .execute()
+        )
+        if _first(probe.data or []) is None:
+            return "not_found"
+
+        counts = self._modifier_attachment_counts(restaurant_id)
+        if counts.get(group_id, 0) > 0:
+            return "attached"
+
+        self._client.table("modifier_groups").delete().eq("id", group_id).eq(
+            "restaurant_id",
+            restaurant_id,
+        ).execute()
+        return None
+
     def _get_active_menu_id_for_restaurant(self, restaurant_id: str) -> str | None:
         response = (
             self._client.table("menus")
@@ -1260,6 +1778,30 @@ class SupabaseDAL(MenuRepository):
         return restaurant_id
 
 
+def _collect_menu_item_ids_from_restaurant(restaurant: dict[str, Any]) -> list[str]:
+    ids: list[str] = []
+    seen: set[str] = set()
+    for menu in _as_list(restaurant.get("menus")):
+        for category in _as_list(menu.get("categories")):
+            for item in _as_list(category.get("menu_items")):
+                item_id = str(item.get("id") or "")
+                if item_id and item_id not in seen:
+                    seen.add(item_id)
+                    ids.append(item_id)
+    return ids
+
+
+def _inject_modifier_groups_into_restaurant(
+    restaurant: dict[str, Any],
+    by_item_id: dict[str, list[dict[str, Any]]],
+) -> None:
+    for menu in _as_list(restaurant.get("menus")):
+        for category in _as_list(menu.get("categories")):
+            for item in _as_list(category.get("menu_items")):
+                item_id = str(item.get("id") or "")
+                item["menu_item_modifier_groups"] = by_item_id.get(item_id, [])
+
+
 def _build_menu_payload(
     restaurant: dict[str, Any],
     menu: dict[str, Any],
@@ -1323,6 +1865,111 @@ def _build_category(
     )
 
 
+def _effective_min_max_select(
+    group: dict[str, Any],
+    assignment: dict[str, Any],
+) -> tuple[int, int]:
+    min_select = assignment.get("min_select_override")
+    if min_select is None:
+        min_select = group.get("min_select")
+    max_select = assignment.get("max_select_override")
+    if max_select is None:
+        max_select = group.get("max_select")
+    min_val = int(min_select if min_select is not None else 0)
+    max_val = int(max_select if max_select is not None else 1)
+    if max_val < min_val:
+        max_val = min_val
+    return min_val, max_val
+
+
+def _build_modifier_option(option: dict[str, Any]) -> ModifierOptionResponse | None:
+    if not bool(option.get("is_available", True)):
+        return None
+    option_id = str(option.get("id") or "")
+    if not option_id:
+        return None
+    return ModifierOptionResponse(
+        id=option_id,
+        name=str(option.get("name") or ""),
+        price_delta=_to_float(option.get("price_delta")),
+        is_default=bool(option.get("is_default")),
+        is_available=True,
+        sort_order=int(option.get("sort_order") or 0),
+        translations=_as_optional_dict(option.get("translations")),
+    )
+
+
+def _build_modifier_group(
+    assignment: dict[str, Any],
+    restaurant_id: str,
+) -> ModifierGroupResponse | None:
+    group = _as_dict(assignment.get("modifier_groups"))
+    if not group:
+        return None
+    if not bool(group.get("is_active", True)):
+        return None
+    group_restaurant_id = str(group.get("restaurant_id") or "")
+    if group_restaurant_id and group_restaurant_id != restaurant_id:
+        return None
+
+    group_id = str(group.get("id") or "")
+    if not group_id:
+        return None
+
+    min_select, max_select = _effective_min_max_select(group, assignment)
+    options = [
+        built
+        for built in (
+            _build_modifier_option(row)
+            for row in sorted(
+                _as_list(group.get("modifier_options")),
+                key=lambda row: (
+                    int(row.get("sort_order") or 0),
+                    str(row.get("id") or ""),
+                ),
+            )
+        )
+        if built is not None
+    ]
+    if not options:
+        return None
+
+    selection_mode = str(group.get("selection_mode") or "single").strip().lower()
+    if selection_mode not in ("single", "multi"):
+        selection_mode = "single"
+
+    return ModifierGroupResponse(
+        id=group_id,
+        name=str(group.get("name") or ""),
+        selection_mode=selection_mode,
+        min_select=min_select,
+        max_select=max_select,
+        sort_order=int(assignment.get("sort_order") or 0),
+        options=options,
+        translations=_as_optional_dict(group.get("translations")),
+    )
+
+
+def _build_modifier_groups(
+    item: dict[str, Any],
+    restaurant_id: str,
+) -> list[ModifierGroupResponse]:
+    return [
+        built
+        for built in (
+            _build_modifier_group(row, restaurant_id)
+            for row in sorted(
+                _as_list(item.get("menu_item_modifier_groups")),
+                key=lambda row: (
+                    int(row.get("sort_order") or 0),
+                    str(row.get("id") or ""),
+                ),
+            )
+        )
+        if built is not None
+    ]
+
+
 def _build_menu_item(item: dict[str, Any], restaurant_id: str) -> MenuItemResponse:
     metadata = _as_dict(item.get("metadata"))
 
@@ -1341,6 +1988,7 @@ def _build_menu_item(item: dict[str, Any], restaurant_id: str) -> MenuItemRespon
             _build_variant(variant)
             for variant in _as_list(item.get("item_variants"))
         ],
+        modifier_groups=_build_modifier_groups(item, restaurant_id),
         upsell_rules=[
             rule
             for rule in (

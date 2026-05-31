@@ -12,6 +12,32 @@ export type OfferItemSnapshot = {
   translations?: TranslationsMap;
 };
 
+export type ModifierOption = {
+  id: string;
+  name: string;
+  price_delta: number;
+  is_default?: boolean;
+  is_available?: boolean;
+  sort_order?: number;
+  translations?: TranslationsMap;
+};
+
+export type ModifierGroup = {
+  id: string;
+  name: string;
+  selection_mode: "single" | "multi" | string;
+  min_select: number;
+  max_select: number;
+  sort_order?: number;
+  options: ModifierOption[];
+  translations?: TranslationsMap;
+};
+
+/** Owner library listing (includes attachment count for delete guard). */
+export type ModifierGroupLibrary = ModifierGroup & {
+  attached_item_count: number;
+};
+
 export type UpsellRule = {
   /** Present when loaded from API; required for edit/delete upsell admin actions. */
   id?: string;
@@ -38,6 +64,7 @@ export type MenuItem = {
     name: string;
     price: number;
   }>;
+  modifier_groups?: ModifierGroup[];
   upsell_rules: UpsellRule[];
 };
 
@@ -80,7 +107,16 @@ export type SlimOfferItemSnapshot = Omit<OfferItemSnapshot, "translations">;
 export type SlimUpsellRule = Omit<UpsellRule, "translations" | "offer_item_snapshot"> & {
   offer_item_snapshot: SlimOfferItemSnapshot;
 };
-export type SlimMenuItem = Omit<MenuItem, "translations" | "upsell_rules"> & {
+export type SlimModifierOption = Omit<ModifierOption, "translations">;
+export type SlimModifierGroup = Omit<ModifierGroup, "translations" | "options"> & {
+  options: SlimModifierOption[];
+};
+
+export type SlimMenuItem = Omit<
+  MenuItem,
+  "translations" | "upsell_rules" | "modifier_groups"
+> & {
+  modifier_groups?: SlimModifierGroup[];
   upsell_rules: SlimUpsellRule[];
 };
 export type SlimMenuCategory = Omit<MenuCategory, "translations" | "items"> & {

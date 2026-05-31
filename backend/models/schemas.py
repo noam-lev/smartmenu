@@ -37,6 +37,31 @@ class UpsellRuleResponse(BaseModel):
     translations: dict[str, Any] | None = None
 
 
+class ModifierOptionResponse(BaseModel):
+    id: str
+    name: str
+    price_delta: float = 0
+    is_default: bool = False
+    is_available: bool = True
+    sort_order: int = 0
+    translations: dict[str, Any] | None = None
+
+
+class ModifierGroupResponse(BaseModel):
+    id: str
+    name: str
+    selection_mode: str = "single"
+    min_select: int = 0
+    max_select: int = 1
+    sort_order: int = 0
+    options: list[ModifierOptionResponse] = Field(default_factory=list)
+    translations: dict[str, Any] | None = None
+
+
+class ModifierGroupLibraryResponse(ModifierGroupResponse):
+    attached_item_count: int = 0
+
+
 class MenuItemResponse(BaseModel):
     id: str
     name: str
@@ -49,6 +74,7 @@ class MenuItemResponse(BaseModel):
     metadata: dict[str, Any] | None = None
     translations: dict[str, Any] | None = None
     variants: list[VariantResponse] = Field(default_factory=list)
+    modifier_groups: list[ModifierGroupResponse] = Field(default_factory=list)
     upsell_rules: list[UpsellRuleResponse] = Field(default_factory=list)
 
 
