@@ -24,6 +24,16 @@ SUPABASE_SERVICE_KEY=your-service-role-key
 
 Optional: `ENVIRONMENT`, `CORS_ORIGINS` (comma-separated), `RESEND_API_KEY`, superadmin vars, etc. See `core/config.py`.
 
+## Database migrations (Supabase)
+
+SQL migrations live in [`../supabase/migrations/`](../supabase/migrations/). Apply via the Supabase SQL editor or CLI before using modifier-aware menu reads.
+
+Phase 1 modifiers: `20260528120000_modifier_tables.sql` creates `modifier_groups`, `modifier_options`, and `menu_item_modifier_groups`, plus triggers that bump `menus.updated_at` when modifier data changes.
+
+Phase 2 owner API: `20260531120000_modifier_group_atomic_create.sql` adds `create_modifier_group_atomic` (group + options + attach in one transaction). Owner routes under `/api/owner/{slug}/modifier-groups` and item attach/detach under `/api/owner/{slug}/items/{item_id}/modifier-groups/{group_id}`.
+
+After applying the migration, run `NOTIFY pgrst, 'reload schema';` in the Supabase SQL editor (the migration file includes this at the end). Without a schema reload, menu API calls may return `PGRST200` until PostgREST picks up the new foreign keys.
+
 ## Run the dev server
 
 **Recommended** — run from `backend/` with reload and **timestamped logs** via `uvicorn_log_config.json`:

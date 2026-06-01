@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -6,6 +8,7 @@ from api.routes import diner, marketing, owner, superadmin, superadmin_restauran
 from core.config import get_settings
 from core.exceptions import CustomHTTPException
 
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
@@ -45,13 +48,21 @@ UVICORN_LOG_CONFIG = {
 
 app = FastAPI(title=settings.app_name)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+_cors_kwargs: dict[str, object] = {
+    "allow_credentials": True,
+    "allow_methods": ["*"],
+    "allow_headers": ["*"],
+}
+if settings.environment == "development":
+    # LAN IPs change often during local dev (e.g. 10.x.x.x vs localhost).
+    _cors_kwargs["allow_origin_regex"] = (
+        r"https?://(localhost|127\.0\.0\.1|10\.\d{1,3}\.\d{1,3}\.\d{1,3})(:\d+)?"
+    )
+    _cors_kwargs["allow_origins"] = settings.cors_origins
+else:
+    _cors_kwargs["allow_origins"] = settings.cors_origins
+
+app.add_middleware(CORSMiddleware, **_cors_kwargs)
 
 
 @app.exception_handler(CustomHTTPException)
@@ -71,9 +82,10 @@ async def custom_http_exception_handler(
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(
-    _request: Request,
-    _exc: Exception,
+    request: Request,
+    exc: Exception,
 ) -> JSONResponse:
+    logger.exception("Unhandled error on %s %s", request.method, request.url.path)
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={"detail": "Internal server error"},

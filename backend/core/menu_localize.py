@@ -9,6 +9,8 @@ from models.schemas import (
     MenuItemResponse,
     MenuPayload,
     MenuResponse,
+    ModifierGroupResponse,
+    ModifierOptionResponse,
     OfferItemSnapshotResponse,
     RestaurantResponse,
     UpsellRuleResponse,
@@ -130,11 +132,45 @@ def _slim_menu_item(item: MenuItemResponse, locale: str) -> MenuItemResponse:
         metadata=item.metadata,
         translations=None,
         variants=item.variants,
+        modifier_groups=[
+            _slim_modifier_group(group, locale) for group in item.modifier_groups
+        ],
         upsell_rules=[
             rule
             for rule in (_slim_upsell_rule(row, locale) for row in item.upsell_rules)
             if rule is not None
         ],
+    )
+
+
+def _slim_modifier_option(
+    option: ModifierOptionResponse,
+    locale: str,
+) -> ModifierOptionResponse:
+    return ModifierOptionResponse(
+        id=option.id,
+        name=_localized_string(option.name, option.translations, locale, "name"),
+        price_delta=option.price_delta,
+        is_default=option.is_default,
+        is_available=option.is_available,
+        sort_order=option.sort_order,
+        translations=None,
+    )
+
+
+def _slim_modifier_group(
+    group: ModifierGroupResponse,
+    locale: str,
+) -> ModifierGroupResponse:
+    return ModifierGroupResponse(
+        id=group.id,
+        name=_localized_string(group.name, group.translations, locale, "name"),
+        selection_mode=group.selection_mode,
+        min_select=group.min_select,
+        max_select=group.max_select,
+        sort_order=group.sort_order,
+        options=[_slim_modifier_option(option, locale) for option in group.options],
+        translations=None,
     )
 
 

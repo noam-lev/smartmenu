@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "r
 import type { Locale, MenuItem, TranslationsMap } from "../types/menu";
 import { useUiStore } from "../store/uiStore";
 import { getLocalizedText, getUiMessage, isRtlLocale } from "../utils/i18n";
+import ModifiersTab from "./ModifiersTab";
 import UpsellTab from "./UpsellTab";
 import DietaryIconPicker from "./DietaryIconPicker";
 import {
@@ -14,7 +15,7 @@ import {
 import { deleteOwnerImage, uploadOwnerImage } from "../lib/menuApi";
 import { hasRenderableImage } from "../utils/media";
 
-type EditTabId = "general" | "translations" | "upsells";
+type EditTabId = "general" | "translations" | "upsells" | "modifiers";
 
 /** Detect text that likely belongs in the English translation bucket (Latin, no Hebrew letters). */
 function looksLikeEnglishBucketText(value: string): boolean {
@@ -244,6 +245,7 @@ export default function EditItemDrawer({
   const tabs: { id: EditTabId; label: string }[] = [
     { id: "general", label: getUiMessage("tabGeneral", locale) },
     { id: "translations", label: getUiMessage("tabTranslations", locale) },
+    { id: "modifiers", label: getUiMessage("tabModifiers", locale) },
     { id: "upsells", label: getUiMessage("tabUpsells", locale) },
   ];
 
@@ -520,6 +522,28 @@ export default function EditItemDrawer({
               <p className="text-sm text-zinc-500">
                 {getUiMessage("translationsComingSoon", locale)}
               </p>
+            ) : null}
+
+            {activeTab === "modifiers" && !item ? (
+              <p className="text-sm text-zinc-500">
+                {getUiMessage("modifierNeedSavedItem", locale)}
+              </p>
+            ) : null}
+
+            {item && onRefreshMenu ? (
+              <div className={activeTab === "modifiers" ? undefined : "hidden"}>
+                <ModifiersTab
+                  restaurantSlug={restaurantSlug}
+                  menuItemId={item.id}
+                  attachedGroups={item.modifier_groups ?? []}
+                  restaurantDefaultLocale={restaurantDefaultLocale}
+                  locale={locale}
+                  isRtl={isRtl}
+                  onRefreshMenu={onRefreshMenu}
+                />
+              </div>
+            ) : activeTab === "modifiers" ? (
+              <p className="text-sm text-zinc-500">{getUiMessage("translationsComingSoon", locale)}</p>
             ) : null}
 
             {activeTab === "upsells" ? (

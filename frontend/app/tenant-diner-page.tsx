@@ -19,6 +19,7 @@ import { mergeRestaurantSettingsIntoPayload } from "../lib/mergeRestaurantSettin
 import { tenantHref } from "../lib/tenantLocale";
 import { useCartStore } from "../store/cartStore";
 import { createClient as createSupabaseBrowserClient } from "../utils/supabase/client";
+import type { SelectedModifier } from "../lib/cart";
 import type { MenuCategory, MenuItem, SlimMenuPayload, UpsellRule } from "../types/menu";
 import { formatCurrency } from "../utils/currency";
 import {
@@ -92,19 +93,20 @@ export function TenantDinerPage({
     () => false,
   );
 
-  const { addSelection, cartBucket, setItemQuantity, removeItem, clearCart, syncCartLifecycle } =
+  const { addOrMergeLine, addSelection, cartBucket, setLineQuantity, removeLine, clearCart, syncCartLifecycle } =
     useCartStore(
       useShallow((state) => ({
+        addOrMergeLine: state.addOrMergeLine,
         addSelection: state.addSelection,
         cartBucket: state.cartsByRestaurant[restaurantSlug],
-        setItemQuantity: state.setItemQuantity,
-        removeItem: state.removeItem,
+        setLineQuantity: state.setLineQuantity,
+        removeLine: state.removeLine,
         clearCart: state.clearCart,
         syncCartLifecycle: state.syncCartLifecycle,
       })),
     );
   const menuLastUpdated = menuPayload?.menu.last_updated;
-  const itemsByItemId = cartBucket?.itemsByItemId ?? {};
+  const cartLines = cartBucket?.lines ?? [];
   const totalItems = cartBucket?.totalItems ?? 0;
   const totalPrice = cartBucket?.totalPrice ?? 0;
 
@@ -123,7 +125,7 @@ export function TenantDinerPage({
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
   }, [restaurantSlug, menuLastUpdated, syncCartLifecycle, totalItems]);
-  const cartItems = useMemo(() => Object.values(itemsByItemId), [itemsByItemId]);
+  const cartItems = useMemo(() => cartLines, [cartLines]);
   const socialLinks = useMemo(
     () => parseSocialLinksForDisplay(menuPayload?.restaurant.settings),
     [menuPayload?.restaurant.settings],
@@ -246,18 +248,21 @@ export function TenantDinerPage({
     return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, [isLanguageMenuOpen]);
 
-  const handlePrimaryAdd = () => {
+  const handlePrimaryAdd = (selections: SelectedModifier[]) => {
     if (!selectedItem) {
       return;
     }
 
-    addSelection({
+    const primaryVariant = selectedItem.variants[0];
+    addOrMergeLine({
       restaurantSlug,
-      itemId: selectedItem.id,
+      menuItemId: selectedItem.id,
+      variantId: primaryVariant?.id ?? "",
       quantity,
       name: selectedItem.name,
       translations: selectedItem.translations,
-      displayUnitPrice: selectedItem.base_price,
+      variantPrice: primaryVariant?.price ?? selectedItem.base_price,
+      selections,
     });
 
     const rules = selectedItem.upsell_rules ?? [];
@@ -552,21 +557,21 @@ export function TenantDinerPage({
         }}
         onClose={closeCartSheet}
         onStartOver={handleStartOver}
-        onIncrease={(itemId) => {
-          const item = itemsByItemId[itemId];
-          if (!item) {
+        onIncrease={(lineId) => {
+          const line = cartLines.find((entry) => entry.lineId === lineId);
+          if (!line) {
             return;
           }
-          setItemQuantity(restaurantSlug, itemId, item.quantity + 1);
+          setLineQuantity(restaurantSlug, lineId, line.quantity + 1);
         }}
-        onDecrease={(itemId) => {
-          const item = itemsByItemId[itemId];
-          if (!item) {
+        onDecrease={(lineId) => {
+          const line = cartLines.find((entry) => entry.lineId === lineId);
+          if (!line) {
             return;
           }
-          setItemQuantity(restaurantSlug, itemId, item.quantity - 1);
+          setLineQuantity(restaurantSlug, lineId, line.quantity - 1);
         }}
-        onRemove={(itemId) => removeItem(restaurantSlug, itemId)}
+        onRemove={(lineId) => removeLine(restaurantSlug, lineId)}
       />
 
       {hasSocialFooter ? <SocialLinksFooter locale={locale} links={socialLinks} /> : null}

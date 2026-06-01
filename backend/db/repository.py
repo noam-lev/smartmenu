@@ -81,6 +81,56 @@ class MenuRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    async def list_modifier_groups(self, restaurant_id: str) -> list[dict[str, Any]]:
+        """Restaurant modifier library with options and attached_item_count."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def create_modifier_group_atomic(
+        self,
+        restaurant_id: str,
+        attach_to_item_id: str,
+        fields: dict[str, Any],
+    ) -> str | None:
+        """Create group, options, and junction in one DB transaction. Returns group id."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def attach_modifier_group(
+        self,
+        menu_item_id: str,
+        modifier_group_id: str,
+        restaurant_id: str,
+    ) -> bool:
+        """Attach an existing group to a menu item."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def detach_modifier_group(
+        self,
+        menu_item_id: str,
+        modifier_group_id: str,
+        restaurant_id: str,
+    ) -> bool:
+        """Remove junction between item and group (does not delete the group)."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def update_modifier_group(
+        self,
+        group_id: str,
+        restaurant_id: str,
+        fields: dict[str, Any],
+    ) -> bool:
+        """Update group metadata and upsert/remove options."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def delete_modifier_group(self, group_id: str, restaurant_id: str) -> str | None:
+        """Delete group when unattached. Returns None on success, or error code string."""
+        raise NotImplementedError
+
+    @abstractmethod
     async def create_category(
         self,
         restaurant_id: str,

@@ -3,10 +3,20 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { TranslationsMap } from "../types/menu";
+import {
+  buildConfigKey,
+  computeLineTotal,
+  computeUnitPrice,
+  type CartLine,
+  type SelectedModifier,
+} from "../lib/cart";
+
+export type { CartLine, SelectedModifier } from "../lib/cart";
 
 /** Cart expires after 90 minutes with no cart mutations. */
 export const CART_IDLE_TTL_MS = 90 * 60 * 1000;
 
+/** @deprecated Legacy shape; migrated to CartLine in persist v6. */
 export type CartItem = {
   itemId: string;
   name: string;
@@ -16,17 +26,32 @@ export type CartItem = {
 };
 
 export type CartBucket = {
-  itemsByItemId: Record<string, CartItem>;
+  lines: CartLine[];
   totalItems: number;
   totalPrice: number;
   lastActivityAt: string;
   menuLastUpdatedAt: string | null;
 };
 
+export type AddOrMergeLinePayload = {
+  restaurantSlug: string;
+  menuItemId: string;
+  variantId: string;
+  quantity: number;
+  name: string;
+  translations?: TranslationsMap;
+  variantPrice: number;
+  selections?: SelectedModifier[];
+  addedBy?: string;
+};
+
 type CartStore = {
   cartsByRestaurant: Record<string, CartBucket>;
-  /** True if this menu item id is in the cart with a positive quantity. */
+  hasLineWithMenuItemId: (restaurantSlug: string, menuItemId: string) => boolean;
+  /** @deprecated Use hasLineWithMenuItemId. Kept for upsell gating. */
   hasItemInCart: (restaurantSlug: string, itemId: string) => boolean;
+  addOrMergeLine: (payload: AddOrMergeLinePayload) => void;
+  /** Compatibility: no modifiers; merges by item + default variant. */
   addSelection: (payload: {
     restaurantSlug: string;
     itemId: string;
@@ -34,14 +59,15 @@ type CartStore = {
     name: string;
     translations?: TranslationsMap;
     displayUnitPrice: number;
+    variantId?: string;
   }) => void;
+  setLineQuantity: (restaurantSlug: string, lineId: string, quantity: number) => void;
+  /** Updates the sole no-modifier line for this menu item, if any. */
   setItemQuantity: (restaurantSlug: string, itemId: string, quantity: number) => void;
+  removeLine: (restaurantSlug: string, lineId: string) => void;
+  /** Removes all lines for a menu item (legacy cart sheet API). */
   removeItem: (restaurantSlug: string, itemId: string) => void;
   clearCart: (restaurantSlug: string) => void;
-  /**
-   * Silently drops the cart when idle TTL expired or the live menu is newer than
-   * the stored baseline. Adopts `menuLastUpdatedAt` when missing on a non-empty cart.
-   */
   syncCartLifecycle: (
     restaurantSlug: string,
     liveMenuLastUpdated: string | null | undefined,
@@ -50,6 +76,13 @@ type CartStore = {
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+function newLineId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `line-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
 function parseTimestampMs(value: string | null | undefined): number | null {
@@ -86,11 +119,11 @@ export function isMenuNewerThanCart(
   return liveMs > cartMs;
 }
 
-function computeCartTotals(itemsByItemId: Record<string, CartItem>) {
-  return Object.values(itemsByItemId).reduce(
-    (acc, item) => {
-      acc.totalItems += item.quantity;
-      acc.totalPrice += item.displayUnitPrice * item.quantity;
+function computeCartTotals(lines: CartLine[]) {
+  return lines.reduce(
+    (acc, line) => {
+      acc.totalItems += line.quantity;
+      acc.totalPrice += computeLineTotal(line.unitPrice, line.quantity);
       return acc;
     },
     { totalItems: 0, totalPrice: 0 },
@@ -98,12 +131,12 @@ function computeCartTotals(itemsByItemId: Record<string, CartItem>) {
 }
 
 function makeCartBucket(
-  itemsByItemId: Record<string, CartItem>,
+  lines: CartLine[],
   meta: { lastActivityAt: string; menuLastUpdatedAt: string | null },
 ): CartBucket {
-  const totals = computeCartTotals(itemsByItemId);
+  const totals = computeCartTotals(lines);
   return {
-    itemsByItemId,
+    lines,
     totalItems: totals.totalItems,
     totalPrice: totals.totalPrice,
     lastActivityAt: meta.lastActivityAt,
@@ -112,7 +145,7 @@ function makeCartBucket(
 }
 
 function bucketHasItems(bucket: CartBucket | undefined): bucket is CartBucket {
-  return Boolean(bucket && Object.keys(bucket.itemsByItemId).length > 0);
+  return Boolean(bucket && bucket.lines.length > 0);
 }
 
 function touchBucketMeta(
@@ -128,8 +161,78 @@ function touchBucketMeta(
   };
 }
 
-function migratePersistedBuckets(
+function sortSelections(selections: SelectedModifier[]): SelectedModifier[] {
+  return [...selections].sort((a, b) => a.groupId.localeCompare(b.groupId));
+}
+
+function legacyCartItemToLine(item: CartItem): CartLine {
+  const variantId = "";
+  const selections: SelectedModifier[] = [];
+  const configKey = buildConfigKey(item.itemId, variantId, selections);
+  return {
+    lineId: newLineId(),
+    menuItemId: item.itemId,
+    variantId,
+    quantity: item.quantity,
+    selections,
+    configKey,
+    unitPrice: item.displayUnitPrice,
+    name: item.name,
+    translations: item.translations,
+    addedAt: nowIso(),
+  };
+}
+
+function normalizeCartBucket(
+  slug: string,
+  raw: Partial<CartBucket> & {
+    itemsByItemId?: Record<string, CartItem>;
+    lines?: CartLine[];
+  },
+): CartBucket | null {
+  if (!slug) {
+    return null;
+  }
+
+  const adoptedAt = nowIso();
+
+  if (Array.isArray(raw.lines) && raw.lines.length > 0) {
+    const lines = raw.lines
+      .filter((line) => line && typeof line.menuItemId === "string")
+      .map((line) => ({
+        ...line,
+        selections: sortSelections(line.selections ?? []),
+        configKey:
+          line.configKey ??
+          buildConfigKey(line.menuItemId, line.variantId ?? "", line.selections ?? []),
+        unitPrice:
+          line.unitPrice ??
+          computeUnitPrice(0, line.selections ?? []),
+      }));
+    if (lines.length === 0) {
+      return null;
+    }
+    return makeCartBucket(lines, {
+      lastActivityAt: raw.lastActivityAt ?? adoptedAt,
+      menuLastUpdatedAt: raw.menuLastUpdatedAt ?? null,
+    });
+  }
+
+  const legacyItems = raw.itemsByItemId ?? {};
+  const legacyLines = Object.values(legacyItems).map(legacyCartItemToLine);
+  if (legacyLines.length === 0) {
+    return null;
+  }
+
+  return makeCartBucket(legacyLines, {
+    lastActivityAt: raw.lastActivityAt ?? adoptedAt,
+    menuLastUpdatedAt: raw.menuLastUpdatedAt ?? null,
+  });
+}
+
+function migratePersistedState(
   persistedState: unknown,
+  version: number,
 ): Pick<CartStore, "cartsByRestaurant"> {
   const state = (persistedState ?? {}) as Partial<
     CartStore & {
@@ -138,44 +241,32 @@ function migratePersistedBuckets(
     }
   >;
 
-  const adoptedAt = nowIso();
-  const normalizeBucket = (
-    slug: string,
-    raw: Partial<CartBucket> & { itemsByItemId?: Record<string, CartItem> },
-  ): CartBucket | null => {
-    const items = raw.itemsByItemId ?? {};
-    if (!slug || Object.keys(items).length === 0) {
-      return null;
-    }
-    return makeCartBucket(items, {
-      lastActivityAt: raw.lastActivityAt ?? adoptedAt,
-      menuLastUpdatedAt: raw.menuLastUpdatedAt ?? null,
-    });
-  };
+  const cartsByRestaurant: Record<string, CartBucket> = {};
 
   if (state.cartsByRestaurant && typeof state.cartsByRestaurant === "object") {
-    const cartsByRestaurant = Object.entries(state.cartsByRestaurant).reduce(
-      (acc, [slug, bucket]) => {
-        const normalized = normalizeBucket(slug, bucket ?? {});
-        if (normalized) {
-          acc[slug] = normalized;
-        }
-        return acc;
-      },
-      {} as Record<string, CartBucket>,
-    );
+    for (const [slug, bucket] of Object.entries(state.cartsByRestaurant)) {
+      const normalized = normalizeCartBucket(slug, bucket ?? {});
+      if (normalized) {
+        cartsByRestaurant[slug] = normalized;
+      }
+    }
     return { cartsByRestaurant };
   }
 
   const legacySlug = state.restaurantSlug ?? null;
-  const legacyItems = state.itemsByItemId ?? {};
-  const cartsByRestaurant: Record<string, CartBucket> = {};
-  if (legacySlug && Object.keys(legacyItems).length > 0) {
-    cartsByRestaurant[legacySlug] = makeCartBucket(legacyItems, {
-      lastActivityAt: adoptedAt,
-      menuLastUpdatedAt: null,
+  if (legacySlug) {
+    const normalized = normalizeCartBucket(legacySlug, {
+      itemsByItemId: state.itemsByItemId ?? {},
     });
+    if (normalized) {
+      cartsByRestaurant[legacySlug] = normalized;
+    }
   }
+
+  if (version >= 6) {
+    return { cartsByRestaurant };
+  }
+
   return { cartsByRestaurant };
 }
 
@@ -201,15 +292,79 @@ function purgeIdleExpiredCarts(
   return changed ? nextCarts : cartsByRestaurant;
 }
 
+function findLegacyLine(bucket: CartBucket, menuItemId: string): CartLine | undefined {
+  const candidates = bucket.lines.filter(
+    (line) => line.menuItemId === menuItemId && line.selections.length === 0,
+  );
+  if (candidates.length === 1) {
+    return candidates[0];
+  }
+  return bucket.lines.find((line) => line.menuItemId === menuItemId);
+}
+
 export const useCartStore = create<CartStore>()(
   persist(
     (set, get) => ({
       cartsByRestaurant: {},
-      hasItemInCart: (restaurantSlug, itemId) => {
+      hasLineWithMenuItemId: (restaurantSlug, menuItemId) => {
         const bucket = get().cartsByRestaurant[restaurantSlug];
-        const row = bucket?.itemsByItemId[itemId];
-        return Boolean(row && row.quantity > 0);
+        return Boolean(
+          bucket?.lines.some((line) => line.menuItemId === menuItemId && line.quantity > 0),
+        );
       },
+      hasItemInCart: (restaurantSlug, itemId) =>
+        get().hasLineWithMenuItemId(restaurantSlug, itemId),
+      addOrMergeLine: ({
+        restaurantSlug,
+        menuItemId,
+        variantId,
+        quantity,
+        name,
+        translations,
+        variantPrice,
+        selections = [],
+        addedBy,
+      }) =>
+        set((state) => {
+          const existingBucket = state.cartsByRestaurant[restaurantSlug];
+          const sortedSelections = sortSelections(selections);
+          const configKey = buildConfigKey(menuItemId, variantId, sortedSelections);
+          const unitPrice = computeUnitPrice(variantPrice, sortedSelections);
+          const lines = [...(existingBucket?.lines ?? [])];
+          const matchIndex = lines.findIndex((line) => line.configKey === configKey);
+
+          if (matchIndex >= 0) {
+            const existing = lines[matchIndex];
+            lines[matchIndex] = {
+              ...existing,
+              quantity: existing.quantity + quantity,
+              name,
+              translations,
+              unitPrice,
+            };
+          } else {
+            lines.push({
+              lineId: newLineId(),
+              menuItemId,
+              variantId,
+              quantity,
+              selections: sortedSelections,
+              configKey,
+              unitPrice,
+              name,
+              translations,
+              addedAt: nowIso(),
+              addedBy,
+            });
+          }
+
+          return {
+            cartsByRestaurant: {
+              ...state.cartsByRestaurant,
+              [restaurantSlug]: makeCartBucket(lines, touchBucketMeta(existingBucket)),
+            },
+          };
+        }),
       addSelection: ({
         restaurantSlug,
         itemId,
@@ -217,91 +372,42 @@ export const useCartStore = create<CartStore>()(
         name,
         translations,
         displayUnitPrice,
-      }) =>
-        set((state) => {
-          const existingBucket = state.cartsByRestaurant[restaurantSlug];
-          const baseItems = existingBucket?.itemsByItemId ?? {};
-          const existing = baseItems[itemId];
-          const nextQuantity = (existing?.quantity ?? 0) + quantity;
-          const nextItemsByItemId = {
-            ...baseItems,
-            [itemId]: {
-              itemId,
-              name,
-              translations,
-              displayUnitPrice,
-              quantity: nextQuantity,
-            },
-          };
-          const nextBucket = makeCartBucket(
-            nextItemsByItemId,
-            touchBucketMeta(existingBucket),
-          );
-
-          return {
-            cartsByRestaurant: {
-              ...state.cartsByRestaurant,
-              [restaurantSlug]: nextBucket,
-            },
-          };
-        }),
-      setItemQuantity: (restaurantSlug, itemId, quantity) =>
+        variantId = "",
+      }) => {
+        get().addOrMergeLine({
+          restaurantSlug,
+          menuItemId: itemId,
+          variantId,
+          quantity,
+          name,
+          translations,
+          variantPrice: displayUnitPrice,
+          selections: [],
+        });
+      },
+      setLineQuantity: (restaurantSlug, lineId, quantity) =>
         set((state) => {
           const bucket = state.cartsByRestaurant[restaurantSlug];
           if (!bucket) {
             return state;
           }
 
-          const existing = bucket.itemsByItemId[itemId];
-          if (!existing) {
+          const index = bucket.lines.findIndex((line) => line.lineId === lineId);
+          if (index < 0) {
             return state;
           }
 
           const meta = touchBucketMeta(bucket);
+          const nextLines = [...bucket.lines];
 
           if (quantity <= 0) {
-            const nextItems = { ...bucket.itemsByItemId };
-            delete nextItems[itemId];
-            const nextCarts = { ...state.cartsByRestaurant };
-            if (Object.keys(nextItems).length === 0) {
-              delete nextCarts[restaurantSlug];
-              return { cartsByRestaurant: nextCarts };
-            }
-
-            return {
-              cartsByRestaurant: {
-                ...nextCarts,
-                [restaurantSlug]: makeCartBucket(nextItems, meta),
-              },
-            };
+            nextLines.splice(index, 1);
+          } else {
+            nextLines[index] = { ...nextLines[index], quantity };
           }
 
-          const nextItemsByItemId = {
-            ...bucket.itemsByItemId,
-            [itemId]: {
-              ...existing,
-              quantity,
-            },
-          };
-
-          return {
-            cartsByRestaurant: {
-              ...state.cartsByRestaurant,
-              [restaurantSlug]: makeCartBucket(nextItemsByItemId, meta),
-            },
-          };
-        }),
-      removeItem: (restaurantSlug, itemId) =>
-        set((state) => {
-          const bucket = state.cartsByRestaurant[restaurantSlug];
-          if (!bucket) {
-            return state;
-          }
-
-          const nextItems = { ...bucket.itemsByItemId };
-          delete nextItems[itemId];
           const nextCarts = { ...state.cartsByRestaurant };
-          if (Object.keys(nextItems).length === 0) {
+          if (nextLines.length === 0) {
             delete nextCarts[restaurantSlug];
             return { cartsByRestaurant: nextCarts };
           }
@@ -309,10 +415,53 @@ export const useCartStore = create<CartStore>()(
           return {
             cartsByRestaurant: {
               ...nextCarts,
-              [restaurantSlug]: makeCartBucket(nextItems, touchBucketMeta(bucket)),
+              [restaurantSlug]: makeCartBucket(nextLines, meta),
             },
           };
         }),
+      setItemQuantity: (restaurantSlug, itemId, quantity) => {
+        const bucket = get().cartsByRestaurant[restaurantSlug];
+        if (!bucket) {
+          return;
+        }
+        const line = findLegacyLine(bucket, itemId);
+        if (!line) {
+          return;
+        }
+        get().setLineQuantity(restaurantSlug, line.lineId, quantity);
+      },
+      removeLine: (restaurantSlug, lineId) =>
+        set((state) => {
+          const bucket = state.cartsByRestaurant[restaurantSlug];
+          if (!bucket) {
+            return state;
+          }
+
+          const nextLines = bucket.lines.filter((line) => line.lineId !== lineId);
+          const nextCarts = { ...state.cartsByRestaurant };
+          if (nextLines.length === 0) {
+            delete nextCarts[restaurantSlug];
+            return { cartsByRestaurant: nextCarts };
+          }
+
+          return {
+            cartsByRestaurant: {
+              ...nextCarts,
+              [restaurantSlug]: makeCartBucket(nextLines, touchBucketMeta(bucket)),
+            },
+          };
+        }),
+      removeItem: (restaurantSlug, itemId) => {
+        const bucket = get().cartsByRestaurant[restaurantSlug];
+        if (!bucket) {
+          return;
+        }
+        const line = findLegacyLine(bucket, itemId);
+        if (!line) {
+          return;
+        }
+        get().removeLine(restaurantSlug, line.lineId);
+      },
       clearCart: (restaurantSlug) =>
         set((state) => {
           const nextCarts = { ...state.cartsByRestaurant };
@@ -361,8 +510,8 @@ export const useCartStore = create<CartStore>()(
     }),
     {
       name: "smartmenu-cart",
-      version: 5,
-      migrate: (persistedState) => migratePersistedBuckets(persistedState),
+      version: 6,
+      migrate: (persistedState, version) => migratePersistedState(persistedState, version),
       onRehydrateStorage: () => (state, error) => {
         if (error || !state) {
           return;

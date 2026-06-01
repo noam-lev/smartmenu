@@ -22,6 +22,8 @@ from models.schemas import (
     ItemReorderRequest,
     MenuItemCreateRequest,
     MenuPayload,
+    ModifierGroupLibraryResponse,
+    ModifierOptionResponse,
 )
 from services.image_service import upload_image as cloudinary_upload, delete_image as cloudinary_delete
 
@@ -94,6 +96,77 @@ class UpsellRuleCreatePayload(BaseModel):
         if isinstance(value, str):
             return value.strip()
         return value
+
+
+class ModifierOptionInput(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: str | None = None
+    name: str
+    translations: dict[str, Any] | None = None
+    price_delta: float = 0
+    is_default: bool = False
+    is_available: bool = True
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def strip_name(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            return value.strip()
+        return value
+
+
+class ModifierGroupCreatePayload(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    name: str
+    translations: dict[str, Any] | None = None
+    selection_mode: str = "single"
+    min_select: int = Field(0, ge=0)
+    max_select: int = Field(1, ge=0)
+    options: list[ModifierOptionInput] = Field(..., min_length=1)
+    attach_to_item_id: str
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def strip_name(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            return value.strip()
+        return value
+
+    @field_validator("selection_mode")
+    @classmethod
+    def normalize_selection_mode(cls, value: str) -> str:
+        low = value.strip().lower()
+        if low not in ("single", "multi"):
+            raise ValueError("selection_mode must be 'single' or 'multi'.")
+        return low
+
+
+class ModifierGroupUpdatePayload(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    name: str
+    translations: dict[str, Any] | None = None
+    selection_mode: str = "single"
+    min_select: int = Field(0, ge=0)
+    max_select: int = Field(1, ge=0)
+    options: list[ModifierOptionInput] = Field(..., min_length=1)
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def strip_name(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            return value.strip()
+        return value
+
+    @field_validator("selection_mode")
+    @classmethod
+    def normalize_selection_mode(cls, value: str) -> str:
+        low = value.strip().lower()
+        if low not in ("single", "multi"):
+            raise ValueError("selection_mode must be 'single' or 'multi'.")
+        return low
 
 
 class DeleteImagePayload(BaseModel):
@@ -520,3 +593,145 @@ async def delete_upsell_rule_route(
         )
 
     return {"success": True, "deleted_id": rule_id}
+
+
+def _library_group_from_row(row: dict[str, Any]) -> ModifierGroupLibraryResponse:
+    options = [
+        ModifierOptionResponse(
+            id=str(opt.get("id") or ""),
+            name=str(opt.get("name") or ""),
+            price_delta=float(opt.get("price_delta") or 0),
+            is_default=bool(opt.get("is_default", False)),
+            is_available=bool(opt.get("is_available", True)),
+            sort_order=int(opt.get("sort_order") or 0),
+            translations=opt.get("translations"),
+        )
+        for opt in row.get("options") or []
+        if opt.get("id")
+    ]
+    return ModifierGroupLibraryResponse(
+        id=str(row.get("id") or ""),
+        name=str(row.get("name") or ""),
+        selection_mode=str(row.get("selection_mode") or "single"),
+        min_select=int(row.get("min_select") or 0),
+        max_select=int(row.get("max_select") or 1),
+        sort_order=int(row.get("sort_order") or 0),
+        translations=row.get("translations"),
+        options=options,
+        attached_item_count=int(row.get("attached_item_count") or 0),
+    )
+
+
+@router.get("/{restaurant_slug}/modifier-groups")
+async def list_modifier_groups_route(
+    restaurant_slug: str,
+    access: RestaurantAccessContext = Depends(verify_restaurant_access),
+    db: MenuRepository = Depends(get_db),
+) -> dict[str, object]:
+    rows = await db.list_modifier_groups(access["restaurant_id"])
+    groups = [_library_group_from_row(row) for row in rows]
+    return {"groups": groups}
+
+
+@router.post("/{restaurant_slug}/modifier-groups")
+async def create_modifier_group_route(
+    restaurant_slug: str,
+    payload: ModifierGroupCreatePayload,
+    access: RestaurantAccessContext = Depends(verify_restaurant_access),
+    db: MenuRepository = Depends(get_db),
+) -> dict[str, object]:
+    body = payload.model_dump()
+    body["options"] = [opt.model_dump(exclude_none=True) for opt in payload.options]
+    group_id = await db.create_modifier_group_atomic(
+        access["restaurant_id"],
+        payload.attach_to_item_id,
+        body,
+    )
+    if group_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Could not create modifier group. Check item, options, and migration.",
+        )
+    return {"success": True, "group_id": group_id}
+
+
+@router.patch("/{restaurant_slug}/modifier-groups/{group_id}")
+async def update_modifier_group_route(
+    restaurant_slug: str,
+    group_id: str,
+    payload: ModifierGroupUpdatePayload,
+    access: RestaurantAccessContext = Depends(verify_restaurant_access),
+    db: MenuRepository = Depends(get_db),
+) -> dict[str, object]:
+    body = payload.model_dump()
+    body["options"] = [opt.model_dump(exclude_none=True) for opt in payload.options]
+    updated = await db.update_modifier_group(group_id, access["restaurant_id"], body)
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Modifier group not found.",
+        )
+    return {"success": True, "id": group_id}
+
+
+@router.delete("/{restaurant_slug}/modifier-groups/{group_id}")
+async def delete_modifier_group_route(
+    restaurant_slug: str,
+    group_id: str,
+    access: RestaurantAccessContext = Depends(verify_restaurant_access),
+    db: MenuRepository = Depends(get_db),
+) -> dict[str, object]:
+    result = await db.delete_modifier_group(group_id, access["restaurant_id"])
+    if result == "not_found":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Modifier group not found.",
+        )
+    if result == "attached":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Detach this group from all menu items before deleting.",
+        )
+    return {"success": True, "deleted_id": group_id}
+
+
+@router.post("/{restaurant_slug}/items/{item_id}/modifier-groups/{group_id}")
+async def attach_modifier_group_route(
+    restaurant_slug: str,
+    item_id: str,
+    group_id: str,
+    access: RestaurantAccessContext = Depends(verify_restaurant_access),
+    db: MenuRepository = Depends(get_db),
+) -> dict[str, object]:
+    attached = await db.attach_modifier_group(
+        item_id,
+        group_id,
+        access["restaurant_id"],
+    )
+    if not attached:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Could not attach modifier group. Check item and group ids.",
+        )
+    return {"success": True, "item_id": item_id, "group_id": group_id}
+
+
+@router.delete("/{restaurant_slug}/items/{item_id}/modifier-groups/{group_id}")
+async def detach_modifier_group_route(
+    restaurant_slug: str,
+    item_id: str,
+    group_id: str,
+    access: RestaurantAccessContext = Depends(verify_restaurant_access),
+    db: MenuRepository = Depends(get_db),
+) -> dict[str, object]:
+    detached = await db.detach_modifier_group(
+        item_id,
+        group_id,
+        access["restaurant_id"],
+    )
+    if not detached:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Modifier assignment not found.",
+        )
+    return {"success": True, "item_id": item_id, "group_id": group_id}

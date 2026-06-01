@@ -58,6 +58,10 @@ export function getMenuLoadErrorMessage(error: unknown, locale: Locale): string 
     }
   }
 
+  if (error instanceof TypeError && error.message.toLowerCase().includes("invalid url")) {
+    return getUiMessage("menuNetworkError", locale);
+  }
+
   return getUiMessage("failedToLoadMenu", locale);
 }
 

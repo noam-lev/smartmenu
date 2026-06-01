@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef } from "react";
-import type { CartItem } from "../store/cartStore";
+import type { CartLine } from "../lib/cart";
 import type { Locale } from "../types/menu";
 import { useDraggableSheet } from "../hooks/useDraggableSheet";
 import { useLockBodyScroll } from "../hooks/useLockBodyScroll";
@@ -13,7 +13,7 @@ type CartSummarySheetProps = {
   isOpen: boolean;
   locale: Locale;
   currency?: string;
-  items: CartItem[];
+  items: CartLine[];
   subtotal: number;
   labels: {
     yourOrder: string;
@@ -25,9 +25,9 @@ type CartSummarySheetProps = {
     startOver: string;
   };
   onClose: () => void;
-  onIncrease: (itemId: string) => void;
-  onDecrease: (itemId: string) => void;
-  onRemove: (itemId: string) => void;
+  onIncrease: (lineId: string) => void;
+  onDecrease: (lineId: string) => void;
+  onRemove: (lineId: string) => void;
   onStartOver: () => void;
 };
 
@@ -108,23 +108,35 @@ export default function CartSummarySheet({
         ) : (
           <>
             <div className="flex-1 space-y-3 overflow-y-auto overscroll-contain pr-1">
-              {items.map((item) => (
+              {items.map((line) => (
                 <div
-                  key={item.itemId}
+                  key={line.lineId}
                   className="rounded-2xl border border-zinc-200 p-3"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-zinc-900">
-                        {getLocalizedText(item, "name", locale)}
+                        {getLocalizedText(line, "name", locale)}
                       </p>
-                      <p className="text-xs text-zinc-500">
-                        {formatCurrency(item.displayUnitPrice, currency)} {labels.each}
+                      {line.selections.length > 0 ? (
+                        <ul className="mt-1 space-y-0.5 text-xs text-zinc-500">
+                          {line.selections.map((modifier) => (
+                            <li key={`${modifier.groupId}-${modifier.optionId}`}>
+                              {modifier.optionName}
+                              {modifier.priceDelta > 0
+                                ? ` (+${formatCurrency(modifier.priceDelta, currency)})`
+                                : null}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                      <p className="mt-1 text-xs text-zinc-500">
+                        {formatCurrency(line.unitPrice, currency)} {labels.each}
                       </p>
                     </div>
                     <button
                       type="button"
-                      onClick={() => onRemove(item.itemId)}
+                      onClick={() => onRemove(line.lineId)}
                       className="text-xs font-semibold text-zinc-500 underline underline-offset-2"
                     >
                       {labels.remove}
@@ -135,24 +147,24 @@ export default function CartSummarySheet({
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => onDecrease(item.itemId)}
+                        onClick={() => onDecrease(line.lineId)}
                         className="h-8 w-8 rounded-full border border-zinc-300 text-zinc-900 active:scale-[0.96]"
                       >
                         -
                       </button>
                       <span className="min-w-5 text-center text-sm font-semibold text-zinc-900">
-                        {item.quantity}
+                        {line.quantity}
                       </span>
                       <button
                         type="button"
-                        onClick={() => onIncrease(item.itemId)}
+                        onClick={() => onIncrease(line.lineId)}
                         className="h-8 w-8 rounded-full border border-zinc-300 text-zinc-900 active:scale-[0.96]"
                       >
                         +
                       </button>
                     </div>
                     <p className="text-sm font-semibold text-zinc-900">
-                      {formatCurrency(item.displayUnitPrice * item.quantity, currency)}
+                      {formatCurrency(line.unitPrice * line.quantity, currency)}
                     </p>
                   </div>
                 </div>
