@@ -136,6 +136,11 @@ const uiMessages = {
     modifierRemoveOption: "Remove",
     modifierRemoveOptionAria: "Remove choice",
     modifierCreateGroup: "Create & attach",
+    modifierValidationGroupName:
+      "Enter a group name in Hebrew or English (at least one language).",
+    modifierValidationRules: "Check the requirement rules — minimum cannot be greater than maximum.",
+    modifierValidationOptionName:
+      "Add at least one choice with a name in Hebrew or English.",
     modifierSaving: "Saving…",
     modifierLoadingGroups: "Loading groups…",
     modifierAllGroupsAttached:
@@ -358,6 +363,12 @@ const uiMessages = {
     modifierRemoveOption: "הסר",
     modifierRemoveOptionAria: "הסר אפשרות",
     modifierCreateGroup: "שמור והוסף למנה",
+    modifierValidationGroupName:
+      "הזן שם לקבוצה בעברית או באנגלית (לפחות בשפה אחת).",
+    modifierValidationRules:
+      "בדוק את חוקי הבחירה — המינימום לא יכול להיות גדול מהמקסימום.",
+    modifierValidationOptionName:
+      "הוסף לפחות אפשרות אחת עם שם בעברית או באנגלית.",
     modifierSaving: "שומר…",
     modifierLoadingGroups: "טוען את התוספות שלך…",
     modifierAllGroupsAttached: "כל קבוצות התוספות שיצרת כבר משויכות למנה הזו.",

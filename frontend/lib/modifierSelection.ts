@@ -60,6 +60,17 @@ export function isModifierSelectionValid(
   return true;
 }
 
+/** Items without modifier UI skip validation; items with groups must satisfy min/max. */
+export function canAddItemToOrder(
+  groups: ModifierGroup[],
+  state: ModifierSelectionState,
+): boolean {
+  if (groups.length === 0) {
+    return true;
+  }
+  return isModifierSelectionValid(groups, state);
+}
+
 /** Single-choice group: tap again to clear when optional (min_select === 0). */
 export function toggleRadioOption(
   state: ModifierSelectionState,

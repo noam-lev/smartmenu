@@ -1,5 +1,6 @@
 import type { Locale, ModifierGroupLibrary, TranslationsMap } from "../types/menu";
 import { API_BASE_URL } from "./apiBase";
+import { parseApiErrorBody } from "./menuFetchError";
 import { createClient as createSupabaseBrowserClient } from "../utils/supabase/client";
 
 export type ModifierOptionInput = {
@@ -72,7 +73,11 @@ export async function createModifierGroup(
     },
   );
   if (!response.ok) {
-    throw new Error(`Failed to create modifier group (${response.status})`);
+    const body = await parseApiErrorBody(response);
+    throw new Error(
+      body.detail ??
+        `Failed to create modifier group (${response.status}). If this persists, apply the Supabase migration create_modifier_group_atomic.`,
+    );
   }
   const payload = (await response.json()) as { group_id?: string };
   if (!payload.group_id) {

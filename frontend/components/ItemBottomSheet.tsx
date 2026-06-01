@@ -11,7 +11,7 @@ import {
   buildSelectedModifiers,
   countSelectedInGroup,
   getAvailableOptions,
-  isModifierSelectionValid,
+  canAddItemToOrder,
   isRadioGroup,
   toggleRadioOption,
   toggleCheckboxOption,
@@ -279,7 +279,7 @@ export default function ItemBottomSheet({
   const cartSelections = buildSelectedModifiers(modifierGroups, modifierSelection);
   const unitPrice = computeUnitPrice(variantPrice, cartSelections);
   const orderTotal = computeLineTotal(unitPrice, quantity);
-  const canAdd = isModifierSelectionValid(modifierGroups, modifierSelection);
+  const canAdd = canAddItemToOrder(modifierGroups, modifierSelection);
 
   const handlePrimaryClick = () => {
     if (!canAdd) {

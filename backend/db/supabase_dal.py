@@ -1145,16 +1145,96 @@ class SupabaseDAL(MenuRepository):
                     "p_options": options_json,
                 },
             ).execute()
-        except APIError:
-            logger.exception("create_modifier_group_atomic RPC failed")
+            raw = response.data
+            if isinstance(raw, str):
+                return raw
+            if raw is not None:
+                return str(raw)
+            return None
+        except APIError as error:
+            logger.warning(
+                "create_modifier_group_atomic RPC failed; trying sequential insert (%s)",
+                error,
+            )
+            return self._create_modifier_group_sequential(
+                restaurant_id,
+                attach_to_item_id,
+                name,
+                fields.get("translations") or {},
+                selection_mode,
+                min_select,
+                max_select,
+                options_json,
+            )
+
+    def _create_modifier_group_sequential(
+        self,
+        restaurant_id: str,
+        attach_to_item_id: str,
+        name: str,
+        translations: dict[str, Any],
+        selection_mode: str,
+        min_select: int,
+        max_select: int,
+        options_json: list[dict[str, Any]],
+    ) -> str | None:
+        """Fallback when RPC migration is not applied yet."""
+        group_row = {
+            "restaurant_id": restaurant_id,
+            "name": name,
+            "translations": translations,
+            "selection_mode": selection_mode,
+            "min_select": min_select,
+            "max_select": max_select,
+            "sort_order": 0,
+        }
+        inserted_group = (
+            self._client.table("modifier_groups").insert(group_row).execute()
+        )
+        group = _first(inserted_group.data or [])
+        if group is None:
+            return None
+        group_id = str(group.get("id") or "")
+        if not group_id:
             return None
 
-        raw = response.data
-        if isinstance(raw, str):
-            return raw
-        if raw is not None:
-            return str(raw)
-        return None
+        for opt in options_json:
+            opt_row = {
+                "modifier_group_id": group_id,
+                "name": opt["name"],
+                "translations": opt.get("translations") or {},
+                "price_delta": opt.get("price_delta", 0),
+                "is_default": opt.get("is_default", False),
+                "is_available": opt.get("is_available", True),
+                "sort_order": int(opt.get("sort_order") or 0),
+            }
+            self._client.table("modifier_options").insert(opt_row).execute()
+
+        sort_response = (
+            self._client.table("menu_item_modifier_groups")
+            .select("sort_order")
+            .eq("menu_item_id", attach_to_item_id)
+            .order("sort_order", desc=True)
+            .limit(1)
+            .execute()
+        )
+        top = _first(sort_response.data or [])
+        next_sort = int(top.get("sort_order") or -1) + 1 if top else 0
+
+        link = (
+            self._client.table("menu_item_modifier_groups")
+            .insert(
+                {
+                    "menu_item_id": attach_to_item_id,
+                    "modifier_group_id": group_id,
+                    "sort_order": next_sort,
+                }
+            )
+            .execute()
+        )
+        if not link.data:
+            return None
+        return group_id
 
     def _attach_modifier_group_sync(
         self,

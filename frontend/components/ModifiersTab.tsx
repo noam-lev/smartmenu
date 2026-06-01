@@ -83,6 +83,56 @@ function draftFromGroup(
   };
 }
 
+type GroupDraftValidationKey =
+  | "modifierValidationGroupName"
+  | "modifierValidationRules"
+  | "modifierValidationOptionName";
+
+function getGroupDraftValidationKey(
+  draft: GroupDraft,
+  defaultLocale: Locale,
+): GroupDraftValidationKey | null {
+  const groupNames = buildModifierNamePayload(
+    draft.nameHe,
+    draft.nameEn,
+    defaultLocale,
+  );
+  if (!groupNames.name) {
+    return "modifierValidationGroupName";
+  }
+
+  const minSelect = Number(draft.minSelect);
+  const maxSelect = Number(draft.maxSelect);
+  if (
+    !Number.isFinite(minSelect) ||
+    !Number.isFinite(maxSelect) ||
+    minSelect < 0 ||
+    maxSelect < 0 ||
+    maxSelect < minSelect
+  ) {
+    return "modifierValidationRules";
+  }
+
+  let validOptionCount = 0;
+  for (const row of draft.options) {
+    const built = buildModifierNamePayload(row.nameHe, row.nameEn, defaultLocale);
+    if (!built.name) {
+      continue;
+    }
+    const priceDelta = Number(row.priceDelta);
+    if (!Number.isFinite(priceDelta)) {
+      return "modifierValidationRules";
+    }
+    validOptionCount += 1;
+  }
+
+  if (validOptionCount < 1) {
+    return "modifierValidationOptionName";
+  }
+
+  return null;
+}
+
 function draftToPayload(
   draft: GroupDraft,
   defaultLocale: Locale,
@@ -625,7 +675,23 @@ export default function ModifiersTab({
     }
   };
 
+  const showDraftValidationError = (draft: GroupDraft) => {
+    const key = getGroupDraftValidationKey(draft, restaurantDefaultLocale);
+    if (!key) {
+      return false;
+    }
+    void alert({
+      title: getUiMessage("dialogErrorTitle", locale),
+      message: getUiMessage(key, locale),
+      dismissLabel: getUiMessage("dialogDismiss", locale),
+    });
+    return true;
+  };
+
   const handleCreate = async () => {
+    if (showDraftValidationError(createDraft)) {
+      return;
+    }
     const payload = draftToPayload(createDraft, restaurantDefaultLocale);
     if (!payload) {
       return;
@@ -667,6 +733,9 @@ export default function ModifiersTab({
 
   const handleSaveEdit = async () => {
     if (!editingGroupId) {
+      return;
+    }
+    if (showDraftValidationError(editDraft)) {
       return;
     }
     const payload = draftToPayload(editDraft, restaurantDefaultLocale);
