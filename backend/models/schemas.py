@@ -225,6 +225,7 @@ class MenuItemCreateRequest(BaseModel):
     description: str | None = None
     image_url: str | None = None
     dietary_icons: list[str] = Field(default_factory=list)
+    translations: dict[str, Any] | None = None
 
     @field_validator("dietary_icons")
     @classmethod

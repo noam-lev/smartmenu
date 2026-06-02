@@ -421,6 +421,9 @@ export async function createMenuItem(
       body.dietary_icons = icons;
     }
   }
+  if (data.translations && Object.keys(data.translations).length > 0) {
+    body.translations = data.translations;
+  }
 
   const response = await fetch(
     `${API_BASE_URL}/api/owner/${encodeURIComponent(restaurantSlug)}/categories/${encodeURIComponent(categoryId)}/items`,

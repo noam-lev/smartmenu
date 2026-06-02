@@ -5,6 +5,7 @@ import { useShallow } from "zustand/react/shallow";
 import { CircleUser, LogOut } from "lucide-react";
 import CartSummarySheet from "../components/CartSummarySheet";
 import { CategorySectionHeader } from "../components/CategorySectionHeader";
+import LanguageMenu from "../components/LanguageMenu";
 import OwnerDrawer from "../components/diner/OwnerDrawer";
 import OwnerMenuButton from "../components/diner/OwnerMenuButton";
 import ItemBottomSheet from "../components/ItemBottomSheet";
@@ -27,8 +28,6 @@ import {
   getLocalizedText,
   getUiMessage,
   isRtlLocale,
-  localeFlagSrc,
-  otherLocale,
 } from "../utils/i18n";
 
 type DinerPageProps = {
@@ -41,7 +40,7 @@ export function TenantDinerPage({
   initialUserId = null,
 }: DinerPageProps) {
   const [activeCategoryId, setActiveCategoryId] = useState("");
-  const { locale, setLocale, isRtl } = useTenantLocale();
+  const { locale, setLocale, isRtl, supportedLocales } = useTenantLocale();
   const handleMenuLoaded = useCallback((data: SlimMenuPayload) => {
     const sortedCategories = [...data.menu.categories].sort(
       (a, b) => a.sort_order - b.sort_order,
@@ -75,14 +74,12 @@ export function TenantDinerPage({
   const [activeUpsellRule, setActiveUpsellRule] = useState<UpsellRule | null>(null);
   const [isCartSheetOpen, setIsCartSheetOpen] = useState(false);
   const [cartSheetSession, setCartSheetSession] = useState(0);
-  const [isLanguageMenuOpen, setIsLanguageMenuOpen] = useState(false);
   const [isOwnerDrawerOpen, setIsOwnerDrawerOpen] = useState(false);
   const [menuPayloadState, setMenuPayloadState] = useState(menuPayload);
 
   useEffect(() => {
     setMenuPayloadState(menuPayload);
   }, [menuPayload]);
-  const languageMenuRef = useRef<HTMLDivElement | null>(null);
 
   const { userId } = useAuthUser(initialUserId);
   const { restaurants, isLoading: isOwnerLoading } = useOwnerRestaurants(userId, restaurantSlug);
@@ -234,21 +231,6 @@ export function TenantDinerPage({
     return () => observer.disconnect();
   }, [categories]);
 
-  useEffect(() => {
-    if (!isLanguageMenuOpen) {
-      return;
-    }
-
-    const handleOutsideClick = (event: MouseEvent) => {
-      if (!languageMenuRef.current?.contains(event.target as Node)) {
-        setIsLanguageMenuOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handleOutsideClick);
-    return () => document.removeEventListener("mousedown", handleOutsideClick);
-  }, [isLanguageMenuOpen]);
-
   const handlePrimaryAdd = (selections: SelectedModifier[]) => {
     if (!selectedItem) {
       return;
@@ -385,55 +367,11 @@ export function TenantDinerPage({
                 {restaurantName}
               </h1>
               <div className="flex shrink-0 items-center gap-2">
-              <div className="relative" ref={languageMenuRef}>
-                <button
-                  type="button"
-                  onClick={() => setIsLanguageMenuOpen((open) => !open)}
-                  aria-haspopup="menu"
-                  aria-expanded={isLanguageMenuOpen}
-                  aria-label={getUiMessage("selectLanguage", locale)}
-                  className="inline-flex items-center gap-1 rounded-full border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 shadow-sm"
-                >
-                  <img
-                    src={localeFlagSrc[locale]}
-                    alt=""
-                    className="h-4 w-[1.375rem] rounded-[2px] object-cover"
-                    aria-hidden
-                  />
-                  <span className="text-[10px] text-zinc-500">▾</span>
-                </button>
-
-                {isLanguageMenuOpen ? (
-                  <div
-                    role="menu"
-                    className={`absolute z-30 mt-2 rounded-xl border border-zinc-200 bg-white p-1 shadow-lg ${
-                      isRtl ? "left-0" : "right-0"
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      role="menuitem"
-                      aria-label={getUiMessage(
-                        otherLocale(locale) === "he"
-                          ? "languageHebrew"
-                          : "languageEnglish",
-                        locale,
-                      )}
-                      onClick={() => {
-                        setLocale(otherLocale(locale));
-                        setIsLanguageMenuOpen(false);
-                      }}
-                      className="flex w-full justify-center rounded-lg px-3 py-2 hover:bg-zinc-100"
-                    >
-                      <img
-                        src={localeFlagSrc[otherLocale(locale)]}
-                        alt=""
-                        className="h-4 w-[1.375rem] rounded-[2px] object-cover"
-                      />
-                    </button>
-                  </div>
-                ) : null}
-              </div>
+              <LanguageMenu
+                locale={locale}
+                supportedLocales={supportedLocales}
+                onLocaleChange={setLocale}
+              />
               {hasMounted ? (
                 userId ? (
                   hasRestaurants ? (

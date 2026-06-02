@@ -15,6 +15,13 @@ import {
 import { deleteOwnerImage, uploadOwnerImage } from "../lib/menuApi";
 import { hasRenderableImage } from "../utils/media";
 import { useLockBodyScroll } from "../hooks/useLockBodyScroll";
+import ItemTranslationsTab from "./ItemTranslationsTab";
+import {
+  buildItemTranslationsPatch,
+  mergeItemTranslationPatches,
+  readItemTranslationFields,
+  type ItemTranslationFields,
+} from "../lib/itemTranslations";
 
 type EditTabId = "general" | "translations" | "upsells" | "modifiers";
 
@@ -52,6 +59,7 @@ export type EditItemDrawerProps = {
   categoryId?: string | null;
   /** Canonical locale stored in DB `name` / `description`; other locales live under `translations`. */
   restaurantDefaultLocale?: Locale;
+  supportedLocales?: Locale[];
   /** Flat list of menu items (e.g. for upsell offer picker). */
   allMenuItems?: MenuItem[];
   /** Reload menu from API after upsell mutations (keeps drawer item in sync). */
@@ -162,6 +170,7 @@ export default function EditItemDrawer({
   item,
   categoryId = null,
   restaurantDefaultLocale = "en",
+  supportedLocales = ["en", "he"],
   allMenuItems = [],
   onRefreshMenu,
   isOpen,
@@ -183,6 +192,7 @@ export default function EditItemDrawer({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [selectedDietaryIcons, setSelectedDietaryIcons] = useState<DietaryIconId[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [translationFields, setTranslationFields] = useState<ItemTranslationFields>({});
 
   useLockBodyScroll(isOpen);
 
@@ -203,6 +213,7 @@ export default function EditItemDrawer({
       setIsImageUploading(false);
       setIsImageRemoving(false);
       setSelectedDietaryIcons([]);
+      setTranslationFields(readItemTranslationFields(null, supportedLocales, restaurantDefaultLocale));
       return;
     }
 
@@ -214,7 +225,21 @@ export default function EditItemDrawer({
     setIsImageUploading(false);
     setIsImageRemoving(false);
     setSelectedDietaryIcons(parseDietaryIcons(item.metadata));
-  }, [isOpen, item, locale, isCreateMode]);
+    setTranslationFields(
+      readItemTranslationFields(item, supportedLocales, restaurantDefaultLocale),
+    );
+  }, [isOpen, item, locale, isCreateMode, supportedLocales, restaurantDefaultLocale]);
+
+  // Keep Translations tab in sync with General fields for the active UI locale.
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+    setTranslationFields((prev) => ({
+      ...prev,
+      [locale]: { name, description },
+    }));
+  }, [isOpen, locale, name, description]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -262,7 +287,7 @@ export default function EditItemDrawer({
       return;
     }
 
-    const patch = buildPatchFromForm(
+    const generalPatch = buildPatchFromForm(
       item,
       locale,
       restaurantDefaultLocale,
@@ -271,6 +296,24 @@ export default function EditItemDrawer({
       parsedPrice,
       imageUrl,
       selectedDietaryIcons,
+    );
+    const translationPatch = buildItemTranslationsPatch(
+      translationFields,
+      supportedLocales,
+      restaurantDefaultLocale,
+    );
+    const patch = mergeItemTranslationPatches(
+      item
+        ? generalPatch
+        : {
+            ...generalPatch,
+            translations: {
+              [locale]: { name: trimmedName, description },
+            },
+          },
+      translationPatch,
+      locale,
+      restaurantDefaultLocale,
     );
 
     setIsSaving(true);
@@ -519,9 +562,37 @@ export default function EditItemDrawer({
             ) : null}
 
             {activeTab === "translations" ? (
-              <p className="text-sm text-zinc-500">
-                {getUiMessage("translationsComingSoon", locale)}
-              </p>
+              <ItemTranslationsTab
+                supportedLocales={supportedLocales}
+                defaultLocale={restaurantDefaultLocale}
+                fields={translationFields}
+                uiLocale={locale}
+                disabled={isSaving}
+                onChange={(code, patch) => {
+                  setTranslationFields((prev) => ({
+                    ...prev,
+                    [code]: {
+                      ...(prev[code] ?? { name: "", description: "" }),
+                      ...patch,
+                    },
+                  }));
+                }}
+                onCopyFromDefault={(code) => {
+                  setTranslationFields((prev) => {
+                    const source = prev[restaurantDefaultLocale] ?? {
+                      name: "",
+                      description: "",
+                    };
+                    return {
+                      ...prev,
+                      [code]: {
+                        name: source.name,
+                        description: source.description,
+                      },
+                    };
+                  });
+                }}
+              />
             ) : null}
 
             {activeTab === "modifiers" && !item ? (

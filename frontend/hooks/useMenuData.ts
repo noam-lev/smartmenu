@@ -40,7 +40,7 @@ export function useMenuData(restaurantSlug: string, options?: UseMenuDataOptions
         }
 
         setMenuPayload(data);
-        applyServerDefaultLocale(data.restaurant.default_locale);
+        applyServerDefaultLocale(data.restaurant.default_locale, data.restaurant.settings);
         onMenuLoaded?.(data);
       } catch (error) {
         if (!isMounted) {
