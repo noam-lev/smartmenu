@@ -67,6 +67,10 @@ import {
   otherLocale,
 } from "../utils/i18n";
 import { mergeRestaurantSettingsIntoPayload } from "../lib/mergeRestaurantSettings";
+import {
+  CategoryHeaderBar,
+  CategoryHeaderTitle,
+} from "../components/CategorySectionHeader";
 import { hasRenderableImage } from "../utils/media";
 
 type AdminMenuPageProps = {
@@ -439,17 +443,35 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
   const mergeCategoryOptimistic = (
     category: MenuCategory,
     defaultLocale: Locale,
-    payload: { name: string; locale: Locale; translations: MenuCategory["translations"] },
-  ): MenuCategory => ({
-    ...category,
-    name: payload.locale === defaultLocale ? payload.name : category.name,
-    translations: payload.translations,
-  });
+    payload: {
+      name: string;
+      locale: Locale;
+      translations: MenuCategory["translations"];
+      header_color: string | null;
+      nameChanged: boolean;
+    },
+  ): MenuCategory => {
+    if (!payload.nameChanged) {
+      return {
+        ...category,
+        header_color: payload.header_color,
+      };
+    }
+
+    return {
+      ...category,
+      name: payload.locale === defaultLocale ? payload.name : category.name,
+      translations: payload.translations,
+      header_color: payload.header_color,
+    };
+  };
 
   const handleSaveCategory = async (payload: {
     name: string;
     locale: Locale;
     translations: MenuCategory["translations"];
+    header_color: string | null;
+    nameChanged: boolean;
   }) => {
     if (!menuPayload) {
       return;
@@ -468,6 +490,7 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
         id: tempId,
         name: payload.name,
         sort_order: nextSort,
+        header_color: payload.header_color,
         translations: payload.translations,
         items: [],
       };
@@ -486,6 +509,7 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
           restaurantSlug,
           name: payload.name,
           locale: payload.locale,
+          header_color: payload.header_color,
         });
         setMenuPayload((prev) => {
           if (!prev) {
@@ -536,7 +560,12 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
     });
 
     try {
-      const updated = await updateCategory(restaurantSlug, categoryId, payload.locale, { name: payload.name });
+      const updated = await updateCategory(restaurantSlug, categoryId, {
+        ...(payload.nameChanged
+          ? { name: payload.name, locale: payload.locale }
+          : {}),
+        header_color: payload.header_color,
+      });
       setMenuPayload((prev) => {
         if (!prev) {
           return prev;
@@ -549,9 +578,14 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
               c.id === categoryId
                 ? {
                     ...c,
-                    name: updated.name,
+                    ...(payload.nameChanged
+                      ? {
+                          name: updated.name,
+                          translations: updated.translations,
+                        }
+                      : {}),
                     sort_order: updated.sort_order,
-                    translations: updated.translations,
+                    header_color: updated.header_color ?? payload.header_color,
                   }
                 : c,
             ),
@@ -562,9 +596,14 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
         prev && prev.id === categoryId
           ? {
               ...prev,
-              name: updated.name,
+              ...(payload.nameChanged
+                ? {
+                    name: updated.name,
+                    translations: updated.translations,
+                  }
+                : {}),
               sort_order: updated.sort_order,
-              translations: updated.translations,
+              header_color: updated.header_color ?? payload.header_color,
             }
           : prev,
       );
@@ -1283,7 +1322,7 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
                           }}
                           data-category-id={category.id}
                         >
-                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 px-4 py-3">
+                          <CategoryHeaderBar headerColor={category.header_color}>
                             <div className="flex min-w-0 flex-1 items-center gap-2">
                               <button
                                 type="button"
@@ -1294,9 +1333,9 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
                               >
                                 <GripVertical className="h-4 w-4" strokeWidth={2} aria-hidden />
                               </button>
-                              <h2 className="min-w-0 truncate text-base font-bold text-zinc-900">
+                              <CategoryHeaderTitle headerColor={category.header_color}>
                                 {getLocalizedText(category, "name", locale)}
-                              </h2>
+                              </CategoryHeaderTitle>
                               <button
                                 type="button"
                                 onClick={() => handleEditCategoryClick(category)}
@@ -1364,7 +1403,7 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
                             >
                               {getUiMessage("addItem", locale)}
                             </button>
-                          </div>
+                          </CategoryHeaderBar>
                           <SortableItemList
                             items={category.items}
                             onReorder={(next) => void handleReorderItems(category.id, next)}

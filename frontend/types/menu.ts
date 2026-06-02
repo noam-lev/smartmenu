@@ -72,6 +72,7 @@ export type MenuCategory = {
   id: string;
   name: string;
   sort_order: number;
+  header_color?: string | null;
   translations?: TranslationsMap;
   items: MenuItem[];
 };

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { useShallow } from "zustand/react/shallow";
 import { CircleUser, LogOut } from "lucide-react";
 import CartSummarySheet from "../components/CartSummarySheet";
+import { CategorySectionHeader } from "../components/CategorySectionHeader";
 import OwnerDrawer from "../components/diner/OwnerDrawer";
 import OwnerMenuButton from "../components/diner/OwnerMenuButton";
 import ItemBottomSheet from "../components/ItemBottomSheet";
@@ -496,9 +497,9 @@ export function TenantDinerPage({
               }}
               data-category-id={category.id}
             >
-              <h2 className="border-b border-zinc-200 px-4 py-3 text-base font-bold text-zinc-900">
+              <CategorySectionHeader headerColor={category.header_color}>
                 {getLocalizedText(category, "name", locale)}
-              </h2>
+              </CategorySectionHeader>
               {category.items.map((item) => (
                 <MenuItemCard
                   key={item.id}

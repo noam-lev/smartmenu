@@ -144,10 +144,13 @@ class MenuRepository(ABC):
         self,
         category_id: str,
         restaurant_id: str,
-        locale: str,
-        name: str,
+        locale: str | None = None,
+        name: str | None = None,
+        header_color: str | None = None,
+        *,
+        update_header_color: bool = False,
     ) -> dict[str, Any] | None:
-        """Merge name for locale into translations; sync base name when locale is default."""
+        """Merge name for locale; optionally update header_color (None clears)."""
         raise NotImplementedError
 
     @abstractmethod

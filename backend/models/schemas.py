@@ -1,6 +1,6 @@
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class RestaurantResponse(BaseModel):
@@ -91,6 +91,7 @@ class CategoryResponse(BaseModel):
     id: str
     name: str
     sort_order: int
+    header_color: str | None = None
     translations: dict[str, Any] | None = None
     items: list[MenuItemResponse] = Field(default_factory=list)
 
@@ -113,6 +114,7 @@ class CategoryCreateRequest(BaseModel):
 
     name: str
     locale: str = Field(..., min_length=2, max_length=2)
+    header_color: str | None = None
 
     @field_validator("name")
     @classmethod
@@ -129,6 +131,64 @@ class CategoryCreateRequest(BaseModel):
         if low not in ("en", "he"):
             raise ValueError("locale must be 'en' or 'he'.")
         return low
+
+    @field_validator("header_color")
+    @classmethod
+    def validate_header_color(cls, value: str | None) -> str | None:
+        from core.colors import normalize_hex_color
+
+        if value is None:
+            return None
+        normalized = normalize_hex_color(value)
+        if normalized is None:
+            raise ValueError("header_color must be a valid #RGB or #RRGGBB hex value.")
+        return normalized
+
+
+class CategoryPatchRequest(BaseModel):
+    """Patch category display name (one locale) and/or header color."""
+
+    name: str | None = None
+    locale: str | None = Field(default=None, min_length=2, max_length=2)
+    header_color: str | None = None
+
+    @field_validator("name")
+    @classmethod
+    def normalize_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("Name must not be empty.")
+        return stripped
+
+    @field_validator("locale")
+    @classmethod
+    def normalize_locale(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        low = value.strip().lower()
+        if low not in ("en", "he"):
+            raise ValueError("locale must be 'en' or 'he'.")
+        return low
+
+    @field_validator("header_color")
+    @classmethod
+    def validate_header_color(cls, value: str | None) -> str | None:
+        from core.colors import normalize_hex_color
+
+        if value is None:
+            return None
+        normalized = normalize_hex_color(value)
+        if normalized is None:
+            raise ValueError("header_color must be a valid #RGB or #RRGGBB hex value.")
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_patch_fields(self) -> "CategoryPatchRequest":
+        if self.name is not None and self.locale is None:
+            raise ValueError("locale is required when name is provided.")
+        return self
 
 
 class LocalizedNameUpdateRequest(BaseModel):
@@ -154,7 +214,6 @@ class LocalizedNameUpdateRequest(BaseModel):
         return low
 
 
-CategoryUpdateRequest = LocalizedNameUpdateRequest
 MenuUpdateRequest = LocalizedNameUpdateRequest
 
 

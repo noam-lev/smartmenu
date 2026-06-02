@@ -18,7 +18,7 @@ from core.social_links import SOCIAL_PLATFORMS, SocialLinksValidationError
 from core.exceptions import MenuNotFoundError
 from models.schemas import (
     CategoryCreateRequest,
-    CategoryUpdateRequest,
+    CategoryPatchRequest,
     ItemReorderRequest,
     MenuItemCreateRequest,
     MenuPayload,
@@ -335,15 +335,17 @@ async def create_category(
 async def patch_category(
     restaurant_slug: str,
     category_id: str,
-    payload: CategoryUpdateRequest,
+    payload: CategoryPatchRequest,
     access: RestaurantAccessContext = Depends(verify_restaurant_access),
     db: MenuRepository = Depends(get_db),
 ) -> dict[str, object]:
     updated = await db.update_category(
         category_id,
         access["restaurant_id"],
-        payload.locale,
-        payload.name,
+        locale=payload.locale,
+        name=payload.name,
+        header_color=payload.header_color,
+        update_header_color="header_color" in payload.model_fields_set,
     )
     if updated is None:
         raise HTTPException(

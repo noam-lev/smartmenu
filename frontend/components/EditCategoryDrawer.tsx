@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { Locale, MenuCategory, TranslationsMap } from "../types/menu";
-import { useUiStore } from "../store/uiStore";
-import { getLocalizedText, getUiMessage, isRtlLocale } from "../utils/i18n";
+import { useTenantLocale } from "../context/TenantLocaleContext";
+import CategoryColorPicker from "./CategoryColorPicker";
 import { useLockBodyScroll } from "../hooks/useLockBodyScroll";
+import { getLocalizedText, getUiMessage } from "../utils/i18n";
 
 function looksLikeEnglishBucketText(value: string): boolean {
   const t = value.trim();
@@ -33,6 +34,9 @@ export type CategorySavePayload = {
   name: string;
   locale: Locale;
   translations: TranslationsMap;
+  header_color: string | null;
+  /** False when the user only changed header color — avoids overwriting translations. */
+  nameChanged: boolean;
 };
 
 function buildCategorySavePayload(
@@ -40,6 +44,8 @@ function buildCategorySavePayload(
   locale: Locale,
   restaurantDefaultLocale: Locale,
   name: string,
+  header_color: string | null,
+  nameChanged: boolean,
 ): CategorySavePayload {
   const trimmed = name.trim();
 
@@ -48,6 +54,18 @@ function buildCategorySavePayload(
       name: trimmed,
       locale,
       translations: { [locale]: { name: trimmed } },
+      header_color,
+      nameChanged: true,
+    };
+  }
+
+  if (!nameChanged) {
+    return {
+      name: trimmed,
+      locale,
+      translations: category.translations ?? {},
+      header_color,
+      nameChanged: false,
     };
   }
 
@@ -84,6 +102,8 @@ function buildCategorySavePayload(
     name: trimmed,
     locale,
     translations: nextTranslations,
+    header_color,
+    nameChanged: true,
   };
 }
 
@@ -102,12 +122,13 @@ export default function EditCategoryDrawer({
   onClose,
   onSave,
 }: EditCategoryDrawerProps) {
-  const locale = useUiStore((state) => state.locale);
-  const isRtl = isRtlLocale(locale);
+  const { locale, isRtl } = useTenantLocale();
   const isCreateMode = !category;
 
   const [name, setName] = useState("");
+  const [headerColor, setHeaderColor] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const initialNameRef = useRef("");
 
   useLockBodyScroll(isOpen);
 
@@ -120,10 +141,15 @@ export default function EditCategoryDrawer({
 
     if (isCreateMode) {
       setName("");
+      setHeaderColor(null);
+      initialNameRef.current = "";
       return;
     }
 
-    setName(getLocalizedText(category, "name", locale));
+    const initialName = getLocalizedText(category, "name", locale);
+    setName(initialName);
+    initialNameRef.current = initialName;
+    setHeaderColor(category.header_color ?? null);
   }, [isOpen, category, locale, isCreateMode]);
 
   useEffect(() => {
@@ -155,11 +181,14 @@ export default function EditCategoryDrawer({
       return;
     }
 
+    const nameChanged = trimmed !== initialNameRef.current.trim();
     const payload = buildCategorySavePayload(
       category,
       locale,
       restaurantDefaultLocale,
       trimmed,
+      headerColor,
+      nameChanged,
     );
 
     setIsSaving(true);
@@ -239,6 +268,14 @@ export default function EditCategoryDrawer({
                 className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none focus:border-zinc-400"
               />
             </div>
+
+            <CategoryColorPicker
+              locale={locale}
+              value={headerColor}
+              onChange={setHeaderColor}
+              previewLabel={name.trim() || getUiMessage("categoryNameLabel", locale)}
+              disabled={isSaving}
+            />
           </div>
 
           <div className="sticky bottom-0 shrink-0 border-t border-zinc-200 bg-white px-4 py-3 shadow-[0_-4px_12px_rgba(0,0,0,0.04)]">

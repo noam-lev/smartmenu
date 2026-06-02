@@ -79,6 +79,7 @@ _MENU_SELECT = """
                     categories(
                         id,
                         name,
+                        header_color,
                         translations,
                         sort_order,
                         is_visible,
@@ -108,6 +109,11 @@ _MENU_SELECT = """
                 )
                 """
 
+_MENU_SELECT_LEGACY = _MENU_SELECT.replace("                        header_color,\n", "")
+
+_HEADER_COLOR_MISSING = "header_color"
+
+from core.colors import normalize_hex_color
 from core.dietary_icons import merge_dietary_icons_into_metadata
 from core.menu_lookup import (
     MENU_NOT_PUBLISHABLE,
@@ -131,8 +137,43 @@ from models.schemas import (
 
 
 class SupabaseDAL(MenuRepository):
+    _categories_header_color_supported: bool | None = None
+
     def __init__(self, client: Client) -> None:
         self._client = client
+
+    @classmethod
+    def _header_color_api_error(cls, error: APIError) -> bool:
+        payload = error.args[0] if error.args else {}
+        if isinstance(payload, dict):
+            message = str(payload.get("message") or "")
+            code = str(payload.get("code") or "")
+            return code == "42703" and _HEADER_COLOR_MISSING in message
+        return _HEADER_COLOR_MISSING in str(error)
+
+    def _probe_categories_header_color_support(self) -> bool:
+        if SupabaseDAL._categories_header_color_supported is True:
+            return True
+
+        try:
+            (
+                self._client.table("categories")
+                .select("header_color")
+                .limit(1)
+                .execute()
+            )
+            SupabaseDAL._categories_header_color_supported = True
+        except APIError as error:
+            if self._header_color_api_error(error):
+                logger.warning(
+                    "categories.header_color column missing; apply migration "
+                    "20260602120000_category_header_color.sql in Supabase."
+                )
+                SupabaseDAL._categories_header_color_supported = False
+                return False
+            raise
+
+        return True
 
     async def get_fat_menu_by_slug(self, slug: str) -> MenuPayload | None:
         response_data = await asyncio.to_thread(self._fetch_restaurant_menu, slug)
@@ -348,15 +389,20 @@ class SupabaseDAL(MenuRepository):
         self,
         category_id: str,
         restaurant_id: str,
-        locale: str,
-        name: str,
+        locale: str | None = None,
+        name: str | None = None,
+        header_color: str | None = None,
+        *,
+        update_header_color: bool = False,
     ) -> dict[str, Any] | None:
         return await asyncio.to_thread(
-            self._patch_category_name_sync,
+            self._patch_category_sync,
             category_id,
             restaurant_id,
             locale,
-            name.strip(),
+            name.strip() if isinstance(name, str) else None,
+            header_color,
+            update_header_color,
         )
 
     async def update_active_menu_name(
@@ -489,18 +535,36 @@ class SupabaseDAL(MenuRepository):
         slug: str,
         select_graph: str,
     ) -> list[dict[str, Any]]:
-        response = (
-            self._client.table("restaurants")
-            .select(select_graph)
-            .eq("slug", slug.lower())
-            .eq("is_active", True)
-            .eq("menus.is_active", True)
-            .eq("menus.categories.is_visible", True)
-            .eq("menus.categories.menu_items.is_visible", True)
-            .limit(1)
-            .execute()
-        )
-        return response.data or []
+        try:
+            response = (
+                self._client.table("restaurants")
+                .select(select_graph)
+                .eq("slug", slug.lower())
+                .eq("is_active", True)
+                .eq("menus.is_active", True)
+                .eq("menus.categories.is_visible", True)
+                .eq("menus.categories.menu_items.is_visible", True)
+                .limit(1)
+                .execute()
+            )
+            if select_graph is _MENU_SELECT:
+                SupabaseDAL._categories_header_color_supported = True
+            return response.data or []
+        except APIError as error:
+            if (
+                self._header_color_api_error(error)
+                and select_graph is _MENU_SELECT
+            ):
+                SupabaseDAL._categories_header_color_supported = False
+                logger.warning(
+                    "Retrying menu fetch without categories.header_color "
+                    "(run migration 20260602120000_category_header_color.sql)."
+                )
+                return self._execute_restaurant_menu_query(slug, _MENU_SELECT_LEGACY)
+            raise
+
+    def _fetch_restaurant_menu(self, slug: str) -> list[dict[str, Any]]:
+        return self._execute_restaurant_menu_query(slug, _MENU_SELECT)
 
     def _fetch_modifier_assignments_by_item_ids(
         self,
@@ -550,9 +614,6 @@ class SupabaseDAL(MenuRepository):
                     error,
                 )
         return []
-
-    def _fetch_restaurant_menu(self, slug: str) -> list[dict[str, Any]]:
-        return self._execute_restaurant_menu_query(slug, _MENU_SELECT)
 
     def _patch_restaurant_settings_sync(
         self,
@@ -1521,6 +1582,8 @@ class SupabaseDAL(MenuRepository):
         default_locale = self._restaurant_default_locale(restaurant_id)
         translations: dict[str, Any] = {locale: {"name": name}}
 
+        header_color = normalize_hex_color(fields.get("header_color"))
+
         row = {
             "menu_id": menu_id,
             "name": name,
@@ -1528,19 +1591,26 @@ class SupabaseDAL(MenuRepository):
             "is_visible": True,
             "translations": translations,
         }
-        response = self._client.table("categories").insert(row).execute()
+        if self._probe_categories_header_color_support():
+            row["header_color"] = header_color
+
+        try:
+            response = self._client.table("categories").insert(row).execute()
+        except APIError as error:
+            if self._header_color_api_error(error) and "header_color" in row:
+                SupabaseDAL._categories_header_color_supported = False
+                row.pop("header_color", None)
+                response = self._client.table("categories").insert(row).execute()
+            else:
+                raise
         inserted = _first(response.data or [])
         if inserted is None:
             return None
         cid = str(inserted.get("id") or "")
         if not cid:
             return None
-        return {
-            "id": cid,
-            "name": str(inserted.get("name") or ""),
-            "sort_order": int(inserted.get("sort_order") or 0),
-            "translations": _as_optional_dict(inserted.get("translations")),
-        }
+        self._bump_active_menus_updated_at_sync(restaurant_id)
+        return self._category_owner_snapshot(inserted)
 
     def _patch_localized_name_sync(
         self,
@@ -1590,30 +1660,118 @@ class SupabaseDAL(MenuRepository):
             return None
         return shape(updated)
 
-    def _patch_category_name_sync(
+    def _category_owner_snapshot(self, row: dict[str, Any]) -> dict[str, Any]:
+        raw_color = row.get("header_color")
+        header_color = normalize_hex_color(str(raw_color)) if raw_color else None
+        return {
+            "id": str(row.get("id") or ""),
+            "name": str(row.get("name") or ""),
+            "sort_order": int(row.get("sort_order") or 0),
+            "header_color": header_color,
+            "translations": _as_optional_dict(row.get("translations")),
+        }
+
+    def _bump_active_menus_updated_at_sync(self, restaurant_id: str) -> None:
+        try:
+            self._client.rpc(
+                "bump_active_menus_updated_at",
+                {"p_restaurant_id": restaurant_id},
+            ).execute()
+        except APIError:
+            self._client.table("menus").update({"updated_at": "now()"}).eq(
+                "restaurant_id",
+                restaurant_id,
+            ).eq("is_active", True).execute()
+
+    def _patch_category_sync(
         self,
         category_id: str,
         restaurant_id: str,
-        locale: str,
-        name: str,
+        locale: str | None,
+        name: str | None,
+        header_color: str | None,
+        update_header_color: bool,
     ) -> dict[str, Any] | None:
         if self._category_restaurant_id(category_id) != restaurant_id:
             return None
 
-        return self._patch_localized_name_sync(
-            table="categories",
-            row_id=category_id,
-            restaurant_id=restaurant_id,
-            locale=locale,
-            name=name,
-            select="id,name,translations,sort_order",
-            shape=lambda updated: {
-                "id": str(updated.get("id") or ""),
-                "name": str(updated.get("name") or ""),
-                "sort_order": int(updated.get("sort_order") or 0),
-                "translations": _as_optional_dict(updated.get("translations")),
-            },
+        category_select = (
+            "id,name,translations,sort_order,header_color"
+            if self._probe_categories_header_color_support()
+            else "id,name,translations,sort_order"
         )
+        try:
+            probe = (
+                self._client.table("categories")
+                .select(category_select)
+                .eq("id", category_id)
+                .limit(1)
+                .execute()
+            )
+        except APIError as error:
+            if self._header_color_api_error(error):
+                SupabaseDAL._categories_header_color_supported = False
+                probe = (
+                    self._client.table("categories")
+                    .select("id,name,translations,sort_order")
+                    .eq("id", category_id)
+                    .limit(1)
+                    .execute()
+                )
+            else:
+                raise
+        row = _first(probe.data or [])
+        if row is None:
+            return None
+
+        patch: dict[str, Any] = {}
+
+        if name is not None and locale is not None:
+            translations = _as_dict(row.get("translations"))
+            bucket = _as_dict(translations.get(locale))
+            bucket["name"] = name
+            translations[locale] = bucket
+            patch["translations"] = translations
+
+            default_locale = self._restaurant_default_locale(restaurant_id)
+            if locale == default_locale:
+                patch["name"] = name
+
+        if update_header_color and self._probe_categories_header_color_support():
+            patch["header_color"] = header_color
+
+        if not patch:
+            return self._category_owner_snapshot(row)
+
+        try:
+            response = (
+                self._client.table("categories")
+                .update(patch)
+                .eq("id", category_id)
+                .execute()
+            )
+        except APIError as error:
+            if self._header_color_api_error(error) and "header_color" in patch:
+                SupabaseDAL._categories_header_color_supported = False
+                patch.pop("header_color", None)
+                if not patch:
+                    return self._category_owner_snapshot(row)
+                response = (
+                    self._client.table("categories")
+                    .update(patch)
+                    .eq("id", category_id)
+                    .execute()
+                )
+            else:
+                raise
+        if not response.data:
+            return None
+        updated = _first(response.data or [])
+        if updated is None:
+            return None
+
+        self._bump_active_menus_updated_at_sync(restaurant_id)
+        return self._category_owner_snapshot(updated)
 
     def _update_active_menu_name_sync(
         self,
@@ -2002,10 +2160,14 @@ def _build_category(
     category: dict[str, Any],
     restaurant_id: str,
 ) -> CategoryResponse:
+    raw_color = category.get("header_color")
+    header_color = normalize_hex_color(str(raw_color)) if raw_color else None
+
     return CategoryResponse(
         id=str(category.get("id") or ""),
         name=str(category.get("name") or ""),
         sort_order=int(category.get("sort_order") or 0),
+        header_color=header_color,
         translations=_as_optional_dict(category.get("translations")),
         items=[
             _build_menu_item(item, restaurant_id)
