@@ -4,7 +4,7 @@ import os
 
 from openai import AsyncOpenAI
 
-from models.schemas import ParsedMenu
+from models.schemas import MenuItemTranslationResult, ParsedMenu
 
 _SYSTEM_PROMPT = (
     "You are an expert data extractor for restaurant menus. "
@@ -35,6 +35,59 @@ _SYSTEM_PROMPT = (
     "- Before finalizing, self-check that each category has at least one item and that one-item categories "
     "only exist when the source clearly indicates a true standalone section."
 )
+
+_LOCALE_LABELS = {"en": "English", "he": "Hebrew"}
+
+_TRANSLATE_SYSTEM_PROMPT = (
+    "You are a High-end Culinary Translator for restaurant menus. "
+    "Translate menu item names and descriptions while preserving a premium dining experience.\n\n"
+    "NAME RULES:\n"
+    "- Keep well-known cultural or regional dish names in their original phonetic form "
+    "(for example: Shakshuka, Hummus, Schnitzel, Sabich). "
+    "Do NOT replace them with literal descriptive translations (for example, do not translate "
+    "Shakshuka to 'Eggs in tomato sauce').\n"
+    "- Only translate generic dish names when a natural, elegant equivalent exists in the target language.\n\n"
+    "DESCRIPTION RULES:\n"
+    "- Translate descriptions to sound appetizing, natural, and native in the target language.\n"
+    "- Use elevated but approachable culinary language appropriate for a high-end restaurant menu.\n"
+    "- Preserve meaning; do not invent ingredients or claims.\n"
+    "- If the source description is empty, return an empty description.\n\n"
+    "Return ONLY schema-compliant JSON with `name` and `description`."
+)
+
+
+async def translate_menu_item_fields(
+    *,
+    name: str,
+    description: str,
+    target_locale: str,
+) -> MenuItemTranslationResult:
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise RuntimeError("OPENAI_API_KEY is not configured.")
+
+    target_label = _LOCALE_LABELS.get(target_locale.strip().lower(), target_locale)
+    client = AsyncOpenAI(api_key=api_key)
+    completion = await client.beta.chat.completions.parse(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": _TRANSLATE_SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": (
+                    f"Translate the following menu item into {target_label}.\n\n"
+                    f"Name: {name.strip()}\n"
+                    f"Description: {description.strip() or '(empty)'}"
+                ),
+            },
+        ],
+        response_format=MenuItemTranslationResult,
+    )
+
+    parsed = completion.choices[0].message.parsed
+    if parsed is None:
+        raise RuntimeError("Failed to parse translation response.")
+    return parsed
 
 
 async def parse_menu_image(base64_image_data: str) -> ParsedMenu:

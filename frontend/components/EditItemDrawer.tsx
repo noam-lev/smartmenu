@@ -12,7 +12,7 @@ import {
   parseDietaryIcons,
   type DietaryIconId,
 } from "../lib/dietaryIcons";
-import { deleteOwnerImage, uploadOwnerImage } from "../lib/menuApi";
+import { autoTranslateMenuItem, deleteOwnerImage, uploadOwnerImage } from "../lib/menuApi";
 import { hasRenderableImage } from "../utils/media";
 import { useLockBodyScroll } from "../hooks/useLockBodyScroll";
 import ItemTranslationsTab from "./ItemTranslationsTab";
@@ -193,6 +193,9 @@ export default function EditItemDrawer({
   const [selectedDietaryIcons, setSelectedDietaryIcons] = useState<DietaryIconId[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [translationFields, setTranslationFields] = useState<ItemTranslationFields>({});
+  const [autoTranslatingLocale, setAutoTranslatingLocale] = useState<Locale | null>(null);
+  const [autoTranslateError, setAutoTranslateError] = useState<string | null>(null);
+  const [autoTranslateErrorLocale, setAutoTranslateErrorLocale] = useState<Locale | null>(null);
 
   useLockBodyScroll(isOpen);
 
@@ -203,6 +206,9 @@ export default function EditItemDrawer({
 
     setActiveTab("general");
     setIsSaving(false);
+    setAutoTranslatingLocale(null);
+    setAutoTranslateError(null);
+    setAutoTranslateErrorLocale(null);
 
     if (isCreateMode) {
       setName("");
@@ -273,6 +279,51 @@ export default function EditItemDrawer({
     { id: "modifiers", label: getUiMessage("tabModifiers", locale) },
     { id: "upsells", label: getUiMessage("tabUpsells", locale) },
   ];
+
+  const handleAutoTranslate = async (targetLocale: Locale) => {
+    const defaultBucket = translationFields[restaurantDefaultLocale] ?? {
+      name: "",
+      description: "",
+    };
+    const sourceName =
+      defaultBucket.name.trim() ||
+      (restaurantDefaultLocale === locale ? name.trim() : "");
+    const sourceDescription =
+      defaultBucket.description.trim() ||
+      (restaurantDefaultLocale === locale ? description : "");
+
+    if (!sourceName) {
+      return;
+    }
+
+    setAutoTranslatingLocale(targetLocale);
+    setAutoTranslateError(null);
+    setAutoTranslateErrorLocale(null);
+
+    try {
+      const result = await autoTranslateMenuItem(restaurantSlug, {
+        name: sourceName,
+        description: sourceDescription,
+        target_locale: targetLocale,
+      });
+      setTranslationFields((prev) => ({
+        ...prev,
+        [targetLocale]: {
+          name: result.name,
+          description: result.description,
+        },
+      }));
+    } catch (error) {
+      setAutoTranslateError(
+        error instanceof Error
+          ? error.message
+          : getUiMessage("itemTranslationAutoTranslateFailed", locale),
+      );
+      setAutoTranslateErrorLocale(targetLocale);
+    } finally {
+      setAutoTranslatingLocale(null);
+    }
+  };
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -568,6 +619,9 @@ export default function EditItemDrawer({
                 fields={translationFields}
                 uiLocale={locale}
                 disabled={isSaving}
+                autoTranslatingLocale={autoTranslatingLocale}
+                autoTranslateError={autoTranslateError}
+                autoTranslateErrorLocale={autoTranslateErrorLocale}
                 onChange={(code, patch) => {
                   setTranslationFields((prev) => ({
                     ...prev,
@@ -577,21 +631,7 @@ export default function EditItemDrawer({
                     },
                   }));
                 }}
-                onCopyFromDefault={(code) => {
-                  setTranslationFields((prev) => {
-                    const source = prev[restaurantDefaultLocale] ?? {
-                      name: "",
-                      description: "",
-                    };
-                    return {
-                      ...prev,
-                      [code]: {
-                        name: source.name,
-                        description: source.description,
-                      },
-                    };
-                  });
-                }}
+                onAutoTranslate={handleAutoTranslate}
               />
             ) : null}
 

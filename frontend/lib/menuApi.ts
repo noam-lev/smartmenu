@@ -212,6 +212,36 @@ export async function updateMenuItem(
   }
 }
 
+export type AutoTranslateMenuItemResult = {
+  name: string;
+  description: string;
+};
+
+export async function autoTranslateMenuItem(
+  restaurantSlug: string,
+  payload: {
+    name: string;
+    description: string;
+    target_locale: Locale;
+  },
+): Promise<AutoTranslateMenuItemResult> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/owner/${encodeURIComponent(restaurantSlug)}/translate`,
+    {
+      method: "POST",
+      headers: await getOwnerAuthHeaders(true),
+      body: JSON.stringify(payload),
+    },
+  );
+
+  if (!response.ok) {
+    const body = await parseApiErrorBody(response);
+    throw new Error(body.detail ?? `Translation failed (${response.status})`);
+  }
+
+  return response.json() as Promise<AutoTranslateMenuItemResult>;
+}
+
 export async function uploadOwnerImage(
   restaurantSlug: string,
   file: File,

@@ -280,6 +280,11 @@ class ParsedMenu(BaseModel):
     categories: list[ParsedCategory] = Field(default_factory=list)
 
 
+class MenuItemTranslationResult(BaseModel):
+    name: str
+    description: str = ""
+
+
 class RestaurantImportPayload(BaseModel):
     restaurant_name: str
     restaurant_slug: str

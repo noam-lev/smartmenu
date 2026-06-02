@@ -13,7 +13,10 @@ type ItemTranslationsTabProps = {
   defaultLocale: Locale;
   fields: ItemTranslationFields;
   onChange: (code: Locale, patch: Partial<ItemLocaleFields>) => void;
-  onCopyFromDefault: (code: Locale) => void;
+  onAutoTranslate: (code: Locale) => void;
+  autoTranslatingLocale: Locale | null;
+  autoTranslateError: string | null;
+  autoTranslateErrorLocale: Locale | null;
   uiLocale: Locale;
   disabled?: boolean;
 };
@@ -35,7 +38,10 @@ export default function ItemTranslationsTab({
   defaultLocale,
   fields,
   onChange,
-  onCopyFromDefault,
+  onAutoTranslate,
+  autoTranslatingLocale,
+  autoTranslateError,
+  autoTranslateErrorLocale,
   uiLocale,
   disabled = false,
 }: ItemTranslationsTabProps) {
@@ -44,6 +50,9 @@ export default function ItemTranslationsTab({
       <p className="text-sm text-zinc-500">{getUiMessage("itemTranslationsSingleLocale", uiLocale)}</p>
     );
   }
+
+  const defaultFields = fields[defaultLocale] ?? { name: "", description: "" };
+  const canAutoTranslate = defaultFields.name.trim().length > 0;
 
   return (
     <div className="space-y-4">
@@ -55,6 +64,9 @@ export default function ItemTranslationsTab({
           const isDefault = code === defaultLocale;
           const isMissing = isItemLocaleTranslationMissing(bucket);
           const columnDir = isRtlLocale(code) ? "rtl" : "ltr";
+          const isTranslating = autoTranslatingLocale === code;
+          const isAutoTranslateDisabled =
+            disabled || autoTranslatingLocale !== null || !canAutoTranslate;
 
           return (
             <section
@@ -79,6 +91,29 @@ export default function ItemTranslationsTab({
                 ) : null}
               </div>
 
+              {!isDefault ? (
+                <div className="mb-3">
+                  <button
+                    type="button"
+                    onClick={() => onAutoTranslate(code)}
+                    disabled={isAutoTranslateDisabled}
+                    className="inline-flex items-center gap-2 rounded-xl border border-zinc-300 bg-white px-3 py-2 text-xs font-semibold text-zinc-800 shadow-sm transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isTranslating ? (
+                      <>
+                        <span className="h-3 w-3 animate-spin rounded-full border-2 border-zinc-500 border-t-transparent" />
+                        {getUiMessage("itemTranslationAutoTranslating", uiLocale)}
+                      </>
+                    ) : (
+                      getUiMessage("itemTranslationAutoTranslate", uiLocale)
+                    )}
+                  </button>
+                  {autoTranslateError && autoTranslateErrorLocale === code ? (
+                    <p className="mt-2 text-xs text-red-600">{autoTranslateError}</p>
+                  ) : null}
+                </div>
+              ) : null}
+
               <div className="space-y-3">
                 <div>
                   <label
@@ -92,7 +127,7 @@ export default function ItemTranslationsTab({
                     type="text"
                     value={bucket.name}
                     onChange={(event) => onChange(code, { name: event.target.value })}
-                    disabled={disabled}
+                    disabled={disabled || isTranslating}
                     autoComplete="off"
                     className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 shadow-sm outline-none focus:border-zinc-400 disabled:opacity-60"
                   />
@@ -109,22 +144,11 @@ export default function ItemTranslationsTab({
                     id={`item-translation-desc-${code}`}
                     value={bucket.description}
                     onChange={(event) => onChange(code, { description: event.target.value })}
-                    disabled={disabled}
+                    disabled={disabled || isTranslating}
                     rows={4}
                     className="mt-1 w-full resize-y rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm leading-5 text-zinc-900 shadow-sm outline-none focus:border-zinc-400 disabled:opacity-60"
                   />
                 </div>
-
-                {!isDefault ? (
-                  <button
-                    type="button"
-                    onClick={() => onCopyFromDefault(code)}
-                    disabled={disabled}
-                    className="text-xs font-semibold text-zinc-700 underline-offset-2 hover:underline disabled:opacity-50"
-                  >
-                    {getUiMessage("itemTranslationCopyFromDefault", uiLocale)}
-                  </button>
-                ) : null}
               </div>
             </section>
           );

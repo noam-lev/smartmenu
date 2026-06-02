@@ -26,6 +26,7 @@ from models.schemas import (
     ModifierGroupLibraryResponse,
     ModifierOptionResponse,
 )
+from services.ai_service import translate_menu_item_fields
 from services.image_service import upload_image as cloudinary_upload, delete_image as cloudinary_delete
 
 
@@ -58,6 +59,27 @@ class MenuItemPatchPayload(BaseModel):
         if isinstance(value, str):
             return value.strip()
         return value
+
+
+class TranslateMenuItemRequest(BaseModel):
+    name: str
+    description: str = ""
+    target_locale: str
+
+    @field_validator("name", "description", mode="before")
+    @classmethod
+    def strip_strings(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            return value.strip()
+        return value
+
+    @field_validator("target_locale")
+    @classmethod
+    def normalize_target_locale(cls, value: str) -> str:
+        low = value.strip().lower()
+        if low not in _ALLOWED_UPSELL_LOCALES:
+            raise ValueError("target_locale must be 'en' or 'he'.")
+        return low
 
 
 class UpsellRulePatchPayload(BaseModel):
@@ -456,6 +478,68 @@ async def patch_menu_item(
             detail="Menu item not found.",
         )
     return {"success": True, "item": updated_item}
+
+
+def _fetch_restaurant_default_locale(supabase: Client, restaurant_id: str) -> str:
+    response = (
+        supabase.table("restaurants")
+        .select("settings")
+        .eq("id", restaurant_id)
+        .limit(1)
+        .execute()
+    )
+    row = (response.data or [None])[0]
+    if not row:
+        return "en"
+    settings = row.get("settings")
+    if isinstance(settings, dict):
+        loc = settings.get("default_locale")
+        if isinstance(loc, str) and loc.strip():
+            return loc.strip().lower()
+    return "en"
+
+
+@router.post("/{restaurant_slug}/translate")
+async def translate_menu_item(
+    restaurant_slug: str,
+    payload: TranslateMenuItemRequest,
+    access: RestaurantAccessContext = Depends(verify_restaurant_access),
+    supabase: Client = Depends(get_supabase_client),
+) -> dict[str, str]:
+    # TODO(Billing): Premium Feature Gating
+    # Require active premium subscription to use the translation endpoint.
+    # if not restaurant.is_premium:
+    #     raise HTTPException(status_code=403, detail="Auto-translation requires a Premium plan")
+
+    default_locale = _fetch_restaurant_default_locale(supabase, access["restaurant_id"])
+    if payload.target_locale == default_locale:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Target locale must differ from the restaurant default locale.",
+        )
+
+    if not payload.name.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Source name is required for translation.",
+        )
+
+    try:
+        result = await translate_menu_item_fields(
+            name=payload.name,
+            description=payload.description,
+            target_locale=payload.target_locale,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+
+    return {
+        "name": result.name.strip(),
+        "description": result.description.strip(),
+    }
 
 
 @router.patch("/{restaurant_slug}/restaurant")
