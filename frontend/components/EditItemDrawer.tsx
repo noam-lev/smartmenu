@@ -12,8 +12,16 @@ import {
   parseDietaryIcons,
   type DietaryIconId,
 } from "../lib/dietaryIcons";
-import { deleteOwnerImage, uploadOwnerImage } from "../lib/menuApi";
+import { autoTranslateMenuItem, deleteOwnerImage, uploadOwnerImage } from "../lib/menuApi";
 import { hasRenderableImage } from "../utils/media";
+import { useLockBodyScroll } from "../hooks/useLockBodyScroll";
+import ItemTranslationsTab from "./ItemTranslationsTab";
+import {
+  buildItemTranslationsPatch,
+  mergeItemTranslationPatches,
+  readItemTranslationFields,
+  type ItemTranslationFields,
+} from "../lib/itemTranslations";
 
 type EditTabId = "general" | "translations" | "upsells" | "modifiers";
 
@@ -51,6 +59,7 @@ export type EditItemDrawerProps = {
   categoryId?: string | null;
   /** Canonical locale stored in DB `name` / `description`; other locales live under `translations`. */
   restaurantDefaultLocale?: Locale;
+  supportedLocales?: Locale[];
   /** Flat list of menu items (e.g. for upsell offer picker). */
   allMenuItems?: MenuItem[];
   /** Reload menu from API after upsell mutations (keeps drawer item in sync). */
@@ -161,6 +170,7 @@ export default function EditItemDrawer({
   item,
   categoryId = null,
   restaurantDefaultLocale = "en",
+  supportedLocales = ["en", "he"],
   allMenuItems = [],
   onRefreshMenu,
   isOpen,
@@ -182,6 +192,12 @@ export default function EditItemDrawer({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [selectedDietaryIcons, setSelectedDietaryIcons] = useState<DietaryIconId[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [translationFields, setTranslationFields] = useState<ItemTranslationFields>({});
+  const [autoTranslatingLocale, setAutoTranslatingLocale] = useState<Locale | null>(null);
+  const [autoTranslateError, setAutoTranslateError] = useState<string | null>(null);
+  const [autoTranslateErrorLocale, setAutoTranslateErrorLocale] = useState<Locale | null>(null);
+
+  useLockBodyScroll(isOpen);
 
   useEffect(() => {
     if (!isOpen) {
@@ -190,6 +206,9 @@ export default function EditItemDrawer({
 
     setActiveTab("general");
     setIsSaving(false);
+    setAutoTranslatingLocale(null);
+    setAutoTranslateError(null);
+    setAutoTranslateErrorLocale(null);
 
     if (isCreateMode) {
       setName("");
@@ -200,6 +219,7 @@ export default function EditItemDrawer({
       setIsImageUploading(false);
       setIsImageRemoving(false);
       setSelectedDietaryIcons([]);
+      setTranslationFields(readItemTranslationFields(null, supportedLocales, restaurantDefaultLocale));
       return;
     }
 
@@ -211,7 +231,21 @@ export default function EditItemDrawer({
     setIsImageUploading(false);
     setIsImageRemoving(false);
     setSelectedDietaryIcons(parseDietaryIcons(item.metadata));
-  }, [isOpen, item, locale, isCreateMode]);
+    setTranslationFields(
+      readItemTranslationFields(item, supportedLocales, restaurantDefaultLocale),
+    );
+  }, [isOpen, item, locale, isCreateMode, supportedLocales, restaurantDefaultLocale]);
+
+  // Keep Translations tab in sync with General fields for the active UI locale.
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+    setTranslationFields((prev) => ({
+      ...prev,
+      [locale]: { name, description },
+    }));
+  }, [isOpen, locale, name, description]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -225,12 +259,9 @@ export default function EditItemDrawer({
     };
 
     document.addEventListener("keydown", onKeyDown);
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
 
     return () => {
       document.removeEventListener("keydown", onKeyDown);
-      document.body.style.overflow = prevOverflow;
     };
   }, [isOpen, onClose, isSaving]);
 
@@ -249,6 +280,51 @@ export default function EditItemDrawer({
     { id: "upsells", label: getUiMessage("tabUpsells", locale) },
   ];
 
+  const handleAutoTranslate = async (targetLocale: Locale) => {
+    const defaultBucket = translationFields[restaurantDefaultLocale] ?? {
+      name: "",
+      description: "",
+    };
+    const sourceName =
+      defaultBucket.name.trim() ||
+      (restaurantDefaultLocale === locale ? name.trim() : "");
+    const sourceDescription =
+      defaultBucket.description.trim() ||
+      (restaurantDefaultLocale === locale ? description : "");
+
+    if (!sourceName) {
+      return;
+    }
+
+    setAutoTranslatingLocale(targetLocale);
+    setAutoTranslateError(null);
+    setAutoTranslateErrorLocale(null);
+
+    try {
+      const result = await autoTranslateMenuItem(restaurantSlug, {
+        name: sourceName,
+        description: sourceDescription,
+        target_locale: targetLocale,
+      });
+      setTranslationFields((prev) => ({
+        ...prev,
+        [targetLocale]: {
+          name: result.name,
+          description: result.description,
+        },
+      }));
+    } catch (error) {
+      setAutoTranslateError(
+        error instanceof Error
+          ? error.message
+          : getUiMessage("itemTranslationAutoTranslateFailed", locale),
+      );
+      setAutoTranslateErrorLocale(targetLocale);
+    } finally {
+      setAutoTranslatingLocale(null);
+    }
+  };
+
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
 
@@ -262,7 +338,7 @@ export default function EditItemDrawer({
       return;
     }
 
-    const patch = buildPatchFromForm(
+    const generalPatch = buildPatchFromForm(
       item,
       locale,
       restaurantDefaultLocale,
@@ -271,6 +347,24 @@ export default function EditItemDrawer({
       parsedPrice,
       imageUrl,
       selectedDietaryIcons,
+    );
+    const translationPatch = buildItemTranslationsPatch(
+      translationFields,
+      supportedLocales,
+      restaurantDefaultLocale,
+    );
+    const patch = mergeItemTranslationPatches(
+      item
+        ? generalPatch
+        : {
+            ...generalPatch,
+            translations: {
+              [locale]: { name: trimmedName, description },
+            },
+          },
+      translationPatch,
+      locale,
+      restaurantDefaultLocale,
     );
 
     setIsSaving(true);
@@ -519,9 +613,26 @@ export default function EditItemDrawer({
             ) : null}
 
             {activeTab === "translations" ? (
-              <p className="text-sm text-zinc-500">
-                {getUiMessage("translationsComingSoon", locale)}
-              </p>
+              <ItemTranslationsTab
+                supportedLocales={supportedLocales}
+                defaultLocale={restaurantDefaultLocale}
+                fields={translationFields}
+                uiLocale={locale}
+                disabled={isSaving}
+                autoTranslatingLocale={autoTranslatingLocale}
+                autoTranslateError={autoTranslateError}
+                autoTranslateErrorLocale={autoTranslateErrorLocale}
+                onChange={(code, patch) => {
+                  setTranslationFields((prev) => ({
+                    ...prev,
+                    [code]: {
+                      ...(prev[code] ?? { name: "", description: "" }),
+                      ...patch,
+                    },
+                  }));
+                }}
+                onAutoTranslate={handleAutoTranslate}
+              />
             ) : null}
 
             {activeTab === "modifiers" && !item ? (

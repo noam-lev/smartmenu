@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import {
   createContext,
@@ -12,9 +12,11 @@ import {
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { Locale } from "../types/menu";
 import {
+  clampLocaleToSupported,
   parseLangFromSearchParams,
   readLocaleHint,
   resolveTenantLocale,
+  supportedLocalesFromRestaurantSettings,
   withLangSearchParams,
   writeLocaleHint,
 } from "../lib/tenantLocale";
@@ -23,11 +25,15 @@ import { isRtlLocale, otherLocale } from "../utils/i18n";
 
 type TenantLocaleContextValue = {
   locale: Locale;
+  supportedLocales: Locale[];
   setLocale: (next: Locale) => void;
   toggleLocale: () => void;
   isRtl: boolean;
-  /** Call after slim menu load to apply server default and canonicalize URL. */
-  applyServerDefaultLocale: (defaultLocale: Locale | undefined) => void;
+  /** Call after menu load to apply server default, supported locales, and canonicalize URL. */
+  applyServerDefaultLocale: (
+    defaultLocale: Locale | undefined,
+    settings?: Record<string, unknown> | null,
+  ) => void;
 };
 
 const TenantLocaleContext = createContext<TenantLocaleContextValue | null>(null);
@@ -56,19 +62,22 @@ export function TenantLocaleProvider({
     [restaurantSlug],
   );
   const [serverDefault, setServerDefault] = useState<Locale | null>(null);
+  const [supportedLocales, setSupportedLocales] = useState<Locale[] | null>(null);
 
   useEffect(() => {
     setServerDefault(null);
+    setSupportedLocales(null);
   }, [restaurantSlug]);
 
   const locale = useMemo(
     () =>
       resolveTenantLocale({
         urlLang,
-        storedLang: storedLang,
+        storedLang,
         serverDefaultLocale: serverDefault,
+        supportedLocales,
       }),
-    [urlLang, storedLang, serverDefault],
+    [urlLang, storedLang, serverDefault, supportedLocales],
   );
 
   useEffect(() => {
@@ -94,28 +103,40 @@ export function TenantLocaleProvider({
 
   const setLocale = useCallback(
     (next: Locale) => {
-      writeLocaleHint(restaurantSlug, next);
-      syncUiStore(next);
-      replaceWithLang(next);
+      const clamped = clampLocaleToSupported(next, supportedLocales, serverDefault);
+      writeLocaleHint(restaurantSlug, clamped);
+      syncUiStore(clamped);
+      replaceWithLang(clamped);
     },
-    [restaurantSlug, syncUiStore, replaceWithLang],
+    [restaurantSlug, supportedLocales, serverDefault, syncUiStore, replaceWithLang],
   );
 
   const toggleLocale = useCallback(() => {
-    setLocale(otherLocale(locale));
-  }, [locale, setLocale]);
+    const options = supportedLocales ?? (["en", "he"] as Locale[]);
+    const currentIndex = options.indexOf(locale);
+    const next =
+      currentIndex >= 0 && options.length > 1
+        ? options[(currentIndex + 1) % options.length]
+        : otherLocale(locale);
+    setLocale(next);
+  }, [locale, supportedLocales, setLocale]);
 
   const applyServerDefaultLocale = useCallback(
-    (defaultLocale: Locale | undefined) => {
+    (defaultLocale: Locale | undefined, settings?: Record<string, unknown> | null) => {
+      const nextSupported = supportedLocalesFromRestaurantSettings(settings, defaultLocale);
+      setSupportedLocales(nextSupported);
       if (defaultLocale) {
         setServerDefault(defaultLocale);
       }
-      if (!urlLang) {
-        const resolved = resolveTenantLocale({
-          urlLang: null,
-          storedLang: readLocaleHint(restaurantSlug),
-          serverDefaultLocale: defaultLocale,
-        });
+
+      const resolved = resolveTenantLocale({
+        urlLang,
+        storedLang: readLocaleHint(restaurantSlug),
+        serverDefaultLocale: defaultLocale,
+        supportedLocales: nextSupported,
+      });
+
+      if (!urlLang || !nextSupported.includes(urlLang)) {
         writeLocaleHint(restaurantSlug, resolved);
         syncUiStore(resolved);
         replaceWithLang(resolved);
@@ -124,15 +145,18 @@ export function TenantLocaleProvider({
     [restaurantSlug, urlLang, syncUiStore, replaceWithLang],
   );
 
+  const effectiveSupportedLocales = supportedLocales ?? (["en", "he"] as Locale[]);
+
   const value = useMemo(
     () => ({
       locale,
+      supportedLocales: effectiveSupportedLocales,
       setLocale,
       toggleLocale,
       isRtl: isRtlLocale(locale),
       applyServerDefaultLocale,
     }),
-    [locale, setLocale, toggleLocale, applyServerDefaultLocale],
+    [locale, effectiveSupportedLocales, setLocale, toggleLocale, applyServerDefaultLocale],
   );
 
   return (

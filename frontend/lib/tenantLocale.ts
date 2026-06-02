@@ -1,4 +1,5 @@
 import type { Locale } from "../types/menu";
+import { getSupportedLocalesFromSettings } from "./supportedLocales";
 
 export const LANG_SEARCH_PARAM = "lang";
 export const LOCALE_STORAGE_PREFIX = "smartmenu:locale:";
@@ -83,20 +84,53 @@ export function parseLangFromSearchParams(
   return isValidLocale(raw) ? raw : null;
 }
 
+export function clampLocaleToSupported(
+  locale: Locale,
+  supportedLocales: Locale[] | null | undefined,
+  defaultLocale?: Locale | null,
+): Locale {
+  if (!supportedLocales || supportedLocales.length === 0) {
+    return locale;
+  }
+  if (supportedLocales.includes(locale)) {
+    return locale;
+  }
+  if (defaultLocale && supportedLocales.includes(defaultLocale)) {
+    return defaultLocale;
+  }
+  return supportedLocales[0];
+}
+
 export function resolveTenantLocale(input: {
   urlLang: Locale | null;
   storedLang: Locale | null;
   serverDefaultLocale: Locale | null | undefined;
+  supportedLocales?: Locale[] | null;
 }): Locale {
+  const defaultLocale = isValidLocale(input.serverDefaultLocale)
+    ? input.serverDefaultLocale
+    : null;
+  const clamp = (lang: Locale) =>
+    clampLocaleToSupported(lang, input.supportedLocales, defaultLocale);
+
   if (input.urlLang) {
-    return input.urlLang;
+    return clamp(input.urlLang);
   }
   if (input.storedLang) {
-    return input.storedLang;
+    return clamp(input.storedLang);
   }
-  const server = input.serverDefaultLocale;
-  if (isValidLocale(server)) {
-    return server;
+  if (defaultLocale) {
+    return clamp(defaultLocale);
+  }
+  if (input.supportedLocales && input.supportedLocales.length > 0) {
+    return input.supportedLocales[0];
   }
   return "he";
+}
+
+export function supportedLocalesFromRestaurantSettings(
+  settings: Record<string, unknown> | null | undefined,
+  defaultLocale?: Locale | null,
+): Locale[] {
+  return getSupportedLocalesFromSettings(settings, defaultLocale);
 }

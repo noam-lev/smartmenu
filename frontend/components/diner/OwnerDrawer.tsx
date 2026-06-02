@@ -32,7 +32,7 @@ import type { OwnerRestaurant } from "../../types/owner";
 
 import { tenantHref } from "../../lib/tenantLocale";
 
-import { getUiMessage, isRtlLocale } from "../../utils/i18n";
+import { getLocalizedText, getUiMessage, isRtlLocale } from "../../utils/i18n";
 
 import { socialLinksFromSettings } from "../../lib/socialLinks";
 
@@ -41,6 +41,8 @@ import { updateRestaurantSocialLinks } from "../../lib/menuApi";
 import SocialLinksEditor from "../SocialLinksEditor";
 
 import OwnerDefaultLanguageSetting from "./OwnerDefaultLanguageSetting";
+
+import { useLockBodyScroll } from "../../hooks/useLockBodyScroll";
 
 
 
@@ -98,7 +100,7 @@ export default function OwnerDrawer({
 
   const [settingsPanel, setSettingsPanel] = useState<SettingsPanel>(null);
 
-
+  useLockBodyScroll(open);
 
   useEffect(() => {
 
@@ -554,7 +556,7 @@ function MenusSection({
 
                 >
 
-                  <span>{menu.name}</span>
+                  <span>{getLocalizedText(menu, "name", locale)}</span>
 
                   <span
 

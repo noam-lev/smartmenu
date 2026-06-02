@@ -32,7 +32,9 @@ Phase 1 modifiers: `20260528120000_modifier_tables.sql` creates `modifier_groups
 
 Phase 2 owner API: `20260531120000_modifier_group_atomic_create.sql` adds `create_modifier_group_atomic` (group + options + attach in one transaction). Owner routes under `/api/owner/{slug}/modifier-groups` and item attach/detach under `/api/owner/{slug}/items/{item_id}/modifier-groups/{group_id}`.
 
-After applying the migration, run `NOTIFY pgrst, 'reload schema';` in the Supabase SQL editor (the migration file includes this at the end). Without a schema reload, menu API calls may return `PGRST200` until PostgREST picks up the new foreign keys.
+Category header colors: `20260602120000_category_header_color.sql` adds `categories.header_color`. Apply in the Supabase SQL editor (or `uv run python scripts/apply_category_header_color_migration.py` with `SUPABASE_DB_URL` set). The migration file includes `NOTIFY pgrst, 'reload schema';` at the end.
+
+After applying modifier migrations, run `NOTIFY pgrst, 'reload schema';` in the Supabase SQL editor if PostgREST has not reloaded yet. Without a schema reload, menu API calls may return `PGRST200` until PostgREST picks up the new foreign keys.
 
 ## Run the dev server
 

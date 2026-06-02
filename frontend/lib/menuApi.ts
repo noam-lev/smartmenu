@@ -3,6 +3,7 @@ import type {
   FatMenuPayload,
   Locale,
   MenuCategory,
+  MenuInfo,
   MenuItem,
   SlimMenuPayload,
 } from "../types/menu";
@@ -118,6 +119,37 @@ export async function fetchMenuBySlug(slug: string): Promise<FatMenuPayload> {
   return fetchOwnerMenu(slug);
 }
 
+export async function updateMenu(
+  restaurantSlug: string,
+  locale: Locale,
+  data: { name: string },
+): Promise<Pick<MenuInfo, "id" | "name" | "last_updated" | "translations">> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/owner/${encodeURIComponent(restaurantSlug)}/menu`,
+    {
+      method: "PATCH",
+      headers: await getOwnerAuthHeaders(true),
+      body: JSON.stringify({
+        name: data.name.trim(),
+        locale,
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to update menu (${response.status})`);
+  }
+
+  const payload = (await response.json()) as {
+    menu?: Pick<MenuInfo, "id" | "name" | "last_updated" | "translations">;
+  };
+  if (!payload.menu?.id) {
+    throw new Error("Invalid response from server.");
+  }
+
+  return payload.menu;
+}
+
 export async function updateItemAvailability(
   restaurantSlug: string,
   itemId: string,
@@ -178,6 +210,36 @@ export async function updateMenuItem(
   if (!response.ok) {
     throw new Error(`Failed to update item (${response.status})`);
   }
+}
+
+export type AutoTranslateMenuItemResult = {
+  name: string;
+  description: string;
+};
+
+export async function autoTranslateMenuItem(
+  restaurantSlug: string,
+  payload: {
+    name: string;
+    description: string;
+    target_locale: Locale;
+  },
+): Promise<AutoTranslateMenuItemResult> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/owner/${encodeURIComponent(restaurantSlug)}/translate`,
+    {
+      method: "POST",
+      headers: await getOwnerAuthHeaders(true),
+      body: JSON.stringify(payload),
+    },
+  );
+
+  if (!response.ok) {
+    const body = await parseApiErrorBody(response);
+    throw new Error(body.detail ?? `Translation failed (${response.status})`);
+  }
+
+  return response.json() as Promise<AutoTranslateMenuItemResult>;
 }
 
 export async function uploadOwnerImage(
@@ -389,6 +451,9 @@ export async function createMenuItem(
       body.dietary_icons = icons;
     }
   }
+  if (data.translations && Object.keys(data.translations).length > 0) {
+    body.translations = data.translations;
+  }
 
   const response = await fetch(
     `${API_BASE_URL}/api/owner/${encodeURIComponent(restaurantSlug)}/categories/${encodeURIComponent(categoryId)}/items`,
@@ -500,6 +565,7 @@ export async function createCategory(data: {
   restaurantSlug: string;
   name: string;
   locale: Locale;
+  header_color?: string | null;
 }): Promise<MenuCategory> {
   const response = await fetch(
     `${API_BASE_URL}/api/owner/${encodeURIComponent(data.restaurantSlug)}/categories`,
@@ -509,6 +575,7 @@ export async function createCategory(data: {
     body: JSON.stringify({
       name: data.name.trim(),
       locale: data.locale,
+      header_color: data.header_color ?? null,
     }),
     },
   );
@@ -518,7 +585,10 @@ export async function createCategory(data: {
   }
 
   const payload = (await response.json()) as {
-    category?: { id: string; name: string; sort_order: number; translations?: MenuCategory["translations"] };
+    category?: Pick<
+      MenuCategory,
+      "id" | "name" | "sort_order" | "translations" | "header_color"
+    >;
   };
   if (!payload.category?.id) {
     throw new Error("Invalid response from server.");
@@ -528,6 +598,7 @@ export async function createCategory(data: {
     id: payload.category.id,
     name: payload.category.name,
     sort_order: payload.category.sort_order,
+    header_color: payload.category.header_color ?? null,
     translations: payload.category.translations,
     items: [],
   };
@@ -536,18 +607,31 @@ export async function createCategory(data: {
 export async function updateCategory(
   restaurantSlug: string,
   categoryId: string,
-  locale: Locale,
-  data: { name: string },
-): Promise<Pick<MenuCategory, "id" | "name" | "sort_order" | "translations">> {
+  data: {
+    locale?: Locale;
+    name?: string;
+    header_color?: string | null;
+  },
+): Promise<
+  Pick<MenuCategory, "id" | "name" | "sort_order" | "translations" | "header_color">
+> {
+  const body: Record<string, unknown> = {};
+  if (data.name !== undefined) {
+    body.name = data.name.trim();
+  }
+  if (data.locale !== undefined) {
+    body.locale = data.locale;
+  }
+  if (data.header_color !== undefined) {
+    body.header_color = data.header_color;
+  }
+
   const response = await fetch(
     `${API_BASE_URL}/api/owner/${encodeURIComponent(restaurantSlug)}/categories/${encodeURIComponent(categoryId)}`,
     {
       method: "PATCH",
       headers: await getOwnerAuthHeaders(true),
-      body: JSON.stringify({
-        name: data.name.trim(),
-        locale,
-      }),
+      body: JSON.stringify(body),
     },
   );
 
@@ -556,7 +640,10 @@ export async function updateCategory(
   }
 
   const payload = (await response.json()) as {
-    category?: { id: string; name: string; sort_order: number; translations?: MenuCategory["translations"] };
+    category?: Pick<
+      MenuCategory,
+      "id" | "name" | "sort_order" | "translations" | "header_color"
+    >;
   };
   if (!payload.category?.id) {
     throw new Error("Invalid response from server.");

@@ -10,7 +10,7 @@ import {
   type ChangeEvent,
   type ReactNode,
 } from "react";
-import { GripVertical } from "lucide-react";
+import { GripVertical, Pencil } from "lucide-react";
 import type { DraggableAttributes, DraggableSyntheticListeners } from "@dnd-kit/core";
 import {
   DndContext,
@@ -29,6 +29,7 @@ import {
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { CSS } from "@dnd-kit/utilities";
 import EditCategoryDrawer from "../components/EditCategoryDrawer";
+import LanguageMenu from "../components/LanguageMenu";
 import EditItemDrawer, {
   placeholderMenuItem,
 } from "../components/EditItemDrawer";
@@ -50,6 +51,7 @@ import {
   updateCategory,
   updateItemAvailability,
   updateMenuItem,
+  updateMenu,
   updateRestaurantBannerUrl,
   uploadOwnerImage,
 } from "../lib/menuApi";
@@ -62,10 +64,12 @@ import {
   getLocalizedText,
   getUiMessage,
   getUiTemplate,
-  localeFlagSrc,
-  otherLocale,
 } from "../utils/i18n";
 import { mergeRestaurantSettingsIntoPayload } from "../lib/mergeRestaurantSettings";
+import {
+  CategoryHeaderBar,
+  CategoryHeaderTitle,
+} from "../components/CategorySectionHeader";
 import { hasRenderableImage } from "../utils/media";
 
 type AdminMenuPageProps = {
@@ -104,7 +108,6 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
   const [menuPayload, setMenuPayload] = useState<FatMenuPayload | null>(null);
   const [isMenuLoading, setIsMenuLoading] = useState(true);
   const [menuError, setMenuError] = useState<string | null>(null);
-  const [isLanguageMenuOpen, setIsLanguageMenuOpen] = useState(false);
   const [activeCategoryId, setActiveCategoryId] = useState("");
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [addingToCategory, setAddingToCategory] = useState<string | null>(null);
@@ -116,13 +119,17 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
   const [editingCategory, setEditingCategory] = useState<MenuCategory | null>(null);
   const [isCategoryDrawerOpen, setIsCategoryDrawerOpen] = useState(false);
   const [isOwnerDrawerOpen, setIsOwnerDrawerOpen] = useState(false);
+  const [menuNameDraft, setMenuNameDraft] = useState("");
+  const [isMenuNameSaving, setIsMenuNameSaving] = useState(false);
+  const [isMenuNameEditorOpen, setIsMenuNameEditorOpen] = useState(false);
+  const menuNameBaselineRef = useRef("");
+  const menuNameInputRef = useRef<HTMLInputElement>(null);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
-  const languageMenuRef = useRef<HTMLDivElement | null>(null);
   const bannerFileInputRef = useRef<HTMLInputElement | null>(null);
-  const { locale, setLocale, isRtl, applyServerDefaultLocale } = useTenantLocale();
+  const { locale, setLocale, isRtl, supportedLocales, applyServerDefaultLocale } = useTenantLocale();
   const { confirm, alert } = useDialogs();
   const { userId } = useAuthUser();
-  const { restaurants } = useOwnerRestaurants(userId, restaurantSlug);
+  const { restaurants, patchMenuInList } = useOwnerRestaurants(userId, restaurantSlug);
   const hasRestaurants = restaurants.length > 0;
   useOwnerDrawerQueryParam(setIsOwnerDrawerOpen, Boolean(userId && hasRestaurants));
 
@@ -138,6 +145,116 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
     () => (menuPayload ? menuPayload.menu.categories.flatMap((c) => c.items) : []),
     [menuPayload],
   );
+
+  const savedMenuName = menuPayload
+    ? getLocalizedText(menuPayload.menu, "name", locale)
+    : getUiMessage("menuEditor", locale);
+
+  const isMenuNameDirty =
+    menuNameDraft.trim() !== menuNameBaselineRef.current &&
+    menuNameDraft.trim().length > 0;
+
+  useEffect(() => {
+    if (!menuPayload) {
+      setMenuNameDraft("");
+      menuNameBaselineRef.current = "";
+      return;
+    }
+
+    const localizedName = getLocalizedText(menuPayload.menu, "name", locale);
+    setMenuNameDraft(localizedName);
+    menuNameBaselineRef.current = localizedName;
+  }, [menuPayload, locale]);
+
+  useEffect(() => {
+    if (!isMenuNameEditorOpen) {
+      return;
+    }
+    menuNameInputRef.current?.focus();
+    menuNameInputRef.current?.select();
+  }, [isMenuNameEditorOpen]);
+
+  const handleMenuNameSave = async () => {
+    if (!menuPayload || isMenuNameSaving) {
+      return;
+    }
+
+    const trimmed = menuNameDraft.trim();
+    if (!trimmed) {
+      setMenuNameDraft(menuNameBaselineRef.current);
+      return;
+    }
+
+    if (trimmed === menuNameBaselineRef.current) {
+      setIsMenuNameEditorOpen(false);
+      return;
+    }
+
+    const defaultLocale = (menuPayload.restaurant.default_locale ?? "en") as Locale;
+    const previousPayload = menuPayload;
+    const optimisticMenu = {
+      ...menuPayload.menu,
+      name: locale === defaultLocale ? trimmed : menuPayload.menu.name,
+      translations: {
+        ...(menuPayload.menu.translations ?? {}),
+        [locale]: {
+          ...(menuPayload.menu.translations?.[locale] ?? {}),
+          name: trimmed,
+        },
+      },
+    };
+
+    setMenuPayload({
+      ...menuPayload,
+      menu: optimisticMenu,
+    });
+    setIsMenuNameSaving(true);
+
+    try {
+      const updated = await updateMenu(restaurantSlug, locale, { name: trimmed });
+      setMenuPayload((prev) =>
+        prev
+          ? {
+              ...prev,
+              menu: {
+                ...prev.menu,
+                name: updated.name,
+                last_updated: updated.last_updated,
+                translations: updated.translations,
+              },
+            }
+          : prev,
+      );
+      const savedName = getLocalizedText(
+        {
+          name: updated.name,
+          translations: updated.translations,
+        },
+        "name",
+        locale,
+      );
+      setMenuNameDraft(savedName);
+      menuNameBaselineRef.current = savedName;
+      patchMenuInList(updated.id, {
+        name: updated.name,
+        translations: updated.translations,
+      });
+      setIsMenuNameEditorOpen(false);
+    } catch (error) {
+      setMenuPayload(previousPayload);
+      setMenuNameDraft(menuNameBaselineRef.current);
+      void alert({
+        title: getUiMessage("dialogErrorTitle", locale),
+        message:
+          error instanceof Error
+            ? error.message
+            : getUiMessage("failedToSaveChanges", locale),
+        dismissLabel: getUiMessage("dialogDismiss", locale),
+      });
+    } finally {
+      setIsMenuNameSaving(false);
+    }
+  };
 
   const refreshMenuForDrawer = useCallback(async () => {
     const data = await fetchOwnerMenu(restaurantSlug);
@@ -186,7 +303,7 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
           (a, b) => a.sort_order - b.sort_order,
         );
         setMenuPayload(data);
-        applyServerDefaultLocale(data.restaurant.default_locale);
+        applyServerDefaultLocale(data.restaurant.default_locale, data.restaurant.settings);
         setActiveCategoryId(sortedCategories[0]?.id ?? "");
       } catch (error) {
         if (!isMounted) {
@@ -244,21 +361,6 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
 
     return () => observer.disconnect();
   }, [categories]);
-
-  useEffect(() => {
-    if (!isLanguageMenuOpen) {
-      return;
-    }
-
-    const handleOutsideClick = (event: MouseEvent) => {
-      if (!languageMenuRef.current?.contains(event.target as Node)) {
-        setIsLanguageMenuOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handleOutsideClick);
-    return () => document.removeEventListener("mousedown", handleOutsideClick);
-  }, [isLanguageMenuOpen]);
 
   const scrollToCategory = (category: MenuCategory) => {
     setActiveCategoryId(category.id);
@@ -323,17 +425,35 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
   const mergeCategoryOptimistic = (
     category: MenuCategory,
     defaultLocale: Locale,
-    payload: { name: string; locale: Locale; translations: MenuCategory["translations"] },
-  ): MenuCategory => ({
-    ...category,
-    name: payload.locale === defaultLocale ? payload.name : category.name,
-    translations: payload.translations,
-  });
+    payload: {
+      name: string;
+      locale: Locale;
+      translations: MenuCategory["translations"];
+      header_color: string | null;
+      nameChanged: boolean;
+    },
+  ): MenuCategory => {
+    if (!payload.nameChanged) {
+      return {
+        ...category,
+        header_color: payload.header_color,
+      };
+    }
+
+    return {
+      ...category,
+      name: payload.locale === defaultLocale ? payload.name : category.name,
+      translations: payload.translations,
+      header_color: payload.header_color,
+    };
+  };
 
   const handleSaveCategory = async (payload: {
     name: string;
     locale: Locale;
     translations: MenuCategory["translations"];
+    header_color: string | null;
+    nameChanged: boolean;
   }) => {
     if (!menuPayload) {
       return;
@@ -352,6 +472,7 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
         id: tempId,
         name: payload.name,
         sort_order: nextSort,
+        header_color: payload.header_color,
         translations: payload.translations,
         items: [],
       };
@@ -370,6 +491,7 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
           restaurantSlug,
           name: payload.name,
           locale: payload.locale,
+          header_color: payload.header_color,
         });
         setMenuPayload((prev) => {
           if (!prev) {
@@ -420,7 +542,12 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
     });
 
     try {
-      const updated = await updateCategory(restaurantSlug, categoryId, payload.locale, { name: payload.name });
+      const updated = await updateCategory(restaurantSlug, categoryId, {
+        ...(payload.nameChanged
+          ? { name: payload.name, locale: payload.locale }
+          : {}),
+        header_color: payload.header_color,
+      });
       setMenuPayload((prev) => {
         if (!prev) {
           return prev;
@@ -433,9 +560,14 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
               c.id === categoryId
                 ? {
                     ...c,
-                    name: updated.name,
+                    ...(payload.nameChanged
+                      ? {
+                          name: updated.name,
+                          translations: updated.translations,
+                        }
+                      : {}),
                     sort_order: updated.sort_order,
-                    translations: updated.translations,
+                    header_color: updated.header_color ?? payload.header_color,
                   }
                 : c,
             ),
@@ -446,9 +578,14 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
         prev && prev.id === categoryId
           ? {
               ...prev,
-              name: updated.name,
+              ...(payload.nameChanged
+                ? {
+                    name: updated.name,
+                    translations: updated.translations,
+                  }
+                : {}),
               sort_order: updated.sort_order,
-              translations: updated.translations,
+              header_color: updated.header_color ?? payload.header_color,
             }
           : prev,
       );
@@ -914,60 +1051,39 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
               <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
                 {getUiMessage("ownerDashboard", locale)}
               </p>
-              <h1 className="mt-1 text-2xl font-bold text-zinc-900">
-                {getUiMessage("menuEditor", locale)}
-              </h1>
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <div className="relative" ref={languageMenuRef}>
-                <button
-                  type="button"
-                  onClick={() => setIsLanguageMenuOpen((open) => !open)}
-                  aria-haspopup="menu"
-                  aria-expanded={isLanguageMenuOpen}
-                  aria-label={getUiMessage("selectLanguage", locale)}
-                  className="inline-flex items-center gap-1 rounded-full border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 shadow-sm"
-                >
-                  <img
-                    src={localeFlagSrc[locale]}
-                    alt=""
-                    className="h-4 w-[1.375rem] rounded-[2px] object-cover"
-                    aria-hidden
-                  />
-                  <span className="text-[10px] text-zinc-500">▾</span>
-                </button>
-
-                {isLanguageMenuOpen ? (
-                  <div
-                    role="menu"
-                    className={`absolute z-30 mt-2 rounded-xl border border-zinc-200 bg-white p-1 shadow-lg ${
-                      isRtl ? "left-0" : "right-0"
+              <div className="mt-1 flex items-center gap-1.5">
+                <h1 className="truncate text-2xl font-bold text-zinc-900">{savedMenuName}</h1>
+                {menuPayload ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isMenuNameEditorOpen) {
+                        setMenuNameDraft(menuNameBaselineRef.current);
+                        setIsMenuNameEditorOpen(false);
+                        return;
+                      }
+                      setIsMenuNameEditorOpen(true);
+                    }}
+                    aria-expanded={isMenuNameEditorOpen}
+                    aria-controls="menu-name-editor"
+                    aria-label={getUiMessage("editMenuNameAria", locale)}
+                    className={`rounded-full p-1.5 transition ${
+                      isMenuNameEditorOpen
+                        ? "bg-zinc-100 text-zinc-700"
+                        : "text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600"
                     }`}
                   >
-                    <button
-                      type="button"
-                      role="menuitem"
-                      aria-label={getUiMessage(
-                        otherLocale(locale) === "he"
-                          ? "languageHebrew"
-                          : "languageEnglish",
-                        locale,
-                      )}
-                      onClick={() => {
-                        setLocale(otherLocale(locale));
-                        setIsLanguageMenuOpen(false);
-                      }}
-                      className="flex w-full justify-center rounded-lg px-3 py-2 hover:bg-zinc-100"
-                    >
-                      <img
-                        src={localeFlagSrc[otherLocale(locale)]}
-                        alt=""
-                        className="h-4 w-[1.375rem] rounded-[2px] object-cover"
-                      />
-                    </button>
-                  </div>
+                    <Pencil className="h-4 w-4" aria-hidden />
+                  </button>
                 ) : null}
               </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <LanguageMenu
+                locale={locale}
+                supportedLocales={supportedLocales}
+                onLocaleChange={setLocale}
+              />
               <button
                 type="button"
                 onClick={() => {
@@ -983,6 +1099,47 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
             </div>
           </div>
         </header>
+        {menuPayload && isMenuNameEditorOpen ? (
+          <section id="menu-name-editor" className="border-b border-zinc-200 px-4 py-4">
+            <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-3">
+              <label htmlFor="menu-name" className="text-xs font-semibold uppercase tracking-wide text-zinc-600">
+                {getUiMessage("menuNameLabel", locale)}
+              </label>
+              <div className="mt-2 flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 shadow-sm">
+                <input
+                  ref={menuNameInputRef}
+                  id="menu-name"
+                  type="text"
+                  value={menuNameDraft}
+                  onChange={(event) => setMenuNameDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      void handleMenuNameSave();
+                    }
+                    if (event.key === "Escape") {
+                      event.preventDefault();
+                      setMenuNameDraft(menuNameBaselineRef.current);
+                      setIsMenuNameEditorOpen(false);
+                    }
+                  }}
+                  disabled={isMenuNameSaving}
+                  placeholder={getUiMessage("menuNamePlaceholder", locale)}
+                  className="min-w-0 flex-1 bg-transparent text-lg font-semibold text-zinc-900 outline-none placeholder:text-zinc-400 disabled:opacity-60"
+                />
+                <button
+                  type="button"
+                  onClick={() => void handleMenuNameSave()}
+                  disabled={isMenuNameSaving || !isMenuNameDirty}
+                  className="shrink-0 rounded-full bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {isMenuNameSaving ? getUiMessage("saving", locale) : getUiMessage("menuNameSave", locale)}
+                </button>
+              </div>
+              <p className="mt-2 text-xs text-zinc-500">{getUiMessage("menuNameHint", locale)}</p>
+            </div>
+          </section>
+        ) : null}
         {menuPayload ? (
           <section className="border-b border-zinc-200 px-4 py-4">
             <input
@@ -1103,7 +1260,7 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
                           }}
                           data-category-id={category.id}
                         >
-                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 px-4 py-3">
+                          <CategoryHeaderBar headerColor={category.header_color}>
                             <div className="flex min-w-0 flex-1 items-center gap-2">
                               <button
                                 type="button"
@@ -1114,9 +1271,9 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
                               >
                                 <GripVertical className="h-4 w-4" strokeWidth={2} aria-hidden />
                               </button>
-                              <h2 className="min-w-0 truncate text-base font-bold text-zinc-900">
+                              <CategoryHeaderTitle headerColor={category.header_color}>
                                 {getLocalizedText(category, "name", locale)}
-                              </h2>
+                              </CategoryHeaderTitle>
                               <button
                                 type="button"
                                 onClick={() => handleEditCategoryClick(category)}
@@ -1184,7 +1341,7 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
                             >
                               {getUiMessage("addItem", locale)}
                             </button>
-                          </div>
+                          </CategoryHeaderBar>
                           <SortableItemList
                             items={category.items}
                             onReorder={(next) => void handleReorderItems(category.id, next)}
@@ -1230,6 +1387,7 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
         item={editingItem}
         categoryId={addingToCategory}
         restaurantDefaultLocale={menuPayload?.restaurant.default_locale ?? "en"}
+        supportedLocales={supportedLocales}
         allMenuItems={allMenuItems}
         onRefreshMenu={refreshMenuForDrawer}
         isOpen={isDrawerOpen}

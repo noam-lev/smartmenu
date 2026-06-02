@@ -109,6 +109,7 @@ def _slim_category(category: CategoryResponse, locale: str) -> CategoryResponse:
         id=category.id,
         name=_localized_string(category.name, category.translations, locale, "name"),
         sort_order=category.sort_order,
+        header_color=category.header_color,
         translations=None,
         items=[_slim_menu_item(item, locale) for item in category.items],
     )
