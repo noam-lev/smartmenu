@@ -1,12 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { OwnerMenuNamePatch } from "../lib/patchOwnerRestaurantMenu";
+import { patchOwnerRestaurantMenu } from "../lib/patchOwnerRestaurantMenu";
 import type { OwnerRestaurant } from "../types/owner";
 import { fetchOwnerRestaurants } from "../lib/menuApi";
 
 type OwnerRestaurantsState = {
   restaurants: OwnerRestaurant[];
   isLoading: boolean;
+  patchMenuInList: (menuId: string, patch: OwnerMenuNamePatch) => void;
 };
 
 /**
@@ -26,6 +29,7 @@ export function useOwnerRestaurants(
     if (!userId) {
       setRestaurants([]);
       setIsLoading(false);
+      cacheRef.current = null;
       return;
     }
 
@@ -61,5 +65,15 @@ export function useOwnerRestaurants(
     };
   }, [userId, currentSlug]);
 
-  return { restaurants, isLoading };
+  const patchMenuInList = useCallback((menuId: string, patch: OwnerMenuNamePatch) => {
+    setRestaurants((prev) => {
+      const next = patchOwnerRestaurantMenu(prev, menuId, patch);
+      if (cacheRef.current) {
+        cacheRef.current = { ...cacheRef.current, data: next };
+      }
+      return next;
+    });
+  }, []);
+
+  return { restaurants, isLoading, patchMenuInList };
 }

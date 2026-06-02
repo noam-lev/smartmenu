@@ -3,6 +3,7 @@ import type {
   FatMenuPayload,
   Locale,
   MenuCategory,
+  MenuInfo,
   MenuItem,
   SlimMenuPayload,
 } from "../types/menu";
@@ -116,6 +117,37 @@ export async function fetchOwnerMenu(slug: string): Promise<FatMenuPayload> {
 /** @deprecated Use fetchDinerMenu or fetchOwnerMenu. */
 export async function fetchMenuBySlug(slug: string): Promise<FatMenuPayload> {
   return fetchOwnerMenu(slug);
+}
+
+export async function updateMenu(
+  restaurantSlug: string,
+  locale: Locale,
+  data: { name: string },
+): Promise<Pick<MenuInfo, "id" | "name" | "last_updated" | "translations">> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/owner/${encodeURIComponent(restaurantSlug)}/menu`,
+    {
+      method: "PATCH",
+      headers: await getOwnerAuthHeaders(true),
+      body: JSON.stringify({
+        name: data.name.trim(),
+        locale,
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to update menu (${response.status})`);
+  }
+
+  const payload = (await response.json()) as {
+    menu?: Pick<MenuInfo, "id" | "name" | "last_updated" | "translations">;
+  };
+  if (!payload.menu?.id) {
+    throw new Error("Invalid response from server.");
+  }
+
+  return payload.menu;
 }
 
 export async function updateItemAvailability(

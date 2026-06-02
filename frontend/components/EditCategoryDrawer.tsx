@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import type { Locale, MenuCategory, TranslationsMap } from "../types/menu";
 import { useUiStore } from "../store/uiStore";
 import { getLocalizedText, getUiMessage, isRtlLocale } from "../utils/i18n";
+import { useLockBodyScroll } from "../hooks/useLockBodyScroll";
 
 function looksLikeEnglishBucketText(value: string): boolean {
   const t = value.trim();
@@ -108,6 +109,8 @@ export default function EditCategoryDrawer({
   const [name, setName] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
+  useLockBodyScroll(isOpen);
+
   useEffect(() => {
     if (!isOpen) {
       return;
@@ -135,12 +138,9 @@ export default function EditCategoryDrawer({
     };
 
     document.addEventListener("keydown", onKeyDown);
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
 
     return () => {
       document.removeEventListener("keydown", onKeyDown);
-      document.body.style.overflow = prevOverflow;
     };
   }, [isOpen, onClose, isSaving]);
 

@@ -14,6 +14,7 @@ import {
 } from "../lib/dietaryIcons";
 import { deleteOwnerImage, uploadOwnerImage } from "../lib/menuApi";
 import { hasRenderableImage } from "../utils/media";
+import { useLockBodyScroll } from "../hooks/useLockBodyScroll";
 
 type EditTabId = "general" | "translations" | "upsells" | "modifiers";
 
@@ -183,6 +184,8 @@ export default function EditItemDrawer({
   const [selectedDietaryIcons, setSelectedDietaryIcons] = useState<DietaryIconId[]>([]);
   const [isSaving, setIsSaving] = useState(false);
 
+  useLockBodyScroll(isOpen);
+
   useEffect(() => {
     if (!isOpen) {
       return;
@@ -225,12 +228,9 @@ export default function EditItemDrawer({
     };
 
     document.addEventListener("keydown", onKeyDown);
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
 
     return () => {
       document.removeEventListener("keydown", onKeyDown);
-      document.body.style.overflow = prevOverflow;
     };
   }, [isOpen, onClose, isSaving]);
 

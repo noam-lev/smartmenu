@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from collections.abc import Callable
 from typing import Any
 
 from postgrest.exceptions import APIError
@@ -358,6 +359,19 @@ class SupabaseDAL(MenuRepository):
             name.strip(),
         )
 
+    async def update_active_menu_name(
+        self,
+        restaurant_id: str,
+        locale: str,
+        name: str,
+    ) -> dict[str, Any] | None:
+        return await asyncio.to_thread(
+            self._update_active_menu_name_sync,
+            restaurant_id,
+            locale,
+            name.strip(),
+        )
+
     async def delete_category(self, category_id: str, restaurant_id: str) -> bool:
         return await asyncio.to_thread(
             self._delete_category_cascade_sync,
@@ -657,7 +671,7 @@ class SupabaseDAL(MenuRepository):
 
             menus_resp = (
                 self._client.table("menus")
-                .select("id,name,is_active")
+                .select("id,name,is_active,translations")
                 .eq("restaurant_id", rid)
                 .order("name")
                 .execute()
@@ -675,6 +689,7 @@ class SupabaseDAL(MenuRepository):
                         "id": str(m.get("id") or ""),
                         "name": str(m.get("name") or ""),
                         "is_active": bool(m.get("is_active")),
+                        "translations": _as_optional_dict(m.get("translations")),
                     }
                     for m in (menus_resp.data or [])
                     if m.get("id")
@@ -1527,25 +1542,30 @@ class SupabaseDAL(MenuRepository):
             "translations": _as_optional_dict(inserted.get("translations")),
         }
 
-    def _patch_category_name_sync(
+    def _patch_localized_name_sync(
         self,
-        category_id: str,
+        *,
+        table: str,
+        row_id: str,
         restaurant_id: str,
         locale: str,
         name: str,
+        select: str,
+        row_allowed: Callable[[dict[str, Any]], bool] | None = None,
+        extra_update_eq: dict[str, Any] | None = None,
+        shape: Callable[[dict[str, Any]], dict[str, Any]],
     ) -> dict[str, Any] | None:
-        if self._category_restaurant_id(category_id) != restaurant_id:
-            return None
-
         probe = (
-            self._client.table("categories")
-            .select("id,name,translations,sort_order")
-            .eq("id", category_id)
+            self._client.table(table)
+            .select(select)
+            .eq("id", row_id)
             .limit(1)
             .execute()
         )
         row = _first(probe.data or [])
         if row is None:
+            return None
+        if row_allowed is not None and not row_allowed(row):
             return None
 
         translations = _as_dict(row.get("translations"))
@@ -1558,23 +1578,78 @@ class SupabaseDAL(MenuRepository):
         if locale == default_locale:
             patch["name"] = name
 
-        response = (
-            self._client.table("categories")
-            .update(patch)
-            .eq("id", category_id)
-            .execute()
-        )
+        query = self._client.table(table).update(patch).eq("id", row_id)
+        for column, value in (extra_update_eq or {}).items():
+            query = query.eq(column, value)
+
+        response = query.execute()
         if not response.data:
             return None
         updated = _first(response.data or [])
         if updated is None:
             return None
-        return {
-            "id": str(updated.get("id") or ""),
-            "name": str(updated.get("name") or ""),
-            "sort_order": int(updated.get("sort_order") or 0),
-            "translations": _as_optional_dict(updated.get("translations")),
-        }
+        return shape(updated)
+
+    def _patch_category_name_sync(
+        self,
+        category_id: str,
+        restaurant_id: str,
+        locale: str,
+        name: str,
+    ) -> dict[str, Any] | None:
+        if self._category_restaurant_id(category_id) != restaurant_id:
+            return None
+
+        return self._patch_localized_name_sync(
+            table="categories",
+            row_id=category_id,
+            restaurant_id=restaurant_id,
+            locale=locale,
+            name=name,
+            select="id,name,translations,sort_order",
+            shape=lambda updated: {
+                "id": str(updated.get("id") or ""),
+                "name": str(updated.get("name") or ""),
+                "sort_order": int(updated.get("sort_order") or 0),
+                "translations": _as_optional_dict(updated.get("translations")),
+            },
+        )
+
+    def _update_active_menu_name_sync(
+        self,
+        restaurant_id: str,
+        locale: str,
+        name: str,
+    ) -> dict[str, Any] | None:
+        menu_id = self._get_active_menu_id_for_restaurant(restaurant_id)
+        if not menu_id:
+            return None
+
+        return self._patch_menu_name_sync(menu_id, restaurant_id, locale, name)
+
+    def _patch_menu_name_sync(
+        self,
+        menu_id: str,
+        restaurant_id: str,
+        locale: str,
+        name: str,
+    ) -> dict[str, Any] | None:
+        return self._patch_localized_name_sync(
+            table="menus",
+            row_id=menu_id,
+            restaurant_id=restaurant_id,
+            locale=locale,
+            name=name,
+            select="id,name,translations,restaurant_id,updated_at",
+            row_allowed=lambda row: str(row.get("restaurant_id") or "") == restaurant_id,
+            extra_update_eq={"restaurant_id": restaurant_id},
+            shape=lambda updated: {
+                "id": str(updated.get("id") or ""),
+                "name": str(updated.get("name") or ""),
+                "last_updated": str(updated.get("updated_at") or ""),
+                "translations": _as_optional_dict(updated.get("translations")),
+            },
+        )
 
     def _delete_category_cascade_sync(self, category_id: str, restaurant_id: str) -> bool:
         if self._category_restaurant_id(category_id) != restaurant_id:

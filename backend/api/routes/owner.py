@@ -22,6 +22,7 @@ from models.schemas import (
     ItemReorderRequest,
     MenuItemCreateRequest,
     MenuPayload,
+    MenuUpdateRequest,
     ModifierGroupLibraryResponse,
     ModifierOptionResponse,
 )
@@ -261,6 +262,27 @@ async def get_owner_menu(
         code = await db.diagnose_menu_not_found_reason(restaurant_slug)
         raise MenuNotFoundError(code=code)
     return menu
+
+
+@router.patch("/{restaurant_slug}/menu")
+async def patch_menu(
+    restaurant_slug: str,
+    payload: MenuUpdateRequest,
+    access: RestaurantAccessContext = Depends(verify_restaurant_access),
+    db: MenuRepository = Depends(get_db),
+) -> dict[str, object]:
+    updated = await db.update_active_menu_name(
+        access["restaurant_id"],
+        payload.locale,
+        payload.name,
+    )
+    if updated is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Menu not found.",
+        )
+
+    return {"success": True, "menu": updated}
 
 
 @router.get("/me/restaurants")

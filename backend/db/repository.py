@@ -151,6 +151,16 @@ class MenuRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    async def update_active_menu_name(
+        self,
+        restaurant_id: str,
+        locale: str,
+        name: str,
+    ) -> dict[str, Any] | None:
+        """Patch active menu name for locale; sync base name when locale is default."""
+        raise NotImplementedError
+
+    @abstractmethod
     async def delete_category(self, category_id: str, restaurant_id: str) -> bool:
         """Hard-delete category and its menu items (scoped to restaurant)."""
         raise NotImplementedError

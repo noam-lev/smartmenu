@@ -131,8 +131,8 @@ class CategoryCreateRequest(BaseModel):
         return low
 
 
-class CategoryUpdateRequest(BaseModel):
-    """Patch category display name for one UI locale (merges into translations JSON)."""
+class LocalizedNameUpdateRequest(BaseModel):
+    """Patch a display name for one UI locale (merges into translations JSON)."""
 
     name: str
     locale: str = Field(..., min_length=2, max_length=2)
@@ -152,6 +152,10 @@ class CategoryUpdateRequest(BaseModel):
         if low not in ("en", "he"):
             raise ValueError("locale must be 'en' or 'he'.")
         return low
+
+
+CategoryUpdateRequest = LocalizedNameUpdateRequest
+MenuUpdateRequest = LocalizedNameUpdateRequest
 
 
 class MenuItemCreateRequest(BaseModel):

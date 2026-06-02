@@ -10,7 +10,7 @@ import {
   type ChangeEvent,
   type ReactNode,
 } from "react";
-import { GripVertical } from "lucide-react";
+import { GripVertical, Pencil } from "lucide-react";
 import type { DraggableAttributes, DraggableSyntheticListeners } from "@dnd-kit/core";
 import {
   DndContext,
@@ -50,6 +50,7 @@ import {
   updateCategory,
   updateItemAvailability,
   updateMenuItem,
+  updateMenu,
   updateRestaurantBannerUrl,
   uploadOwnerImage,
 } from "../lib/menuApi";
@@ -116,13 +117,18 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
   const [editingCategory, setEditingCategory] = useState<MenuCategory | null>(null);
   const [isCategoryDrawerOpen, setIsCategoryDrawerOpen] = useState(false);
   const [isOwnerDrawerOpen, setIsOwnerDrawerOpen] = useState(false);
+  const [menuNameDraft, setMenuNameDraft] = useState("");
+  const [isMenuNameSaving, setIsMenuNameSaving] = useState(false);
+  const [isMenuNameEditorOpen, setIsMenuNameEditorOpen] = useState(false);
+  const menuNameBaselineRef = useRef("");
+  const menuNameInputRef = useRef<HTMLInputElement>(null);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
   const languageMenuRef = useRef<HTMLDivElement | null>(null);
   const bannerFileInputRef = useRef<HTMLInputElement | null>(null);
   const { locale, setLocale, isRtl, applyServerDefaultLocale } = useTenantLocale();
   const { confirm, alert } = useDialogs();
   const { userId } = useAuthUser();
-  const { restaurants } = useOwnerRestaurants(userId, restaurantSlug);
+  const { restaurants, patchMenuInList } = useOwnerRestaurants(userId, restaurantSlug);
   const hasRestaurants = restaurants.length > 0;
   useOwnerDrawerQueryParam(setIsOwnerDrawerOpen, Boolean(userId && hasRestaurants));
 
@@ -138,6 +144,116 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
     () => (menuPayload ? menuPayload.menu.categories.flatMap((c) => c.items) : []),
     [menuPayload],
   );
+
+  const savedMenuName = menuPayload
+    ? getLocalizedText(menuPayload.menu, "name", locale)
+    : getUiMessage("menuEditor", locale);
+
+  const isMenuNameDirty =
+    menuNameDraft.trim() !== menuNameBaselineRef.current &&
+    menuNameDraft.trim().length > 0;
+
+  useEffect(() => {
+    if (!menuPayload) {
+      setMenuNameDraft("");
+      menuNameBaselineRef.current = "";
+      return;
+    }
+
+    const localizedName = getLocalizedText(menuPayload.menu, "name", locale);
+    setMenuNameDraft(localizedName);
+    menuNameBaselineRef.current = localizedName;
+  }, [menuPayload, locale]);
+
+  useEffect(() => {
+    if (!isMenuNameEditorOpen) {
+      return;
+    }
+    menuNameInputRef.current?.focus();
+    menuNameInputRef.current?.select();
+  }, [isMenuNameEditorOpen]);
+
+  const handleMenuNameSave = async () => {
+    if (!menuPayload || isMenuNameSaving) {
+      return;
+    }
+
+    const trimmed = menuNameDraft.trim();
+    if (!trimmed) {
+      setMenuNameDraft(menuNameBaselineRef.current);
+      return;
+    }
+
+    if (trimmed === menuNameBaselineRef.current) {
+      setIsMenuNameEditorOpen(false);
+      return;
+    }
+
+    const defaultLocale = (menuPayload.restaurant.default_locale ?? "en") as Locale;
+    const previousPayload = menuPayload;
+    const optimisticMenu = {
+      ...menuPayload.menu,
+      name: locale === defaultLocale ? trimmed : menuPayload.menu.name,
+      translations: {
+        ...(menuPayload.menu.translations ?? {}),
+        [locale]: {
+          ...(menuPayload.menu.translations?.[locale] ?? {}),
+          name: trimmed,
+        },
+      },
+    };
+
+    setMenuPayload({
+      ...menuPayload,
+      menu: optimisticMenu,
+    });
+    setIsMenuNameSaving(true);
+
+    try {
+      const updated = await updateMenu(restaurantSlug, locale, { name: trimmed });
+      setMenuPayload((prev) =>
+        prev
+          ? {
+              ...prev,
+              menu: {
+                ...prev.menu,
+                name: updated.name,
+                last_updated: updated.last_updated,
+                translations: updated.translations,
+              },
+            }
+          : prev,
+      );
+      const savedName = getLocalizedText(
+        {
+          name: updated.name,
+          translations: updated.translations,
+        },
+        "name",
+        locale,
+      );
+      setMenuNameDraft(savedName);
+      menuNameBaselineRef.current = savedName;
+      patchMenuInList(updated.id, {
+        name: updated.name,
+        translations: updated.translations,
+      });
+      setIsMenuNameEditorOpen(false);
+    } catch (error) {
+      setMenuPayload(previousPayload);
+      setMenuNameDraft(menuNameBaselineRef.current);
+      void alert({
+        title: getUiMessage("dialogErrorTitle", locale),
+        message:
+          error instanceof Error
+            ? error.message
+            : getUiMessage("failedToSaveChanges", locale),
+        dismissLabel: getUiMessage("dialogDismiss", locale),
+      });
+    } finally {
+      setIsMenuNameSaving(false);
+    }
+  };
 
   const refreshMenuForDrawer = useCallback(async () => {
     const data = await fetchOwnerMenu(restaurantSlug);
@@ -914,9 +1030,32 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
               <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
                 {getUiMessage("ownerDashboard", locale)}
               </p>
-              <h1 className="mt-1 text-2xl font-bold text-zinc-900">
-                {getUiMessage("menuEditor", locale)}
-              </h1>
+              <div className="mt-1 flex items-center gap-1.5">
+                <h1 className="truncate text-2xl font-bold text-zinc-900">{savedMenuName}</h1>
+                {menuPayload ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isMenuNameEditorOpen) {
+                        setMenuNameDraft(menuNameBaselineRef.current);
+                        setIsMenuNameEditorOpen(false);
+                        return;
+                      }
+                      setIsMenuNameEditorOpen(true);
+                    }}
+                    aria-expanded={isMenuNameEditorOpen}
+                    aria-controls="menu-name-editor"
+                    aria-label={getUiMessage("editMenuNameAria", locale)}
+                    className={`rounded-full p-1.5 transition ${
+                      isMenuNameEditorOpen
+                        ? "bg-zinc-100 text-zinc-700"
+                        : "text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600"
+                    }`}
+                  >
+                    <Pencil className="h-4 w-4" aria-hidden />
+                  </button>
+                ) : null}
+              </div>
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <div className="relative" ref={languageMenuRef}>
@@ -983,6 +1122,47 @@ export function TenantAdminPage({ restaurantSlug = "yossis-hummus" }: AdminMenuP
             </div>
           </div>
         </header>
+        {menuPayload && isMenuNameEditorOpen ? (
+          <section id="menu-name-editor" className="border-b border-zinc-200 px-4 py-4">
+            <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-3">
+              <label htmlFor="menu-name" className="text-xs font-semibold uppercase tracking-wide text-zinc-600">
+                {getUiMessage("menuNameLabel", locale)}
+              </label>
+              <div className="mt-2 flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 shadow-sm">
+                <input
+                  ref={menuNameInputRef}
+                  id="menu-name"
+                  type="text"
+                  value={menuNameDraft}
+                  onChange={(event) => setMenuNameDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      void handleMenuNameSave();
+                    }
+                    if (event.key === "Escape") {
+                      event.preventDefault();
+                      setMenuNameDraft(menuNameBaselineRef.current);
+                      setIsMenuNameEditorOpen(false);
+                    }
+                  }}
+                  disabled={isMenuNameSaving}
+                  placeholder={getUiMessage("menuNamePlaceholder", locale)}
+                  className="min-w-0 flex-1 bg-transparent text-lg font-semibold text-zinc-900 outline-none placeholder:text-zinc-400 disabled:opacity-60"
+                />
+                <button
+                  type="button"
+                  onClick={() => void handleMenuNameSave()}
+                  disabled={isMenuNameSaving || !isMenuNameDirty}
+                  className="shrink-0 rounded-full bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {isMenuNameSaving ? getUiMessage("saving", locale) : getUiMessage("menuNameSave", locale)}
+                </button>
+              </div>
+              <p className="mt-2 text-xs text-zinc-500">{getUiMessage("menuNameHint", locale)}</p>
+            </div>
+          </section>
+        ) : null}
         {menuPayload ? (
           <section className="border-b border-zinc-200 px-4 py-4">
             <input
