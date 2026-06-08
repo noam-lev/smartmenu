@@ -96,6 +96,8 @@ export type RestaurantImportPayload = {
   categories: ParsedCategory[];
 };
 
+export const MAX_MENU_PARSE_IMAGES = 7;
+
 export async function parseMenuImage(file: File): Promise<ParsedMenu> {
   const formData = new FormData();
   formData.append("file", file);
@@ -104,6 +106,37 @@ export async function parseMenuImage(file: File): Promise<ParsedMenu> {
     method: "POST",
     body: formData,
   });
+
+  const raw = await response.text();
+  if (!response.ok) {
+    throw new Error(readDetailFromBody(raw));
+  }
+
+  return JSON.parse(raw) as ParsedMenu;
+}
+
+export async function parseMenuImages(files: File[]): Promise<ParsedMenu> {
+  if (files.length === 0) {
+    throw new Error("At least one image is required.");
+  }
+  if (files.length > MAX_MENU_PARSE_IMAGES) {
+    throw new Error(
+      `Maximum ${MAX_MENU_PARSE_IMAGES} images allowed per batch.`,
+    );
+  }
+
+  const formData = new FormData();
+  for (const file of files) {
+    formData.append("files", file);
+  }
+
+  const response = await superadminApiFetch(
+    "/api/superadmin/magic-parse-batch",
+    {
+      method: "POST",
+      body: formData,
+    },
+  );
 
   const raw = await response.text();
   if (!response.ok) {

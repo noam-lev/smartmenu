@@ -2,8 +2,10 @@
 
 import { useMemo, useState } from "react";
 import { Trash2, Plus } from "lucide-react";
+import { compressImagesForUpload } from "../../../lib/compressImage";
 import {
-  parseMenuImage,
+  MAX_MENU_PARSE_IMAGES,
+  parseMenuImages,
   type ParsedCategory,
   type ParsedItem,
   type ParsedMenu,
@@ -25,7 +27,7 @@ function blankCategory(): ParsedCategory {
 }
 
 export default function StepMenuUpload({ state, onChange }: StepProps) {
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [parsing, setParsing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,12 +41,31 @@ export default function StepMenuUpload({ state, onChange }: StepProps) {
     [menu],
   );
 
+  const handleFileChange = (selected: FileList | null) => {
+    const next = Array.from(selected ?? []);
+    if (next.length > MAX_MENU_PARSE_IMAGES) {
+      setError(
+        `You can select up to ${MAX_MENU_PARSE_IMAGES} images at once.`,
+      );
+      setFiles(next.slice(0, MAX_MENU_PARSE_IMAGES));
+      return;
+    }
+    setError(null);
+    setFiles(next);
+  };
+
+  const removeFile = (index: number) => {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
+    setError(null);
+  };
+
   const handleParse = async () => {
-    if (!file) return;
+    if (files.length === 0) return;
     setError(null);
     setParsing(true);
     try {
-      const parsed = await parseMenuImage(file);
+      const compressed = await compressImagesForUpload(files);
+      const parsed = await parseMenuImages(compressed);
       onChange({ parsedMenu: parsed });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to parse menu.");
@@ -115,39 +136,64 @@ export default function StepMenuUpload({ state, onChange }: StepProps) {
     <div className="space-y-5">
       <h2 className="text-lg font-semibold text-zinc-900">Menu Upload</h2>
       <p className="text-sm text-zinc-500">
-        Upload a menu image for AI parsing, then edit the results. You can also
-        add categories and items manually.
+        Upload one or more menu photos for AI parsing (up to{" "}
+        {MAX_MENU_PARSE_IMAGES}), then edit the results. You can also add
+        categories and items manually.
       </p>
 
       {/* Upload section */}
       <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
         <label className="block">
           <span className="mb-1.5 block text-sm font-medium text-zinc-700">
-            Menu Image
+            Menu Images
           </span>
           <input
             type="file"
             accept="image/*"
-            onChange={(e) => {
-              setFile(e.target.files?.[0] ?? null);
-              setError(null);
-            }}
+            multiple
+            onChange={(e) => handleFileChange(e.target.files)}
             className="block w-full cursor-pointer rounded-xl border border-zinc-300 bg-zinc-50 px-3 py-2.5 text-sm text-zinc-700 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white hover:bg-zinc-100"
           />
         </label>
         <button
           type="button"
           onClick={() => void handleParse()}
-          disabled={!file || parsing}
+          disabled={files.length === 0 || parsing}
           className="rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
         >
           {parsing ? "Analyzing…" : "Analyze Menu"}
         </button>
       </div>
 
+      {files.length > 0 && (
+        <ul className="space-y-1.5 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2">
+          {files.map((f, i) => (
+            <li
+              key={`${f.name}-${f.size}-${i}`}
+              className="flex items-center justify-between gap-2 text-sm text-zinc-700"
+            >
+              <span className="truncate">
+                {i + 1}. {f.name}
+              </span>
+              <button
+                type="button"
+                onClick={() => removeFile(i)}
+                disabled={parsing}
+                className="shrink-0 rounded p-1 text-zinc-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                aria-label={`Remove ${f.name}`}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
       {parsing && (
         <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
-          AI is analyzing and translating the menu…
+          {files.length > 1
+            ? "AI is carefully analyzing all pages, this may take up to a minute…"
+            : "AI is analyzing and translating the menu…"}
         </div>
       )}
 
@@ -321,7 +367,7 @@ export default function StepMenuUpload({ state, onChange }: StepProps) {
 
       {!menu && !parsing && (
         <p className="text-center text-sm text-zinc-400 py-6">
-          Upload and analyze a menu image to get started, or add categories
+          Upload and analyze menu photos to get started, or add categories
           manually after analyzing.
         </p>
       )}

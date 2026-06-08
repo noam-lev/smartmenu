@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useLayoutEffect, useRef } from "react";
-import { Menu, Play, Star } from "lucide-react";
+import { Miriam_Libre } from "next/font/google";
+import { Menu, Play } from "lucide-react";
 import type { LandingLocale } from "./landingDictionary";
 import { landingCopy } from "./landingDictionary";
 import { getUiMessage, localeFlagSrc, otherLocale } from "../../utils/i18n";
@@ -12,6 +13,11 @@ import { WhatsAppFloatingButton } from "./WhatsAppFloatingButton";
 import { LandingFaq } from "./LandingFaq";
 import { useAuthUser } from "../../hooks/useAuthUser";
 import { createClient } from "../../utils/supabase/client";
+
+const miriamLibre = Miriam_Libre({
+  subsets: ["hebrew", "latin"],
+  weight: ["400", "700"],
+});
 
 /** Hero phone scene — edit these first when tuning the mockup. */
 const HERO_PHONE_SCENE = {
@@ -225,24 +231,79 @@ const PLANS = [
 
 const TRUSTED_LOGO_PLACEHOLDERS = [0, 1, 2, 3, 4] as const;
 
+const RECEIPT_DIVIDER =
+  "- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -";
+
+function buildReceiptSerratedClipPath(teeth = 40): string {
+  const points: string[] = [];
+  for (let i = 0; i <= teeth; i++) {
+    const x = (i / teeth) * 100;
+    const y = i % 2 === 0 ? 0 : 1.4;
+    points.push(`${x.toFixed(2)}% ${y.toFixed(2)}%`);
+  }
+  for (let i = teeth; i >= 0; i--) {
+    const x = (i / teeth) * 100;
+    const y = i % 2 === 0 ? 100 : 98.6;
+    points.push(`${x.toFixed(2)}% ${y.toFixed(2)}%`);
+  }
+  return `polygon(${points.join(", ")})`;
+}
+
+function buildCode128BarcodeGradient(): string {
+  const widths = [
+    2, 1, 3, 2, 1, 4, 1, 2, 5, 1, 3, 2, 1, 4, 3, 1, 2, 6, 1, 3, 4, 2, 1, 5, 2, 3, 1, 7, 2, 1, 4, 3, 2, 1,
+    5, 1, 4, 2, 3, 6, 1, 2, 4, 1, 3, 5, 2, 1, 8, 1, 3, 2, 4, 6, 1, 2, 3, 5, 1, 4, 2, 1, 7, 3, 2, 4, 1, 5, 2,
+    3, 1, 6, 4, 2, 1, 3, 5, 2, 4, 1, 7, 2, 3, 1, 5, 4, 2, 6, 1, 3, 2, 8, 1, 4, 2, 5, 3, 1, 6, 2, 4, 1, 3, 7,
+  ];
+  const stops: string[] = [];
+  let pos = 0;
+  let isBar = true;
+  for (const width of widths) {
+    const end = pos + width;
+    const color = isBar ? "#3E2723" : "transparent";
+    stops.push(`${color} ${pos}px`, `${color} ${end}px`);
+    pos = end;
+    isBar = !isBar;
+  }
+  return `linear-gradient(to right, ${stops.join(", ")})`;
+}
+
+const RECEIPT_SERRATED_CLIP = buildReceiptSerratedClipPath();
+const RECEIPT_CODE128_BARCODE = buildCode128BarcodeGradient();
+
 const TESTIMONIAL_TICKETS = [
   {
     quoteKey: "testimonial1Quote" as const,
     customerKey: "testimonial1Customer" as const,
     restaurantKey: "testimonial1Restaurant" as const,
     rotationClass: "rotate-1",
+    table: "14",
+    check: "4092",
+    date: "12/05/26",
+    time: "19:30",
+    warpTransform: "perspective(900px) rotateX(1.6deg) rotateZ(0.35deg) skewX(-0.4deg)",
   },
   {
     quoteKey: "testimonial2Quote" as const,
     customerKey: "testimonial2Customer" as const,
     restaurantKey: "testimonial2Restaurant" as const,
     rotationClass: "-rotate-2",
+    table: "07",
+    check: "3184",
+    date: "03/06/26",
+    time: "21:15",
+    warpTransform: "perspective(900px) rotateX(-1.2deg) rotateZ(-0.5deg) skewX(0.45deg)",
   },
   {
     quoteKey: "testimonial3Quote" as const,
     customerKey: "testimonial3Customer" as const,
     restaurantKey: "testimonial3Restaurant" as const,
     rotationClass: "rotate-2",
+    table: "22",
+    check: "5521",
+    date: "28/04/26",
+    time: "13:45",
+    warpTransform: "perspective(900px) rotateX(0.8deg) rotateY(-0.6deg) skewX(-0.25deg)",
   },
 ] as const;
 
@@ -793,23 +854,77 @@ export function TafritoLandingPage() {
               {TESTIMONIAL_TICKETS.map((ticket) => (
                 <div
                   key={ticket.quoteKey}
-                  className={`bg-white p-8 font-mono shadow-[0_16px_40px_rgba(62,39,35,0.1)] border-t-[8px] border-b-[8px] border-dashed border-[#D7CCC8] ${ticket.rotationClass}`}
+                  className={`mx-auto w-full max-w-[280px] [perspective:1000px] ${ticket.rotationClass}`}
                 >
-                  <div className="flex gap-1" aria-hidden>
-                    {Array.from({ length: 5 }, (_, starIndex) => (
-                      <Star
-                        key={starIndex}
-                        className="h-4 w-4 fill-warm-gold text-warm-gold"
-                        strokeWidth={1.5}
-                      />
-                    ))}
-                  </div>
+                  <div
+                    className={`relative bg-gradient-to-b from-[#FAFAF8] via-[#F6F6F2] to-[#FAFAF8] px-5 py-6 ${miriamLibre.className}`}
+                    style={{
+                      clipPath: RECEIPT_SERRATED_CLIP,
+                      filter: "drop-shadow(0 4px 12px rgba(62,39,35,0.08))",
+                      transform: ticket.warpTransform,
+                    }}
+                  >
+                    <div className="relative" dir={dir}>
+                      <div className="relative z-10 text-espresso/90">
+                        <div className="mb-3 text-center text-[10px] leading-tight">
+                          <p>{t.receiptPosHeader}</p>
+                          <div className="mt-2 flex justify-between">
+                            <span>
+                              {t.receiptTable} {ticket.table}
+                            </span>
+                            <span>
+                              {t.receiptCheck} {ticket.check}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>
+                              {t.receiptDate} {ticket.date}
+                            </span>
+                            <span>
+                              {t.receiptTime} {ticket.time}
+                            </span>
+                          </div>
+                        </div>
 
-                  <p className="mt-6 text-base leading-snug text-espresso">{t[ticket.quoteKey]}</p>
+                        <div
+                          className="overflow-hidden whitespace-nowrap text-center tracking-[-2px] text-espresso/40 opacity-60 select-none"
+                          aria-hidden
+                        >
+                          {RECEIPT_DIVIDER}
+                        </div>
 
-                  <div className="mt-8 border-t border-dashed border-[#D7CCC8] pt-6">
-                    <p className="font-bold text-espresso">{t[ticket.customerKey]}</p>
-                    <p className="mt-1 font-bold text-warm-brown">{t[ticket.restaurantKey]}</p>
+                        <p
+                          className="my-3 text-center text-[13px] tracking-[0.35em] text-espresso/75"
+                          aria-hidden
+                        >
+                          ★★★★★
+                        </p>
+
+                        <p className="my-5 text-[15px] font-bold leading-relaxed text-espresso">
+                          {t[ticket.quoteKey]}
+                        </p>
+
+                        <div
+                          className="overflow-hidden whitespace-nowrap text-center tracking-[-2px] text-espresso/40 opacity-60 select-none"
+                          aria-hidden
+                        >
+                          {RECEIPT_DIVIDER}
+                        </div>
+
+                        <p className="text-xs">
+                          {t.receiptCustomer} {t[ticket.customerKey]}
+                        </p>
+                        <p className="text-xs">
+                          {t.receiptRestaurant} {t[ticket.restaurantKey]}
+                        </p>
+
+                        <div
+                          className="mt-5 h-8 w-full opacity-30"
+                          style={{ backgroundImage: RECEIPT_CODE128_BARCODE }}
+                          aria-hidden
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
               ))}
