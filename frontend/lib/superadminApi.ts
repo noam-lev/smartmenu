@@ -115,9 +115,61 @@ export async function parseMenuImage(file: File): Promise<ParsedMenu> {
   return JSON.parse(raw) as ParsedMenu;
 }
 
-export async function parseMenuImages(files: File[]): Promise<ParsedMenu> {
+export type ParseMenuBatchOptions = {
+  /** Fires when the upload body has been sent (before server processing). */
+  onUploadComplete?: () => void;
+};
+
+async function postMenuBatchFormData(
+  formData: FormData,
+  options?: ParseMenuBatchOptions,
+): Promise<ParsedMenu> {
+  const headers = await getAuthHeaders(false);
+  const url = `${API_BASE_URL}/api/superadmin/magic-parse-batch`;
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", url);
+
+    for (const [key, value] of Object.entries(headers)) {
+      xhr.setRequestHeader(key, value);
+    }
+
+    xhr.upload.addEventListener("load", () => {
+      options?.onUploadComplete?.();
+    });
+
+    xhr.addEventListener("load", () => {
+      const raw = xhr.responseText;
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(raw) as ParsedMenu);
+        } catch {
+          reject(new Error("Invalid response from server."));
+        }
+        return;
+      }
+      reject(new Error(readDetailFromBody(raw)));
+    });
+
+    xhr.addEventListener("error", () => {
+      reject(new Error("Network error while parsing menu."));
+    });
+
+    xhr.addEventListener("abort", () => {
+      reject(new Error("Menu parse request was cancelled."));
+    });
+
+    xhr.send(formData);
+  });
+}
+
+export async function parseMenuImages(
+  files: File[],
+  options?: ParseMenuBatchOptions,
+): Promise<ParsedMenu> {
   if (files.length === 0) {
-    throw new Error("At least one image is required.");
+    throw new Error("Upload one PDF or at least one image.");
   }
   if (files.length > MAX_MENU_PARSE_IMAGES) {
     throw new Error(
@@ -130,20 +182,7 @@ export async function parseMenuImages(files: File[]): Promise<ParsedMenu> {
     formData.append("files", file);
   }
 
-  const response = await superadminApiFetch(
-    "/api/superadmin/magic-parse-batch",
-    {
-      method: "POST",
-      body: formData,
-    },
-  );
-
-  const raw = await response.text();
-  if (!response.ok) {
-    throw new Error(readDetailFromBody(raw));
-  }
-
-  return JSON.parse(raw) as ParsedMenu;
+  return postMenuBatchFormData(formData, options);
 }
 
 export async function importRestaurant(

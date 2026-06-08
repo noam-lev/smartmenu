@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import { Trash2, Plus } from "lucide-react";
 import { compressImagesForUpload } from "../../../lib/compressImage";
+import { isImageFile, isPdfFile } from "../../../lib/menuFileUtils";
+import { getPdfPageCount } from "../../../lib/pdfPageCount";
 import {
   MAX_MENU_PARSE_IMAGES,
   parseMenuImages,
@@ -11,6 +13,8 @@ import {
   type ParsedMenu,
 } from "../../../lib/superadminApi";
 import type { StepProps } from "./types";
+
+type ParsePhase = "idle" | "validating" | "converting" | "analyzing";
 
 function blankItem(): ParsedItem {
   return {
@@ -28,8 +32,15 @@ function blankCategory(): ParsedCategory {
 
 export default function StepMenuUpload({ state, onChange }: StepProps) {
   const [files, setFiles] = useState<File[]>([]);
-  const [parsing, setParsing] = useState(false);
+  const [parsePhase, setParsePhase] = useState<ParsePhase>("idle");
   const [error, setError] = useState<string | null>(null);
+
+  const parsing = parsePhase === "converting" || parsePhase === "analyzing";
+  const validatingPdf = parsePhase === "validating";
+  const isPdfUpload =
+    files.length === 1 && files[0] !== undefined && isPdfFile(files[0]);
+  const isMultiPage =
+    isPdfUpload || files.length > 1;
 
   const menu = state.parsedMenu;
 
@@ -42,16 +53,66 @@ export default function StepMenuUpload({ state, onChange }: StepProps) {
   );
 
   const handleFileChange = (selected: FileList | null) => {
-    const next = Array.from(selected ?? []);
-    if (next.length > MAX_MENU_PARSE_IMAGES) {
-      setError(
-        `You can select up to ${MAX_MENU_PARSE_IMAGES} images at once.`,
-      );
-      setFiles(next.slice(0, MAX_MENU_PARSE_IMAGES));
-      return;
-    }
-    setError(null);
-    setFiles(next);
+    void (async () => {
+      const next = Array.from(selected ?? []);
+      if (next.length === 0) {
+        setFiles([]);
+        setError(null);
+        return;
+      }
+
+      const pdfFiles = next.filter(isPdfFile);
+      const imageFiles = next.filter(isImageFile);
+
+      if (pdfFiles.length > 0 && imageFiles.length > 0) {
+        setError("Upload either one PDF or up to 7 images, not both.");
+        return;
+      }
+      if (pdfFiles.length > 1) {
+        setError("Only one PDF can be uploaded at a time.");
+        return;
+      }
+      if (pdfFiles.length === 1) {
+        setParsePhase("validating");
+        setError(null);
+        try {
+          const pageCount = await getPdfPageCount(pdfFiles[0]);
+          if (pageCount > MAX_MENU_PARSE_IMAGES) {
+            setError(
+              `This PDF has ${pageCount} pages. Maximum allowed is ${MAX_MENU_PARSE_IMAGES}. Please split the file or upload images instead.`,
+            );
+            setFiles([]);
+            return;
+          }
+          setFiles([pdfFiles[0]]);
+        } catch {
+          setError(
+            "Could not read PDF. The file may be corrupted or password-protected.",
+          );
+          setFiles([]);
+        } finally {
+          setParsePhase("idle");
+        }
+        return;
+      }
+
+      if (imageFiles.length > MAX_MENU_PARSE_IMAGES) {
+        setError(
+          `You can select up to ${MAX_MENU_PARSE_IMAGES} images at once.`,
+        );
+        setFiles(imageFiles.slice(0, MAX_MENU_PARSE_IMAGES));
+        return;
+      }
+
+      const unsupported = next.filter((f) => !isImageFile(f));
+      if (unsupported.length > 0) {
+        setError("Only images or a single PDF are supported.");
+        return;
+      }
+
+      setError(null);
+      setFiles(imageFiles);
+    })();
   };
 
   const removeFile = (index: number) => {
@@ -62,15 +123,21 @@ export default function StepMenuUpload({ state, onChange }: StepProps) {
   const handleParse = async () => {
     if (files.length === 0) return;
     setError(null);
-    setParsing(true);
+    setParsePhase(isPdfUpload ? "converting" : "analyzing");
     try {
-      const compressed = await compressImagesForUpload(files);
-      const parsed = await parseMenuImages(compressed);
+      const toUpload = isPdfUpload
+        ? files
+        : await compressImagesForUpload(files);
+      const parsed = await parseMenuImages(toUpload, {
+        onUploadComplete: isPdfUpload
+          ? () => setParsePhase("analyzing")
+          : undefined,
+      });
       onChange({ parsedMenu: parsed });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to parse menu.");
     } finally {
-      setParsing(false);
+      setParsePhase("idle");
     }
   };
 
@@ -136,29 +203,30 @@ export default function StepMenuUpload({ state, onChange }: StepProps) {
     <div className="space-y-5">
       <h2 className="text-lg font-semibold text-zinc-900">Menu Upload</h2>
       <p className="text-sm text-zinc-500">
-        Upload one or more menu photos for AI parsing (up to{" "}
-        {MAX_MENU_PARSE_IMAGES}), then edit the results. You can also add
-        categories and items manually.
+        Upload one PDF (up to {MAX_MENU_PARSE_IMAGES} pages) or up to{" "}
+        {MAX_MENU_PARSE_IMAGES} menu photos for AI parsing, then edit the
+        results. You can also add categories and items manually.
       </p>
 
       {/* Upload section */}
       <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
         <label className="block">
           <span className="mb-1.5 block text-sm font-medium text-zinc-700">
-            Menu Images
+            Menu file
           </span>
           <input
             type="file"
-            accept="image/*"
+            accept="image/*,.pdf,application/pdf"
             multiple
             onChange={(e) => handleFileChange(e.target.files)}
-            className="block w-full cursor-pointer rounded-xl border border-zinc-300 bg-zinc-50 px-3 py-2.5 text-sm text-zinc-700 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white hover:bg-zinc-100"
+            disabled={validatingPdf || parsing}
+            className="block w-full cursor-pointer rounded-xl border border-zinc-300 bg-zinc-50 px-3 py-2.5 text-sm text-zinc-700 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
           />
         </label>
         <button
           type="button"
           onClick={() => void handleParse()}
-          disabled={files.length === 0 || parsing}
+          disabled={files.length === 0 || parsing || validatingPdf}
           className="rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
         >
           {parsing ? "Analyzing…" : "Analyze Menu"}
@@ -189,11 +257,19 @@ export default function StepMenuUpload({ state, onChange }: StepProps) {
         </ul>
       )}
 
+      {validatingPdf && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+          Checking PDF…
+        </div>
+      )}
+
       {parsing && (
         <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
-          {files.length > 1
-            ? "AI is carefully analyzing all pages, this may take up to a minute…"
-            : "AI is analyzing and translating the menu…"}
+          {parsePhase === "converting"
+            ? "Converting PDF…"
+            : isMultiPage
+              ? "AI is carefully analyzing all pages, this may take up to a minute…"
+              : "AI is analyzing and translating the menu…"}
         </div>
       )}
 
@@ -365,10 +441,10 @@ export default function StepMenuUpload({ state, onChange }: StepProps) {
         </>
       )}
 
-      {!menu && !parsing && (
+      {!menu && !parsing && !validatingPdf && (
         <p className="text-center text-sm text-zinc-400 py-6">
-          Upload and analyze menu photos to get started, or add categories
-          manually after analyzing.
+          Upload and analyze a menu PDF or photos to get started, or add
+          categories manually after analyzing.
         </p>
       )}
     </div>
