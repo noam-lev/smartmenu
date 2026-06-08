@@ -4,8 +4,39 @@
     margin: 12mm;
   }
 
+  html,
+  body {
+    height: auto !important;
+    min-height: 0 !important;
+    background: white !important;
+  }
+
+  /* Print only the QR sheet — avoids shrink-to-fit from full-viewport page height. */
+  body * {
+    visibility: hidden;
+  }
+
+  #qr-print-area,
+  #qr-print-area * {
+    visibility: visible;
+  }
+
+  #qr-print-area {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    max-width: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
   .admin-no-print {
     display: none !important;
+  }
+
+  .qr-codes-page {
+    min-height: auto !important;
+    background: white !important;
   }
 
   .admin-print-surface {
@@ -23,21 +54,46 @@
     align-items: start;
     justify-items: center;
     width: 100%;
+    max-width: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
   }
 
   .qr-print-grid--general {
     grid-template-columns: 1fr !important;
     justify-items: center;
+    align-content: start;
+    min-height: 0 !important;
   }
 
   .qr-print-cell {
     break-inside: avoid;
     page-break-inside: avoid;
+    width: 100%;
+    display: flex !important;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .qr-print-svg {
+    width: 56mm !important;
+    height: 56mm !important;
+    max-width: none !important;
+  }
+
+  .qr-print-grid--general .qr-print-svg {
+    width: 170mm !important;
+    height: 170mm !important;
   }
 
   .qr-print-label {
     font-size: 11pt;
     color: #000 !important;
     margin-top: 4mm !important;
+  }
+
+  .qr-print-grid--general .qr-print-label {
+    font-size: 14pt;
+    margin-top: 6mm !important;
   }
 }

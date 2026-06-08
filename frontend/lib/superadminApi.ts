@@ -96,6 +96,8 @@ export type RestaurantImportPayload = {
   categories: ParsedCategory[];
 };
 
+export const MAX_MENU_PARSE_IMAGES = 7;
+
 export async function parseMenuImage(file: File): Promise<ParsedMenu> {
   const formData = new FormData();
   formData.append("file", file);
@@ -111,6 +113,76 @@ export async function parseMenuImage(file: File): Promise<ParsedMenu> {
   }
 
   return JSON.parse(raw) as ParsedMenu;
+}
+
+export type ParseMenuBatchOptions = {
+  /** Fires when the upload body has been sent (before server processing). */
+  onUploadComplete?: () => void;
+};
+
+async function postMenuBatchFormData(
+  formData: FormData,
+  options?: ParseMenuBatchOptions,
+): Promise<ParsedMenu> {
+  const headers = await getAuthHeaders(false);
+  const url = `${API_BASE_URL}/api/superadmin/magic-parse-batch`;
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", url);
+
+    for (const [key, value] of Object.entries(headers)) {
+      xhr.setRequestHeader(key, value);
+    }
+
+    xhr.upload.addEventListener("load", () => {
+      options?.onUploadComplete?.();
+    });
+
+    xhr.addEventListener("load", () => {
+      const raw = xhr.responseText;
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(raw) as ParsedMenu);
+        } catch {
+          reject(new Error("Invalid response from server."));
+        }
+        return;
+      }
+      reject(new Error(readDetailFromBody(raw)));
+    });
+
+    xhr.addEventListener("error", () => {
+      reject(new Error("Network error while parsing menu."));
+    });
+
+    xhr.addEventListener("abort", () => {
+      reject(new Error("Menu parse request was cancelled."));
+    });
+
+    xhr.send(formData);
+  });
+}
+
+export async function parseMenuImages(
+  files: File[],
+  options?: ParseMenuBatchOptions,
+): Promise<ParsedMenu> {
+  if (files.length === 0) {
+    throw new Error("Upload one PDF or at least one image.");
+  }
+  if (files.length > MAX_MENU_PARSE_IMAGES) {
+    throw new Error(
+      `Maximum ${MAX_MENU_PARSE_IMAGES} images allowed per batch.`,
+    );
+  }
+
+  const formData = new FormData();
+  for (const file of files) {
+    formData.append("files", file);
+  }
+
+  return postMenuBatchFormData(formData, options);
 }
 
 export async function importRestaurant(

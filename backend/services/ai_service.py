@@ -90,29 +90,51 @@ async def translate_menu_item_fields(
     return parsed
 
 
-async def parse_menu_image(base64_image_data: str) -> ParsedMenu:
+_SINGLE_IMAGE_USER_TEXT = (
+    "Parse this menu image into the requested structured schema. "
+    "Important: keep true section headers as categories, and put dish lines under those categories."
+)
+
+_MULTI_IMAGE_USER_TEXT = (
+    "These are multiple photos/pages of the same restaurant menu. "
+    "Combine them into one unified menu in logical reading order. "
+    "Do not duplicate categories or items that appear across pages. "
+    "Parse into the requested structured schema. "
+    "Important: keep true section headers as categories, and put dish lines under those categories."
+)
+
+
+def _image_content_block(data_url: str) -> dict[str, object]:
+    return {
+        "type": "image_url",
+        "image_url": {"url": data_url, "detail": "high"},
+    }
+
+
+async def parse_menu_images(image_data_urls: list[str]) -> ParsedMenu:
+    if not image_data_urls:
+        raise ValueError("At least one image is required.")
+
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY is not configured.")
+
+    user_text = (
+        _MULTI_IMAGE_USER_TEXT
+        if len(image_data_urls) > 1
+        else _SINGLE_IMAGE_USER_TEXT
+    )
+    content: list[dict[str, object]] = [
+        {"type": "text", "text": user_text},
+        *[_image_content_block(url) for url in image_data_urls],
+    ]
 
     client = AsyncOpenAI(api_key=api_key)
     completion = await client.beta.chat.completions.parse(
         model="gpt-4o",
         messages=[
             {"role": "system", "content": _SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": (
-                            "Parse this menu image into the requested structured schema. "
-                            "Important: keep true section headers as categories, and put dish lines under those categories."
-                        ),
-                    },
-                    {"type": "image_url", "image_url": {"url": base64_image_data}},
-                ],
-            },
+            {"role": "user", "content": content},
         ],
         response_format=ParsedMenu,
     )
@@ -121,3 +143,7 @@ async def parse_menu_image(base64_image_data: str) -> ParsedMenu:
     if parsed is None:
         raise RuntimeError("Failed to parse AI response into ParsedMenu.")
     return parsed
+
+
+async def parse_menu_image(base64_image_data: str) -> ParsedMenu:
+    return await parse_menu_images([base64_image_data])

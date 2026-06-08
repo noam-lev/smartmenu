@@ -49,7 +49,7 @@ export default function QrCodeCard({
         marginSize={2}
         title={title}
         imageSettings={imageSettings}
-        className="rounded-lg bg-white"
+        className="qr-print-svg rounded-lg bg-white"
       />
       <p className="qr-print-label mt-3 text-center text-sm font-semibold text-zinc-900">{label}</p>
     </article>

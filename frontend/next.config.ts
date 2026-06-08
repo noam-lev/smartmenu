@@ -12,6 +12,11 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: turbopackRoot,
   },
+  // Dev rewrites proxy to FastAPI; default proxy timeout is 30s. Multi-image menu
+  // parsing (GPT-4o vision) can take 30–90s, which otherwise causes ECONNRESET.
+  experimental: {
+    proxyTimeout: 120_000,
+  },
   allowedDevOrigins: ["10.100.102.11", "localhost", "10.100.102.2", "10.100.102.3", "10.100.102.13"],
   async rewrites() {
     return [

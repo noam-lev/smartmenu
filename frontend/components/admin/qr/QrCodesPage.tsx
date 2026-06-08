@@ -204,7 +204,7 @@ export default function QrCodesPage({ restaurantSlug }: QrCodesPageProps) {
   };
 
   return (
-    <div className="min-h-[100dvh] bg-zinc-50">
+    <div className="qr-codes-page min-h-[100dvh] bg-zinc-50">
       <div className="admin-no-print mx-auto max-w-4xl px-4 py-6">
         <header className="mb-6 flex items-start gap-3 border-b border-zinc-200 pb-4">
           {userId && hasRestaurants ? (
